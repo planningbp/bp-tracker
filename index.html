@@ -1154,12 +1154,14 @@ function renderImportZone(type, title, desc){
   </div>`;
 }
 function renderImport(){
+  const hasAny = DB.colaboradores.length || DB.desligamentos.length || DB.promocoes.length;
   return `
   <div class="grid grid-3" style="margin-bottom:20px;">
     ${renderImportZone('colaboradores','Colaboradores','Base completa de colaboradores ativos e histórico.')}
     ${renderImportZone('desligamentos','Desligamentos','Registros de desligamento por competência.')}
     ${renderImportZone('promocoes','Promoções','Movimentações salariais e de cargo.')}
   </div>
+  ${hasAny?'<div style="margin-bottom:20px;"><button class="btn btn-outline btn-sm" id="btnClearAllImport" style="width:auto;padding:6px 16px;color:var(--red);border-color:var(--red);">'+ICONS.trash+' Limpar todas as bases</button></div>':''}
   <div id="importPreview"></div>`;
 }
 function renderImportPreviewTables(){
@@ -1269,6 +1271,13 @@ function bindImport(){
       e.preventDefault(); zone.classList.remove('drag');
       if(e.dataTransfer.files[0]) handleImportFile(type, e.dataTransfer.files[0]);
     });
+  });
+  const btnClear = document.getElementById('btnClearAllImport');
+  if(btnClear) btnClear.addEventListener('click', ()=>{
+    if(!confirm('Tem certeza que deseja limpar TODAS as bases importadas (colaboradores, desligamentos e promoções)?')) return;
+    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[];
+    persist('colaboradores'); persist('desligamentos'); persist('promocoes');
+    renderShellAndPage();
   });
 }
 function handleImportFile(type, file){
