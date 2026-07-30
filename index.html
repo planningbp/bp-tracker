@@ -635,8 +635,8 @@ function seedIfNeeded(){
           movimentacoes: Math.floor(Math.random()*2), experienciaCount: Math.floor(Math.random()*3),
           pdis: Math.floor(Math.random()*6), sucessores: Math.floor(Math.random()*3), talentos: Math.floor(Math.random()*4),
           enps, lnps,
-          riscos: [], feriasVencidas: Math.floor(Math.random()*3), bancoHoras: Math.floor(Math.random()*40),
-          horasExtras: Math.floor(Math.random()*20), pendenciasPonto: Math.floor(Math.random()*4),
+          riscos: [], feriasVencidas:0, bancoHoras:0, horasExtras:0, pendenciasPonto:0,
+          feriasTable:[], bancoHorasTable:[], horasExtrasTable:[], pendenciasPontoTable:[],
           planoAcao: 'Reforçar acompanhamento de clima e revisar plano de desenvolvimento da equipe.',
           observacoes: 'Reunião realizada conforme calendário trimestral.',
           admissoesTable: [], desligamentosTable: [], experienciaTable: [], promocoesTable: [],
@@ -1316,6 +1316,7 @@ function blankMeeting(bp){
     headcount:0, admissoesCount:0, desligamentosCount:0, turnover:0, vagasAbertas:0, movimentacoes:0, experienciaCount:0,
     pdis:0, sucessores:0, talentos:0, enps:0, lnps:0,
     riscos:[], feriasVencidas:0, bancoHoras:0, horasExtras:0, pendenciasPonto:0,
+    feriasTable:[], bancoHorasTable:[], horasExtrasTable:[], pendenciasPontoTable:[],
     planoAcao:'', observacoes:'',
     admissoesTable:[], desligamentosTable:[], experienciaTable:[], promocoesTable:[],
     autoApplied:false,
@@ -1349,6 +1350,14 @@ function applyAutoCalc(){
   fd.experienciaTable = auto.experiencia.map(e=>({nome:e.nome, cargo:e.cargo, admissao:fmtDate(e.admissao), milestone:e.milestone, milestoneDate:fmtDate(e.milestoneDate)}));
   fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, cargoAnterior:p.cargoAtual, cargoNovo:p.cargoAprovado, pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
   fd.autoApplied = true;
+}
+function detailMiniTable(title, rows, headers, keys){
+  if(!rows || !rows.length) return '';
+  return `<div class="card" style="margin-bottom:20px;">
+    <div class="section-title">${title} (${rows.length})</div>
+    <div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(r=>`<tr>${keys.map(k=>`<td>${esc(r[k]||'')}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div></div>`;
 }
 function renderMiniTable(tableId, title, rows, cols){
   return `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;">
@@ -1424,12 +1433,10 @@ function renderMeetingForm(){
             ${fd.riscos.map((r,i)=>renderRiskRow(r,i)).join('')}
           </div>
           <button class="btn btn-outline btn-sm" id="btnAddRisk" style="width:auto;margin-bottom:20px;">${ICONS.plus} Adicionar risco</button>
-          <div class="field-grid">
-            <div class="field"><label>Férias vencidas</label><input id="f_ferias" type="number" value="${fd.feriasVencidas}"></div>
-            <div class="field"><label>Banco de horas (h)</label><input id="f_banco" type="number" value="${fd.bancoHoras}"></div>
-            <div class="field"><label>Horas extras (h)</label><input id="f_he" type="number" value="${fd.horasExtras}"></div>
-            <div class="field"><label>Pendências de ponto</label><input id="f_ponto" type="number" value="${fd.pendenciasPonto}"></div>
-          </div>
+          ${renderMiniTable('feriasTable','Férias vencidas', fd.feriasTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'diasVencidos',label:'Dias vencidos'},{key:'observacao',label:'Observação'}])}
+          ${renderMiniTable('bancoHorasTable','Banco de horas', fd.bancoHorasTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'horas',label:'Horas'},{key:'observacao',label:'Observação'}])}
+          ${renderMiniTable('horasExtrasTable','Horas extras', fd.horasExtrasTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'horas',label:'Horas'},{key:'observacao',label:'Observação'}])}
+          ${renderMiniTable('pendenciasPontoTable','Pendências de ponto', fd.pendenciasPontoTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'tipo',label:'Tipo pendência'},{key:'observacao',label:'Observação'}])}
         </div>
 
         <div class="form-section ${UI.formSection===5?'active':''}" data-panel="5">
@@ -1482,10 +1489,10 @@ function collectFormBasics(){
   if(el('f_talentos')) fd.talentos = Number(el('f_talentos').value)||0;
   if(el('f_enps')) fd.enps = Number(el('f_enps').value)||0;
   if(el('f_lnps')) fd.lnps = Number(el('f_lnps').value)||0;
-  if(el('f_ferias')) fd.feriasVencidas = Number(el('f_ferias').value)||0;
-  if(el('f_banco')) fd.bancoHoras = Number(el('f_banco').value)||0;
-  if(el('f_he')) fd.horasExtras = Number(el('f_he').value)||0;
-  if(el('f_ponto')) fd.pendenciasPonto = Number(el('f_ponto').value)||0;
+  fd.feriasVencidas = (fd.feriasTable||[]).length;
+  fd.bancoHoras = (fd.bancoHorasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0);
+  fd.horasExtras = (fd.horasExtrasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0);
+  fd.pendenciasPonto = (fd.pendenciasPontoTable||[]).length;
   if(el('f_plano')) fd.planoAcao = el('f_plano').value;
   if(el('f_obs')) fd.observacoes = el('f_obs').value;
   if(el('f_status')) fd.status = el('f_status').value;
@@ -1534,7 +1541,11 @@ function bindMeetingForm(){
     admissoesTable: {nome:'',cargo:'',admissao:''},
     desligamentosTable: {nome:'',cargo:'',tipo:'',motivo:''},
     experienciaTable: {nome:'',cargo:'',admissao:'',milestone:'',milestoneDate:''},
-    promocoesTable: {nome:'',cargoAnterior:'',cargoNovo:'',pct:''}
+    promocoesTable: {nome:'',cargoAnterior:'',cargoNovo:'',pct:''},
+    feriasTable: {nome:'',cargo:'',diasVencidos:'',observacao:''},
+    bancoHorasTable: {nome:'',cargo:'',horas:'',observacao:''},
+    horasExtrasTable: {nome:'',cargo:'',horas:'',observacao:''},
+    pendenciasPontoTable: {nome:'',cargo:'',tipo:'',observacao:''}
   };
   document.querySelectorAll('[data-add-table]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -1623,6 +1634,10 @@ function renderMeetingDetail(){
       ${m.riscos.map(r=>`<tr><td>${esc(r.nome)}</td><td>${esc(r.cargo)}</td><td>${esc(r.motivo)}</td><td>${r.criticidade==='Alta'?'<span class="badge badge-red">Alta</span>':r.criticidade==='Média'?'<span class="badge badge-yellow">Média</span>':'<span class="badge badge-gray">Baixa</span>'}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty-state">Nenhum risco registrado.</div>'}
   </div>
+  ${detailMiniTable('Férias vencidas', m.feriasTable, ['Nome','Cargo','Dias vencidos','Observação'], ['nome','cargo','diasVencidos','observacao'])}
+  ${detailMiniTable('Banco de horas', m.bancoHorasTable, ['Nome','Cargo','Horas','Observação'], ['nome','cargo','horas','observacao'])}
+  ${detailMiniTable('Horas extras', m.horasExtrasTable, ['Nome','Cargo','Horas','Observação'], ['nome','cargo','horas','observacao'])}
+  ${detailMiniTable('Pendências de ponto', m.pendenciasPontoTable, ['Nome','Cargo','Tipo pendência','Observação'], ['nome','cargo','tipo','observacao'])}
   <div class="card">
     <div class="section-title">Plano de Ação</div>
     <p style="white-space:pre-wrap;font-size:13.5px;line-height:1.6;">${esc(m.planoAcao)||'—'}</p>
