@@ -790,7 +790,8 @@ let UI = {
   acompFilterArea: '',
   acompFilterLider: '',
   acompShowDone: false,
-  acompShowAll: false
+  acompShowAll: false,
+  acompFilterMonth: ''
 };
 let CHARTS = {};
 function destroyChart(id){ if(CHARTS[id]){ CHARTS[id].destroy(); delete CHARTS[id]; } }
@@ -1815,6 +1816,18 @@ function renderAcompanhamentos(){
   const areas = [...new Set(records.map(r=>r.area))].sort();
   const lideres = [...new Set(records.map(r=>r.lider).filter(Boolean))].sort();
 
+  // Build month options from all dueDate values
+  const monthSet = new Set();
+  records.forEach(r=>{
+    if(r.dueDate instanceof Date && !isNaN(r.dueDate)){
+      const key = r.dueDate.getFullYear()+'-'+String(r.dueDate.getMonth()+1).padStart(2,'0');
+      monthSet.add(key);
+    }
+  });
+  const monthOptions = [...monthSet].sort();
+  const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const fMonth = UI.acompFilterMonth || '';
+
   const fArea = UI.acompFilterArea || '';
   const fLider = UI.acompFilterLider || '';
   const showDone = UI.acompShowDone || false;
@@ -1823,9 +1836,18 @@ function renderAcompanhamentos(){
   if(fArea) filtered = filtered.filter(r=>r.area===fArea);
   if(fLider) filtered = filtered.filter(r=>r.lider===fLider);
 
+  // Month filter: if set, show ALL records for that month (bypass window)
+  if(fMonth){
+    filtered = filtered.filter(r=>{
+      if(!(r.dueDate instanceof Date)) return false;
+      const key = r.dueDate.getFullYear()+'-'+String(r.dueDate.getMonth()+1).padStart(2,'0');
+      return key === fMonth;
+    });
+  }
+
   // By default hide done; show only pending within ±10 days window or all if toggle
   const WINDOW = 10;
-  const showAll = UI.acompShowAll || false;
+  const showAll = UI.acompShowAll || !!fMonth;
   const pending = filtered.filter(r => {
     if(r.done && !showDone) return false;
     if(!showAll && !showDone && Math.abs(r.diffDays) > WINDOW && !r.done) return false;
@@ -1846,7 +1868,7 @@ function renderAcompanhamentos(){
         <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">
           ${ICONS.acomp} Alertas de Experiência
         </h2>
-        <p style="margin:4px 0 0;color:#888;font-size:13px;">Colaboradores dentro da janela de ±${WINDOW} dias dos marcos (7, 15, 45 e 90 dias). Marque "Registro feito" para remover da lista.</p>
+        <p style="margin:4px 0 0;color:#888;font-size:13px;">Colaboradores dentro da janela de ±${WINDOW} dias dos marcos (7, 15, 45 e 90 dias). Selecione um mês para validar todos os registros do período.</p>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <select id="acompArea" class="select" style="min-width:150px;">
@@ -1856,6 +1878,10 @@ function renderAcompanhamentos(){
         <select id="acompLider" class="select" style="min-width:150px;">
           <option value="">Todos os líderes</option>
           ${lideres.map(l=>`<option value="${esc(l)}" ${l===fLider?'selected':''}>${esc(l)}</option>`).join('')}
+        </select>
+        <select id="acompMonth" class="select" style="min-width:150px;">
+          <option value="">Todos os meses</option>
+          ${monthOptions.map(m=>{const [y,mo]=m.split('-'); const label=MONTH_NAMES[parseInt(mo)-1]+'/'+y; return `<option value="${m}" ${m===fMonth?'selected':''}>${label}</option>`;}).join('')}
         </select>
       </div>
     </div>
@@ -1871,6 +1897,20 @@ function renderAcompanhamentos(){
       </label>
       <span style="margin-left:auto;font-size:13px;color:#888;">${pendingCount} pendente${pendingCount!==1?'s':''}</span>
     </div>
+    ${fMonth ? (()=>{
+      const totalMonth = filtered.length;
+      const doneMonth = filtered.filter(r=>r.done).length;
+      const pctMonth = totalMonth ? Math.round(doneMonth/totalMonth*100) : 0;
+      const [yy,mm] = fMonth.split('-');
+      const monthLabel = MONTH_NAMES[parseInt(mm)-1]+'/'+yy;
+      const allDone = doneMonth === totalMonth && totalMonth > 0;
+      return `<div style="background:${allDone?'#f0fdf4':'#fffbeb'};border:1px solid ${allDone?'#bbf7d0':'#fde68a'};border-radius:10px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:14px;font-weight:600;color:${allDone?'#166534':'#92400e'};">
+          ${allDone ? '✓ Todos os acompanhamentos de '+monthLabel+' foram realizados!' : 'Progresso de '+monthLabel+': '+doneMonth+' de '+totalMonth+' realizados'}
+        </div>
+        <div style="font-size:20px;font-weight:800;color:${allDone?'#16a34a':'#d97706'};">${pctMonth}%</div>
+      </div>`;
+    })() : ''}
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start;">
       ${cols.map(col=>{
@@ -1932,8 +1972,10 @@ function bindAcompanhamentos(){
   const liderSel = document.getElementById('acompLider');
   const toggleDone = document.getElementById('acompToggleDone');
   const toggleAll = document.getElementById('acompToggleAll');
+  const monthSel = document.getElementById('acompMonth');
   if(areaSel) areaSel.addEventListener('change', ()=>{ UI.acompFilterArea=areaSel.value; rerender(); });
   if(liderSel) liderSel.addEventListener('change', ()=>{ UI.acompFilterLider=liderSel.value; rerender(); });
+  if(monthSel) monthSel.addEventListener('change', ()=>{ UI.acompFilterMonth=monthSel.value; rerender(); });
   if(toggleAll) toggleAll.addEventListener('change', ()=>{ UI.acompShowAll=toggleAll.checked; rerender(); });
   if(toggleDone) toggleDone.addEventListener('change', ()=>{ UI.acompShowDone=toggleDone.checked; rerender(); });
 
