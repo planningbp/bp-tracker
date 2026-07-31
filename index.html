@@ -2372,14 +2372,22 @@ function renderColaboradorDetail(){
           const dueStr = m.dueDate.toLocaleDateString('pt-BR');
           const diffDays = Math.round((m.dueDate - today) / 86400000);
           const isPast = diffDays < 0;
-          return `<div style="background:${m.done?'#f0fdf4':isPast?'#fef2f2':'#f9fafb'};border:1px solid ${m.done?'#bbf7d0':isPast?'#fca5a5':'#e5e7eb'};border-radius:10px;padding:14px;text-align:center;">
-            <div style="font-weight:800;font-size:18px;margin-bottom:4px;">${m.days} dias</div>
-            <div style="font-size:12px;color:#888;margin-bottom:6px;">${dueStr}</div>
-            ${m.done
-              ? '<div style="color:#16a34a;font-weight:700;font-size:13px;">✓ Realizado'+(m.realizado?' em '+new Date(m.realizado+'T00:00:00').toLocaleDateString('pt-BR'):'')+'</div>'
-              : '<div style="color:'+(isPast?'#ef4444':'#f59e0b')+';font-weight:600;font-size:13px;">'+(isPast?'Atrasado ('+diffDays+'d)':'Pendente (+'+diffDays+'d)')+'</div>'
-            }
-            ${m.observacao?'<div style="font-size:11px;color:#666;margin-top:4px;">'+esc(m.observacao)+'</div>':''}
+          return `<div style="background:${m.done?'#f0fdf4':isPast?'#fef2f2':'#f9fafb'};border:1px solid ${m.done?'#bbf7d0':isPast?'#fca5a5':'#e5e7eb'};border-radius:10px;padding:14px;">
+            <div style="text-align:center;">
+              <div style="font-weight:800;font-size:18px;margin-bottom:4px;">${m.days} dias</div>
+              <div style="font-size:12px;color:#888;margin-bottom:6px;">${dueStr}</div>
+              ${m.done
+                ? '<div style="color:#16a34a;font-weight:700;font-size:13px;">✓ Realizado'+(m.realizado?' em '+new Date(m.realizado+'T00:00:00').toLocaleDateString('pt-BR'):'')+'</div>'
+                : '<div style="color:'+(isPast?'#ef4444':'#f59e0b')+';font-weight:600;font-size:13px;">'+(isPast?'Atrasado ('+diffDays+'d)':'Pendente (+'+diffDays+'d)')+'</div>'
+              }
+            </div>
+            <div style="margin-top:10px;">
+              <textarea class="detail-obs" data-milestone="${m.days}" rows="4" placeholder="Registre aqui o acompanhamento..." style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#fff;resize:vertical;font-family:inherit;line-height:1.5;">${esc(m.observacao)}</textarea>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-top:8px;justify-content:center;">
+              <input type="checkbox" class="detail-done" data-milestone="${m.days}" ${m.done?'checked':''}>
+              Registro feito
+            </label>
           </div>`;
         }).join('')}
       </div>
@@ -2446,6 +2454,35 @@ function bindColaboradorDetail(){
     DB.oneOnOnes.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, data, titulo, resumo, createdAt: new Date().toISOString() });
     persist('oneOnOnes');
     rerender();
+  });
+
+  // Milestone observation edit
+  document.querySelectorAll('.detail-obs').forEach(ta=>{
+    ta.addEventListener('change', ()=>{
+      const milestone = parseInt(ta.getAttribute('data-milestone'));
+      const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
+      if(idx>=0){ DB.acompanhamentos[idx].observacao = ta.value; }
+      else { DB.acompanhamentos.push({ nome, milestone, status:'Pendente', realizado:'', observacao: ta.value }); }
+      persist('acompanhamentos');
+    });
+  });
+
+  // Milestone done checkbox
+  document.querySelectorAll('.detail-done').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const milestone = parseInt(cb.getAttribute('data-milestone'));
+      const done = cb.checked;
+      const status = done ? 'Realizado' : 'Pendente';
+      const realizado = done ? new Date().toISOString().slice(0,10) : '';
+      const ta = document.querySelector('.detail-obs[data-milestone="'+milestone+'"]');
+      const observacao = ta ? ta.value : '';
+      const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
+      const record = { nome, milestone, status, realizado, observacao };
+      if(idx>=0) DB.acompanhamentos[idx] = record;
+      else DB.acompanhamentos.push(record);
+      persist('acompanhamentos');
+      rerender();
+    });
   });
 
   document.querySelectorAll('.ood-delete').forEach(btn=>{
