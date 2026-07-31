@@ -535,6 +535,7 @@ const LS = {
   colaboradores:'planning_colaboradores',
   desligamentos:'planning_desligamentos',
   promocoes:'planning_promocoes',
+  acompanhamentos:'planning_acompanhamentos',
   session:'planning_session',
   seeded:'planning_seeded_v1'
 };
@@ -547,7 +548,8 @@ let DB = {
   meetings: loadJSON(LS.meetings, []),
   colaboradores: loadJSON(LS.colaboradores, []),
   desligamentos: loadJSON(LS.desligamentos, []),
-  promocoes: loadJSON(LS.promocoes, [])
+  promocoes: loadJSON(LS.promocoes, []),
+  acompanhamentos: loadJSON(LS.acompanhamentos, [])
 };
 function persist(part){ saveJSON(LS[part], DB[part]); }
 
@@ -598,7 +600,8 @@ const ICONS = {
   arrowUp:'<svg class="icon" style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   arrowDown:'<svg class="icon" style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
   alert:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-  file:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+  file:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  acomp:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-4 4-2-2"/></svg>'
 };
 
 /* =========================================================
@@ -788,7 +791,10 @@ let UI = {
   detailMeetingId: null,
   historyA: CONFIG.periods[6],
   historyB: CONFIG.periods[8],
-  execFilterPeriod: ''
+  execFilterPeriod: '',
+  acompFilterArea: '',
+  acompFilterLider: '',
+  acompShowDone: false
 };
 let CHARTS = {};
 function destroyChart(id){ if(CHARTS[id]){ CHARTS[id].destroy(); delete CHARTS[id]; } }
@@ -866,6 +872,7 @@ const NAV_ITEMS = [
   {key:'import', label:'Importar Dados', icon:'import'},
   {key:'history', label:'Histórico', icon:'history'},
   {key:'executive', label:'Painel Executivo', icon:'exec'},
+  {key:'acompanhamentos', label:'Acompanhamentos', icon:'acomp'},
   {key:'settings', label:'Configurações', icon:'settings'}
 ];
 const PAGE_TITLES = {
@@ -876,7 +883,8 @@ const PAGE_TITLES = {
   executive:['Painel Executivo','Visão consolidada de todos os BPs'],
   settings:['Configurações','Perfil e áreas do Business Partner'],
   form:['Reunião','Registro de reunião de BP'],
-  detail:['Detalhe da Reunião','Resumo executivo e indicadores']
+  detail:['Detalhe da Reunião','Resumo executivo e indicadores'],
+  acompanhamentos:['Acompanhamentos','Acompanhamento de novos colaboradores (7/15/45/90 dias)']
 };
 function hasImportedData(){
   return DB.colaboradores.length>0 || DB.desligamentos.length>0 || DB.promocoes.length>0;
@@ -936,6 +944,7 @@ function renderPageContent(){
   else if(UI.page==='settings'){ c.innerHTML = renderSettings(); bindSettings(); }
   else if(UI.page==='form'){ c.innerHTML = renderMeetingForm(); bindMeetingForm(); }
   else if(UI.page==='detail'){ c.innerHTML = renderMeetingDetail(); bindMeetingDetail(); }
+  else if(UI.page==='acompanhamentos'){ c.innerHTML = renderAcompanhamentos(); bindAcompanhamentos(); }
 }
 
 /* =========================================================
@@ -1275,8 +1284,8 @@ function bindImport(){
   const btnClear = document.getElementById('btnClearAllImport');
   if(btnClear) btnClear.addEventListener('click', ()=>{
     if(!confirm('Tem certeza que deseja limpar TODAS as bases importadas (colaboradores, desligamentos e promoções)?')) return;
-    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[];
-    persist('colaboradores'); persist('desligamentos'); persist('promocoes');
+    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[];
+    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos');
     renderShellAndPage();
   });
 }
@@ -1766,6 +1775,187 @@ function bindExecutive(){
   const evo = labels.map(p=> DB.meetings.filter(m=>m.period===p).reduce((s,m)=>s+(m.headcount||0),0) );
   destroyChart('chartExecEvo');
   CHARTS.chartExecEvo = new Chart(document.getElementById('chartExecEvo'), { type:'line', data:{labels, datasets:[{label:'Headcount total', data:evo, borderColor:'#1B1B2F', backgroundColor:'rgba(27,27,47,0.08)', fill:true, tension:.3}]}, options:{plugins:{legend:{display:false}}} });
+}
+
+/* =========================================================
+   ACOMPANHAMENTOS (7/15/45/90 dias) — card columns
+========================================================= */
+function getAcompanhamentoRecords(){
+  const bp = currentBP();
+  const colabs = DB.colaboradores.filter(c => bp.areas.map(a=>normalizeStr(a)).includes(normalizeStr(c.area||c.departamento||'')));
+  const milestones = [7,15,45,90];
+  const records = [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  colabs.forEach(c=>{
+    const admRaw = c.admissao || c['Data de admissão'] || c['data de admissao'] || c['data_admissao'];
+    if(!admRaw) return;
+    const adm = admRaw instanceof Date ? admRaw : new Date(admRaw);
+    if(isNaN(adm.getTime())) return;
+    milestones.forEach(days=>{
+      const dueDate = new Date(adm.getTime() + days*86400000);
+      const diffDays = Math.round((dueDate - today) / 86400000);
+      const saved = DB.acompanhamentos.find(a=> normalizeStr(a.nome)===normalizeStr(c.nome) && a.milestone===days);
+      records.push({
+        nome: c.nome || c.Nome || '',
+        cargo: c.cargo || c.Cargo || '',
+        area: c.area || c.departamento || c.Departamento || '',
+        lider: c.lider || c['Líder'] || c.Lider || '',
+        admissao: adm,
+        milestone: days,
+        dueDate,
+        diffDays,
+        done: saved ? saved.status === 'Realizado' : false,
+        observacao: saved ? saved.observacao : '',
+        realizado: saved ? saved.realizado : ''
+      });
+    });
+  });
+  return records;
+}
+
+function renderAcompanhamentos(){
+  const records = getAcompanhamentoRecords();
+  const areas = [...new Set(records.map(r=>r.area))].sort();
+  const lideres = [...new Set(records.map(r=>r.lider).filter(Boolean))].sort();
+
+  const fArea = UI.acompFilterArea || '';
+  const fLider = UI.acompFilterLider || '';
+  const showDone = UI.acompShowDone || false;
+
+  let filtered = records;
+  if(fArea) filtered = filtered.filter(r=>r.area===fArea);
+  if(fLider) filtered = filtered.filter(r=>r.lider===fLider);
+
+  // By default hide done; show only pending within ±10 days window or all if toggle
+  const WINDOW = 10;
+  const pending = filtered.filter(r => {
+    if(r.done && !showDone) return false;
+    if(!showDone && Math.abs(r.diffDays) > WINDOW && !r.done) return false;
+    return true;
+  });
+
+  const cols = [7,15,45,90].map(m => {
+    const items = pending.filter(r=>r.milestone===m);
+    items.sort((a,b)=>a.diffDays - b.diffDays);
+    return { milestone:m, items };
+  });
+
+  const pendingCount = filtered.filter(r=>!r.done).length;
+
+  return `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">
+          ${ICONS.acomp} Alertas de Experiência
+        </h2>
+        <p style="margin:4px 0 0;color:#888;font-size:13px;">Colaboradores dentro da janela de ±${WINDOW} dias dos marcos (7, 15, 45 e 90 dias). Marque "Registro feito" para remover da lista.</p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <select id="acompArea" class="select" style="min-width:150px;">
+          <option value="">Todas as áreas</option>
+          ${areas.map(a=>`<option value="${esc(a)}" ${a===fArea?'selected':''}>${esc(a)}</option>`).join('')}
+        </select>
+        <select id="acompLider" class="select" style="min-width:150px;">
+          <option value="">Todos os líderes</option>
+          ${lideres.map(l=>`<option value="${esc(l)}" ${l===fLider?'selected':''}>${esc(l)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="acompToggleDone" ${showDone?'checked':''}>
+        Mostrar registros já feitos
+      </label>
+      <span style="margin-left:auto;font-size:13px;color:#888;">${pendingCount} pendente${pendingCount!==1?'s':''}</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start;">
+      ${cols.map(col=>{
+        const count = col.items.filter(r=>!r.done).length;
+        return `
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px;">
+            <span style="font-weight:700;font-size:16px;">${col.milestone} dias</span>
+            <span style="background:${count>0?'#f59e0b':'#10b981'};color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">${count}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;min-height:60px;">
+            ${col.items.length===0 ? '<div style="padding:20px;text-align:center;color:#aaa;font-size:13px;border:1px dashed #ddd;border-radius:10px;">Nenhum colaborador pendente.</div>' :
+            col.items.map(r=>{
+              const sign = r.diffDays >= 0 ? '+' : '';
+              const daysLabel = Math.abs(r.diffDays) + 'd';
+              const diffLabel = '(' + sign + r.diffDays + 'd)';
+              const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+              const areaColor = areaColors[r.area] || '#64748b';
+              const cardBg = r.done ? '#f0fdf4' : '#fff';
+              const cardBorder = r.done ? '#bbf7d0' : '#e5e7eb';
+              return `<div class="acomp-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:10px;padding:14px;${r.done?'opacity:0.7;':''}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+                  <div>
+                    <div style="font-weight:700;font-size:14px;line-height:1.3;">${esc(r.nome)}</div>
+                    <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.3px;">${esc(r.cargo)}</div>
+                  </div>
+                  <div style="text-align:right;font-size:12px;color:#888;white-space:nowrap;">${daysLabel} <span style="color:${r.diffDays<0?'#ef4444':'#10b981'}">${diffLabel}</span></div>
+                </div>
+                <div style="margin:8px 0;">
+                  <span style="background:${areaColor};color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">${esc(r.area)}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:10px;">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex:1;">
+                    <input type="checkbox" class="acomp-check" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" ${r.done?'checked':''}>
+                    Registro feito
+                  </label>
+                </div>
+                <div style="margin-top:8px;">
+                  <input type="text" class="acomp-obs" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" value="${esc(r.observacao)}" placeholder="Observação..." style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#f9fafb;">
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function bindAcompanhamentos(){
+  const rerender = ()=>{ const c=document.getElementById('content'); c.innerHTML=renderAcompanhamentos(); bindAcompanhamentos(); };
+  const areaSel = document.getElementById('acompArea');
+  const liderSel = document.getElementById('acompLider');
+  const toggleDone = document.getElementById('acompToggleDone');
+  if(areaSel) areaSel.addEventListener('change', ()=>{ UI.acompFilterArea=areaSel.value; rerender(); });
+  if(liderSel) liderSel.addEventListener('change', ()=>{ UI.acompFilterLider=liderSel.value; rerender(); });
+  if(toggleDone) toggleDone.addEventListener('change', ()=>{ UI.acompShowDone=toggleDone.checked; rerender(); });
+
+  document.querySelectorAll('.acomp-check').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const nome = cb.getAttribute('data-nome');
+      const milestone = parseInt(cb.getAttribute('data-milestone'));
+      const card = cb.closest('.acomp-card');
+      const obsInput = card.querySelector('.acomp-obs');
+      const observacao = obsInput ? obsInput.value : '';
+      const done = cb.checked;
+      const status = done ? 'Realizado' : 'Pendente';
+      const realizado = done ? new Date().toISOString().slice(0,10) : '';
+
+      const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
+      const record = { nome, milestone, status, realizado, observacao };
+      if(idx>=0) DB.acompanhamentos[idx] = record;
+      else DB.acompanhamentos.push(record);
+      persist('acompanhamentos');
+      rerender();
+    });
+  });
+
+  document.querySelectorAll('.acomp-obs').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const nome = inp.getAttribute('data-nome');
+      const milestone = parseInt(inp.getAttribute('data-milestone'));
+      const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
+      if(idx>=0){ DB.acompanhamentos[idx].observacao = inp.value; }
+      else { DB.acompanhamentos.push({ nome, milestone, status:'Pendente', realizado:'', observacao:inp.value }); }
+      persist('acompanhamentos');
+    });
+  });
 }
 
 /* =========================================================
