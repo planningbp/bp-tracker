@@ -1622,12 +1622,16 @@ function renderMeetingDetail(){
       <table><tbody>
         <tr><td>eNPS</td><td><strong>${m.enps}</strong></td></tr>
         <tr><td>lNPS</td><td><strong>${m.lnps}</strong></td></tr>
-        <tr><td>Férias vencidas</td><td><strong>${m.feriasVencidas||0}</strong></td></tr>
-        <tr><td>Banco de horas</td><td><strong>${m.bancoHoras||0}h</strong></td></tr>
-        <tr><td>Horas extras</td><td><strong>${m.horasExtras||0}h</strong></td></tr>
+        <tr><td>Férias vencidas</td><td><strong>${(m.feriasTable||[]).length}</strong></td></tr>
+        <tr><td>Banco de horas</td><td><strong>${(m.bancoHorasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
+        <tr><td>Horas extras</td><td><strong>${(m.horasExtrasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
       </tbody></table>
     </div>
   </div>
+  ${detailMiniTable('Admissões no período', m.admissoesTable, ['Nome','Cargo','Data admissão'], ['nome','cargo','admissao'])}
+  ${detailMiniTable('Desligamentos no período', m.desligamentosTable, ['Nome','Cargo','Tipo','Motivo'], ['nome','cargo','tipo','motivo'])}
+  ${detailMiniTable('Período de experiência (45/90 dias)', m.experienciaTable, ['Nome','Cargo','Admissão','Marco (dias)','Data do marco'], ['nome','cargo','admissao','milestone','milestoneDate'])}
+  ${detailMiniTable('Promoções / Movimentações', m.promocoesTable, ['Nome','Cargo anterior','Cargo novo','Reajuste'], ['nome','cargoAnterior','cargoNovo','pct'])}
   <div class="card" style="margin-bottom:20px;">
     <div class="section-title">Riscos e Pendências</div>
     ${m.riscos && m.riscos.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Cargo</th><th>Motivo</th><th>Criticidade</th></tr></thead><tbody>
