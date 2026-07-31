@@ -538,6 +538,7 @@ const LS = {
   desligamentos:'planning_desligamentos',
   promocoes:'planning_promocoes',
   acompanhamentos:'planning_acompanhamentos',
+  oneOnOnes:'planning_one_on_ones',
   session:'planning_session',
   seeded:'planning_seeded_v1'
 };
@@ -551,7 +552,8 @@ let DB = {
   colaboradores: loadJSON(LS.colaboradores, []),
   desligamentos: loadJSON(LS.desligamentos, []),
   promocoes: loadJSON(LS.promocoes, []),
-  acompanhamentos: loadJSON(LS.acompanhamentos, [])
+  acompanhamentos: loadJSON(LS.acompanhamentos, []),
+  oneOnOnes: loadJSON(LS.oneOnOnes, [])
 };
 function persist(part){ saveJSON(LS[part], DB[part]); }
 
@@ -1281,8 +1283,8 @@ function bindImport(){
   const btnClear = document.getElementById('btnClearAllImport');
   if(btnClear) btnClear.addEventListener('click', ()=>{
     if(!confirm('Tem certeza que deseja limpar TODAS as bases importadas (colaboradores, desligamentos e promoções)?')) return;
-    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[];
-    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos');
+    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[]; DB.oneOnOnes=[];
+    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos'); persist('oneOnOnes');
     renderShellAndPage();
   });
 }
@@ -1963,6 +1965,77 @@ function renderAcompanhamentos(){
           </div>
         </div>`;
       }).join('')}
+    </div>
+
+    <!-- 1:1 Section -->
+    <div style="margin-top:40px;border-top:2px solid #e5e7eb;padding-top:28px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">
+            ${ICONS.meetings} Registros de 1:1
+          </h2>
+          <p style="margin:4px 0 0;color:#888;font-size:13px;">Registre conversas individuais com colaboradores.</p>
+        </div>
+        <button class="btn btn-primary" id="btnNew1on1" style="width:auto;">${ICONS.plus} Novo 1:1</button>
+      </div>
+
+      <div id="form1on1" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:20px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div class="field"><label>Colaborador</label>
+            <select id="oo_nome" class="select">
+              <option value="">Selecione...</option>
+              ${(()=>{
+                const bp = currentBP();
+                const colabs = DB.colaboradores.filter(c => bp.areas.map(a=>normalizeStr(a)).includes(normalizeStr(c.area||c.departamento||'')));
+                return colabs.map(c=>{
+                  const nome = c.nome || c.Nome || '';
+                  return '<option value="'+esc(nome)+'">'+esc(nome)+'</option>';
+                }).join('');
+              })()}
+            </select>
+          </div>
+          <div class="field"><label>Data</label><input type="date" id="oo_data" value="${new Date().toISOString().slice(0,10)}"></div>
+        </div>
+        <div class="field"><label>Título</label><input type="text" id="oo_titulo" placeholder="Ex: Alinhamento de metas Q3"></div>
+        <div class="field"><label>Resumo da conversa</label><textarea id="oo_resumo" rows="4" placeholder="Principais pontos discutidos..."></textarea></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button class="btn btn-outline" id="btnCancel1on1">Cancelar</button>
+          <button class="btn btn-primary" id="btnSave1on1" style="width:auto;">Salvar</button>
+        </div>
+      </div>
+
+      ${(()=>{
+        const bp = currentBP();
+        const bpAreas = bp.areas.map(a=>normalizeStr(a));
+        const myOnes = DB.oneOnOnes.filter(o=>{
+          const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(o.nome));
+          if(!colab) return true;
+          return bpAreas.includes(normalizeStr(colab.area||colab.departamento||''));
+        });
+        myOnes.sort((a,b)=> (b.data||'').localeCompare(a.data||''));
+        if(myOnes.length===0) return '<div style="text-align:center;padding:40px;color:#aaa;font-size:14px;border:1px dashed #ddd;border-radius:12px;">Nenhum 1:1 registrado ainda.</div>';
+        return '<div style="display:flex;flex-direction:column;gap:12px;">'+myOnes.map(o=>{
+          const dataStr = o.data ? new Date(o.data+'T00:00:00').toLocaleDateString('pt-BR') : '';
+          const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(o.nome));
+          const area = colab ? (colab.area||colab.departamento||'') : '';
+          const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+          const areaColor = areaColors[area] || '#64748b';
+          return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start;">'+
+            '<div style="flex:1;">'+
+              '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'+
+                '<span style="font-weight:700;font-size:15px;">'+esc(o.titulo||'Sem título')+'</span>'+
+                '<span style="font-size:12px;color:#888;">'+dataStr+'</span>'+
+              '</div>'+
+              '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'+
+                '<span style="font-weight:600;font-size:13px;">'+esc(o.nome)+'</span>'+
+                (area ? '<span style="background:'+areaColor+';color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">'+esc(area)+'</span>' : '')+
+              '</div>'+
+              '<div style="font-size:13px;color:#555;line-height:1.5;white-space:pre-wrap;">'+esc(o.resumo||'')+'</div>'+
+            '</div>'+
+            '<button class="btn btn-danger btn-sm oo-delete" data-oo-id="'+esc(o.id)+'" title="Excluir" style="flex-shrink:0;">'+ICONS.trash+'</button>'+
+          '</div>';
+        }).join('')+'</div>';
+      })()}
     </div>`;
 }
 
@@ -2007,6 +2080,38 @@ function bindAcompanhamentos(){
       if(idx>=0){ DB.acompanhamentos[idx].observacao = inp.value; }
       else { DB.acompanhamentos.push({ nome, milestone, status:'Pendente', realizado:'', observacao:inp.value }); }
       persist('acompanhamentos');
+    });
+  });
+
+  // 1:1 bindings
+  const btnNew = document.getElementById('btnNew1on1');
+  const form1on1 = document.getElementById('form1on1');
+  if(btnNew && form1on1){
+    btnNew.addEventListener('click', ()=>{ form1on1.style.display = form1on1.style.display==='none'?'block':'none'; });
+  }
+  const btnCancel = document.getElementById('btnCancel1on1');
+  if(btnCancel) btnCancel.addEventListener('click', ()=>{ form1on1.style.display='none'; });
+
+  const btnSave = document.getElementById('btnSave1on1');
+  if(btnSave) btnSave.addEventListener('click', ()=>{
+    const nome = document.getElementById('oo_nome').value;
+    const data = document.getElementById('oo_data').value;
+    const titulo = document.getElementById('oo_titulo').value;
+    const resumo = document.getElementById('oo_resumo').value;
+    if(!nome){ alert('Selecione um colaborador.'); return; }
+    if(!titulo.trim()){ alert('Informe o título.'); return; }
+    DB.oneOnOnes.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, data, titulo, resumo, createdAt: new Date().toISOString() });
+    persist('oneOnOnes');
+    rerender();
+  });
+
+  document.querySelectorAll('.oo-delete').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(!confirm('Excluir este registro de 1:1?')) return;
+      const ooId = btn.getAttribute('data-oo-id');
+      DB.oneOnOnes = DB.oneOnOnes.filter(o=>o.id!==ooId);
+      persist('oneOnOnes');
+      rerender();
     });
   });
 }
