@@ -722,6 +722,38 @@ function parsePromocoes(rows){
 }
 
 /* =========================================================
+   APPLY PROMOTIONS TO COLABORADORES
+========================================================= */
+function applyPromocoes(){
+  if(!DB.promocoes.length || !DB.colaboradores.length) return;
+  // Group promotions by collaborator, pick the most recent one
+  const latestPromo = {};
+  DB.promocoes.forEach(p=>{
+    const key = normalizeStr(p.nome||'');
+    if(!key) return;
+    const pDate = p.mesDate instanceof Date ? p.mesDate : new Date(p.mesDate);
+    if(!latestPromo[key] || (pDate && !isNaN(pDate) && pDate > (latestPromo[key]._date||new Date(0)))){
+      latestPromo[key] = Object.assign({}, p, {_date: pDate});
+    }
+  });
+  let changed = false;
+  DB.colaboradores.forEach(c=>{
+    const key = normalizeStr(c.nome||c.Nome||'');
+    const promo = latestPromo[key];
+    if(!promo) return;
+    if(promo.cargoAprovado && promo.cargoAprovado !== c.cargo){
+      c.cargo = promo.cargoAprovado;
+      changed = true;
+    }
+    if(promo.valorAprovado != null && promo.valorAprovado !== '' && promo.valorAprovado !== c.faixaSalarial){
+      c.faixaSalarial = promo.valorAprovado;
+      changed = true;
+    }
+  });
+  if(changed) persist('colaboradores');
+}
+
+/* =========================================================
    AUTO-CALC ENGINE
 ========================================================= */
 function isHead(liderName){
@@ -1307,6 +1339,7 @@ function handleImportFile(type, file){
     else parsed = parsePromocoes(rows);
     DB[type] = parsed;
     persist(type);
+    if(type==='promocoes' || type==='colaboradores') applyPromocoes();
     statusEl.textContent = parsed.length + ' registros importados de "'+file.name+'"';
     statusEl.className = 'import-status ok';
     renderImportPreviewTables();
@@ -2196,7 +2229,7 @@ function renderColaboradoresPage(){
             const admRaw = c.admissao||c['Data de admissão']||c['data de admissao']||c['data_admissao']||'';
             const adm = admRaw ? (admRaw instanceof Date ? admRaw : new Date(admRaw)) : null;
             const admStr = adm && !isNaN(adm) ? adm.toLocaleDateString('pt-BR') : '';
-            const salario = c.faixa_salarial||c['Faixa Salarial']||c.salario||'';
+            const salario = c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'';
             const salarioStr = typeof salario==='number' ? salario.toLocaleString('pt-BR',{minimumFractionDigits:2}) : salario;
             const regime = c.regime||c.Regime||'';
             const aColor = areaColors[area]||'#64748b';
@@ -2258,7 +2291,7 @@ function renderColaboradorDetail(){
   const nascRaw = c.nascimento||c['Dt Nascimento']||c['dt_nascimento']||'';
   const nasc = nascRaw ? (nascRaw instanceof Date ? nascRaw : new Date(nascRaw)) : null;
   const nascStr = nasc && !isNaN(nasc) ? nasc.toLocaleDateString('pt-BR') : '';
-  const salario = c.faixa_salarial||c['Faixa Salarial']||c.salario||'';
+  const salario = c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'';
   const salarioStr = typeof salario==='number' ? salario.toLocaleString('pt-BR',{minimumFractionDigits:2}) : salario;
   const regime = c.regime||c.Regime||'';
   const efetivacao = c.dt_efetivacao||c['Dt Efetivação']||'';
@@ -2461,6 +2494,7 @@ function bindSettings(){}
 /* =========================================================
    INIT
 ========================================================= */
+applyPromocoes();
 render();
 </script>
 
