@@ -1396,7 +1396,10 @@ function applyAutoCalc(){
   fd.experienciaCount = auto.experiencia.length;
   fd.admissoesTable = auto.admissoes.map(a=>({nome:a.nome, cargo:a.cargo, admissao:fmtDate(a.admissao)}));
   fd.desligamentosTable = auto.desligamentos.map(d=>({nome:d.nome, cargo:d.cargo, tipo:d.tipo, motivo:d.motivo}));
-  fd.experienciaTable = auto.experiencia.map(e=>({nome:e.nome, cargo:e.cargo, admissao:fmtDate(e.admissao), milestone:e.milestone+' dias', milestoneDate:fmtDate(e.milestoneDate), status:'Pendente', observacao:''}));
+  fd.experienciaTable = auto.experiencia.map(e=>{
+    const saved = DB.acompanhamentos.find(a=> normalizeStr(a.nome)===normalizeStr(e.nome) && a.milestone===e.milestone);
+    return {nome:e.nome, cargo:e.cargo, admissao:fmtDate(e.admissao), milestone:e.milestone+' dias', milestoneDate:fmtDate(e.milestoneDate), status: saved ? saved.status : 'Pendente', observacao: saved ? saved.observacao||'' : ''};
+  });
   fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, cargoAnterior:p.cargoAtual, cargoNovo:p.cargoAprovado, pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
   fd.autoApplied = true;
 }
@@ -1859,12 +1862,15 @@ function renderAcompanhamentos(){
   const areas = [...new Set(records.map(r=>r.area))].sort();
   const lideres = [...new Set(records.map(r=>r.lider).filter(Boolean))].sort();
 
-  // Build month options from all dueDate values
+  // Build month options from dueDate and realizado values
   const monthSet = new Set();
   records.forEach(r=>{
     if(r.dueDate instanceof Date && !isNaN(r.dueDate)){
-      const key = r.dueDate.getFullYear()+'-'+String(r.dueDate.getMonth()+1).padStart(2,'0');
-      monthSet.add(key);
+      monthSet.add(r.dueDate.getFullYear()+'-'+String(r.dueDate.getMonth()+1).padStart(2,'0'));
+    }
+    if(r.realizado){
+      const rd = new Date(r.realizado+'T00:00:00');
+      if(!isNaN(rd)) monthSet.add(rd.getFullYear()+'-'+String(rd.getMonth()+1).padStart(2,'0'));
     }
   });
   const monthOptions = [...monthSet].sort();
@@ -1879,21 +1885,34 @@ function renderAcompanhamentos(){
   if(fArea) filtered = filtered.filter(r=>r.area===fArea);
   if(fLider) filtered = filtered.filter(r=>r.lider===fLider);
 
-  // Month filter: if set, show ALL records for that month (bypass window)
+  // Month filter: if set, show ALL records for that month (due date OR realizado date)
   if(fMonth){
     filtered = filtered.filter(r=>{
-      if(!(r.dueDate instanceof Date)) return false;
-      const key = r.dueDate.getFullYear()+'-'+String(r.dueDate.getMonth()+1).padStart(2,'0');
-      return key === fMonth;
+      // Match by due date
+      if(r.dueDate instanceof Date && !isNaN(r.dueDate)){
+        const key = r.dueDate.getFullYear()+'-'+String(r.dueDate.getMonth()+1).padStart(2,'0');
+        if(key === fMonth) return true;
+      }
+      // Match by realizado date (done in that month)
+      if(r.realizado){
+        const rd = new Date(r.realizado+'T00:00:00');
+        if(!isNaN(rd)){
+          const rKey = rd.getFullYear()+'-'+String(rd.getMonth()+1).padStart(2,'0');
+          if(rKey === fMonth) return true;
+        }
+      }
+      return false;
     });
   }
 
   // By default hide done; show only pending within ±10 days window or all if toggle
+  // When month is selected, always show done records to validate completion
   const WINDOW = 10;
   const showAll = UI.acompShowAll || !!fMonth;
+  const effectiveShowDone = showDone || !!fMonth;
   const pending = filtered.filter(r => {
-    if(r.done && !showDone) return false;
-    if(!showAll && !showDone && Math.abs(r.diffDays) > WINDOW && !r.done) return false;
+    if(r.done && !effectiveShowDone) return false;
+    if(!showAll && !effectiveShowDone && Math.abs(r.diffDays) > WINDOW && !r.done) return false;
     return true;
   });
 
