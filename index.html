@@ -2354,6 +2354,29 @@ function renderColaboradorDetail(){
     <div style="margin-bottom:16px;display:flex;gap:10px;">
       <button class="btn btn-outline" id="btnBackColabs" style="width:auto;">&larr; Voltar para Colaboradores</button>
       <button class="btn btn-outline" id="btnPdfDetail" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.file} Baixar PDF</button>
+      <button class="btn btn-danger" id="btnDesligar" style="width:auto;margin-left:auto;display:flex;align-items:center;gap:6px;">${ICONS.logout} Desligar Colaborador</button>
+    </div>
+
+    <div id="formDesligamento" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:20px;margin-bottom:20px;">
+      <div style="font-weight:700;font-size:15px;color:#dc2626;margin-bottom:14px;">Registrar Desligamento — ${esc(nome)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+        <div class="field"><label>Último dia</label><input type="date" id="desl_ultimoDia" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>Tipo</label>
+          <select id="desl_tipo" class="select">
+            <option value="">Selecione...</option>
+            <option value="Voluntário">Voluntário</option>
+            <option value="Involuntário">Involuntário</option>
+            <option value="Acordo mútuo">Acordo mútuo</option>
+            <option value="Término de contrato">Término de contrato</option>
+          </select>
+        </div>
+        <div class="field"><label>Motivo</label><input type="text" id="desl_motivo" placeholder="Ex: Proposta externa, performance..."></div>
+      </div>
+      <div class="field" style="margin-bottom:14px;"><label>Submotivo / Observações</label><input type="text" id="desl_submotivo" placeholder="Detalhes adicionais..."></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-outline" id="btnCancelDesl">Cancelar</button>
+        <button class="btn btn-danger" id="btnConfirmDesl" style="width:auto;">Confirmar Desligamento</button>
+      </div>
     </div>
 
     <div class="card" style="margin-bottom:20px;">
@@ -2466,6 +2489,67 @@ function bindColaboradorDetail(){
     renderShellAndPage();
   });
   document.getElementById('btnPdfDetail').addEventListener('click', ()=>{ exportColaboradorDetailPDF(nome); });
+
+  // Desligamento
+  const btnDesligar = document.getElementById('btnDesligar');
+  const formDesl = document.getElementById('formDesligamento');
+  if(btnDesligar && formDesl){
+    btnDesligar.addEventListener('click', ()=>{ formDesl.style.display = formDesl.style.display==='none'?'block':'none'; });
+  }
+  const btnCancelDesl = document.getElementById('btnCancelDesl');
+  if(btnCancelDesl) btnCancelDesl.addEventListener('click', ()=>{ formDesl.style.display='none'; });
+
+  const btnConfirmDesl = document.getElementById('btnConfirmDesl');
+  if(btnConfirmDesl) btnConfirmDesl.addEventListener('click', ()=>{
+    const tipo = document.getElementById('desl_tipo').value;
+    const motivo = document.getElementById('desl_motivo').value;
+    const submotivo = document.getElementById('desl_submotivo').value;
+    const ultimoDia = document.getElementById('desl_ultimoDia').value;
+    if(!tipo){ alert('Selecione o tipo de desligamento.'); return; }
+    if(!ultimoDia){ alert('Informe o último dia.'); return; }
+    if(!confirm('Confirma o desligamento de '+nome+'? O colaborador será removido da base ativa e adicionado aos desligamentos.')) return;
+
+    // Find the collaborator
+    const colabs = getMyColaboradores();
+    const c = colabs.find(x=>(x.nome||x.Nome||'')===nome);
+    if(!c){ alert('Colaborador não encontrado.'); return; }
+
+    // Build desligamento record
+    const now = new Date();
+    const mesDate = new Date(ultimoDia+'T00:00:00');
+    const admDate = c.admissao instanceof Date ? c.admissao : new Date(c.admissao);
+    const diffMs = mesDate - admDate;
+    const diffDays = diffMs > 0 ? Math.round(diffMs/86400000) : 0;
+    const tempoStr = diffDays > 365 ? Math.floor(diffDays/365)+' ano(s) e '+Math.floor((diffDays%365)/30)+' mês(es)' : Math.floor(diffDays/30)+' mês(es) e '+(diffDays%30)+' dia(s)';
+
+    DB.desligamentos.push({
+      id: uid(),
+      mesRaw: ultimoDia,
+      mesDate: mesDate,
+      nome: c.nome||c.Nome||'',
+      cargo: c.cargo||c.Cargo||'',
+      regime: c.regime||c.Regime||'',
+      departamentoRaw: c.departamento||c.Departamento||'',
+      area: c.area||c.departamento||'',
+      lider: c.lider||c['Líder']||c.Lider||'',
+      coordenacao: '',
+      empresa: '',
+      dtAdmissao: c.admissao,
+      ultimoDia: mesDate,
+      tempoDeCasa: tempoStr,
+      tipo: tipo,
+      motivo: motivo,
+      submotivo: submotivo
+    });
+    persist('desligamentos');
+
+    // Remove from colaboradores
+    const idx = DB.colaboradores.findIndex(x=> (x.nome||x.Nome||'')===nome);
+    if(idx>=0){ DB.colaboradores.splice(idx,1); persist('colaboradores'); }
+
+    UI.page='colaboradores';
+    renderShellAndPage();
+  });
 
   const btnNew = document.getElementById('btnNew1on1Detail');
   const form = document.getElementById('form1on1Detail');
