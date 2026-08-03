@@ -2782,6 +2782,11 @@ function renderIndicadores(){
           <div class="field"><label>eNPS</label><input type="number" id="sc_enps" placeholder="-100 a 100"></div>
           <div class="field"><label>lNPS</label><input type="number" id="sc_lnps" placeholder="-100 a 100"></div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div class="field"><label>Principais Forças</label><textarea id="sc_forcas" rows="3" placeholder="Pontos fortes identificados..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
+          <div class="field"><label>Pontos de Atenção</label><textarea id="sc_atencao" rows="3" placeholder="Pontos que precisam de atenção..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
+          <div class="field"><label>Recomendações</label><textarea id="sc_recomendacoes" rows="3" placeholder="Ações recomendadas..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
+        </div>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
           <button class="btn btn-outline" id="btnCancelScore">Cancelar</button>
           <button class="btn btn-primary" id="btnSaveScore" style="width:auto;">Salvar</button>
@@ -2807,7 +2812,17 @@ function renderIndicadores(){
           if(tipo==='empresa') refLabel = '<span style="color:#888;font-style:italic;">Geral</span>';
           else if(tipo==='lider') refLabel = '<span style="font-weight:600;">'+esc(s.lider||'')+'</span>'+(s.area?' <span style="font-size:11px;color:#888;">('+esc(s.area)+')</span>':'');
           else { const ac = areaColors[s.area]||'#64748b'; refLabel = '<span style="background:'+ac+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+esc(s.area)+'</span>'; }
-          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="padding:10px 14px;"><span style="background:'+(tipoBg[tipo]||'#64748b')+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+(tipoLabels[tipo]||tipo)+'</span></td><td style="padding:10px 14px;">'+refLabel+'</td><td style="padding:10px 14px;font-weight:600;">'+esc(s.period)+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td><td style="padding:10px 14px;text-align:center;font-size:12px;color:#888;">'+dtStr+'</td><td style="padding:10px 14px;text-align:center;"><button class="btn btn-danger btn-sm score-delete" data-score-id="'+esc(s.id)+'">'+ICONS.trash+'</button></td></tr>';
+          const hasNotes = s.forcas||s.atencao||s.recomendacoes;
+          let row = '<tr style="border-bottom:'+(hasNotes?'none':'1px solid #f0f0f0')+';'+(i%2===1?'background:#fafbfc;':'')+'" class="score-row" data-score-idx="'+i+'"><td style="padding:10px 14px;"><span style="background:'+(tipoBg[tipo]||'#64748b')+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+(tipoLabels[tipo]||tipo)+'</span></td><td style="padding:10px 14px;">'+refLabel+'</td><td style="padding:10px 14px;font-weight:600;">'+esc(s.period)+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td><td style="padding:10px 14px;text-align:center;font-size:12px;color:#888;">'+dtStr+'</td><td style="padding:10px 14px;text-align:center;"><button class="btn btn-danger btn-sm score-delete" data-score-id="'+esc(s.id)+'">'+ICONS.trash+'</button></td></tr>';
+          if(hasNotes){
+            row += '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td colspan="7" style="padding:4px 14px 12px;">' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">' +
+              (s.forcas?'<div><span style="font-size:10px;text-transform:uppercase;color:#16a34a;font-weight:700;">Forças</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.forcas)+'</p></div>':'<div></div>') +
+              (s.atencao?'<div><span style="font-size:10px;text-transform:uppercase;color:#f59e0b;font-weight:700;">Pontos de Atenção</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.atencao)+'</p></div>':'<div></div>') +
+              (s.recomendacoes?'<div><span style="font-size:10px;text-transform:uppercase;color:#3b82f6;font-weight:700;">Recomendações</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.recomendacoes)+'</p></div>':'<div></div>') +
+              '</div></td></tr>';
+          }
+          return row;
         }).join('')+'</tbody></table></div>';
       })()}
     </div>`;
@@ -2997,7 +3012,10 @@ function bindIndicadores(){
     if(tipo==='empresa') existing = DB.scores.findIndex(s=> s.tipo==='empresa' && s.period===period);
     else if(tipo==='area') existing = DB.scores.findIndex(s=> (s.tipo||'area')==='area' && normalizeStr(s.area)===normalizeStr(area) && s.period===period);
     else existing = DB.scores.findIndex(s=> s.tipo==='lider' && normalizeStr(s.lider||'')===normalizeStr(lider) && s.period===period);
-    const record = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), tipo, area: tipo==='empresa'?'':area, lider: tipo==='lider'?lider.trim():'', period, enps, lnps, createdAt: new Date().toISOString() };
+    const forcas = (document.getElementById('sc_forcas')||{}).value||'';
+    const atencao = (document.getElementById('sc_atencao')||{}).value||'';
+    const recomendacoes = (document.getElementById('sc_recomendacoes')||{}).value||'';
+    const record = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), tipo, area: tipo==='empresa'?'':area, lider: tipo==='lider'?lider.trim():'', period, enps, lnps, forcas, atencao, recomendacoes, createdAt: new Date().toISOString() };
     if(existing>=0) DB.scores[existing] = record;
     else DB.scores.push(record);
     persist('scores');
