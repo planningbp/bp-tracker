@@ -2718,8 +2718,8 @@ function renderIndicadores(){
     </div>
 
     <div class="grid grid-2" style="margin-bottom:20px;">
-      <div class="card"><div class="section-title">Headcount — Evolução por período</div><canvas id="chartHCevo" height="220"></canvas></div>
-      <div class="card"><div class="section-title">Turnover (%) — Evolução por período</div><canvas id="chartTOevo" height="220"></canvas></div>
+      <div class="card"><div class="section-title">Headcount — Evolução mensal</div><canvas id="chartHCevo" height="220"></canvas></div>
+      <div class="card"><div class="section-title">Turnover (%) — Evolução mensal</div><canvas id="chartTOevo" height="220"></canvas></div>
     </div>
 
     <div class="grid grid-2" style="margin-bottom:20px;">
@@ -2769,7 +2769,7 @@ function bindIndicadores(){
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
   });
 
-  // eNPS / lNPS / Headcount / Turnover by period
+  // eNPS / lNPS by period (from meetings)
   const periods = CONFIG.periods;
   const periodEnps = periods.map(p=>{
     const ms = myMeetings.filter(m=>m.period===p);
@@ -2779,13 +2779,36 @@ function bindIndicadores(){
     const ms = myMeetings.filter(m=>m.period===p);
     return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.lnps||0),0)/ms.length) : null;
   });
-  const periodHC = periods.map(p=>{
-    const ms = myMeetings.filter(m=>m.period===p);
-    return ms.length ? ms.reduce((s,m)=>s+(m.headcount||0),0) : null;
+
+  // Headcount & Turnover by month (from imported data)
+  // Headcount at end of each month = collaborators admitted on or before that month who haven't been terminated
+  function toMonthKey(d){
+    if(!d) return null;
+    const dt = d instanceof Date ? d : new Date(d);
+    if(isNaN(dt)) return null;
+    return dt.getFullYear()*100+(dt.getMonth()+1);
+  }
+  const monthlyHC = months.map(m=>{
+    const [y,mo] = m.key.split('-').map(Number);
+    const endOfMonth = y*100+mo;
+    const active = myColabs.filter(c=>{
+      const admKey = toMonthKey(c.admissao||c['Data de admissão']||c['data de admissao']);
+      if(!admKey || admKey > endOfMonth) return false;
+      return true;
+    });
+    // Subtract desligamentos that happened on or before this month
+    const desligados = myDeslig.filter(d=>{
+      const dKey = toMonthKey(d.ultimoDia||d.mesDate);
+      return dKey && dKey <= endOfMonth;
+    });
+    // Match by name to avoid double-counting
+    const deslNames = new Set(desligados.map(d=>normalizeStr(d.nome||'')));
+    return active.filter(c=>!deslNames.has(normalizeStr(c.nome||c.Nome||''))).length;
   });
-  const periodTO = periods.map(p=>{
-    const ms = myMeetings.filter(m=>m.period===p);
-    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.turnover||0),0)/ms.length*100)/100 : null;
+  const monthlyTO = months.map((m,i)=>{
+    const hc = monthlyHC[i];
+    if(!hc) return 0;
+    return Math.round(deslData[i]/hc*10000)/100;
   });
 
   destroyChart('chartEnps');
@@ -2804,16 +2827,16 @@ function bindIndicadores(){
 
   destroyChart('chartHCevo');
   CHARTS.chartHCevo = new Chart(document.getElementById('chartHCevo'), {
-    type:'bar',
-    data:{labels:periods, datasets:[{label:'Headcount', data:periodHC, backgroundColor:'#0ea5e9'}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}
+    type:'line',
+    data:{labels, datasets:[{label:'Headcount', data:monthlyHC, borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,0.1)', fill:true, tension:.3}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
   });
 
   destroyChart('chartTOevo');
   CHARTS.chartTOevo = new Chart(document.getElementById('chartTOevo'), {
     type:'line',
-    data:{labels:periods, datasets:[{label:'Turnover %', data:periodTO, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.1)', fill:true, tension:.3, spanGaps:true}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}
+    data:{labels, datasets:[{label:'Turnover %', data:monthlyTO, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.1)', fill:true, tension:.3}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{callback:function(v){return v+'%'}}}}}
   });
 
   // Desligamentos by tipo (doughnut)
