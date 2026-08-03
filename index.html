@@ -600,7 +600,8 @@ const ICONS = {
   arrowDown:'<svg class="icon" style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
   alert:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
   file:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
-  acomp:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-4 4-2-2"/></svg>'
+  acomp:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-4 4-2-2"/></svg>',
+  chart:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>'
 };
 
 /* =========================================================
@@ -910,6 +911,7 @@ const NAV_ITEMS = [
   {key:'history', label:'Histórico', icon:'history'},
   {key:'executive', label:'Painel Executivo', icon:'exec'},
   {key:'acompanhamentos', label:'Acompanhamentos', icon:'acomp'},
+  {key:'indicadores', label:'Indicadores', icon:'chart'},
   {key:'settings', label:'Configurações', icon:'settings'}
 ];
 const PAGE_TITLES = {
@@ -922,6 +924,7 @@ const PAGE_TITLES = {
   form:['Reunião','Registro de reunião de BP'],
   detail:['Detalhe da Reunião','Resumo executivo e indicadores'],
   acompanhamentos:['Acompanhamentos','Acompanhamento de novos colaboradores (7/15/45/90 dias)'],
+  indicadores:['Indicadores','Comparativos e evolução mensal dos dados'],
   colaboradores:['Colaboradores','Cadastro e histórico de interações'],
   colaboradorDetail:['Colaborador','Detalhes e registros do colaborador']
 };
@@ -984,6 +987,7 @@ function renderPageContent(){
   else if(UI.page==='form'){ c.innerHTML = renderMeetingForm(); bindMeetingForm(); }
   else if(UI.page==='detail'){ c.innerHTML = renderMeetingDetail(); bindMeetingDetail(); }
   else if(UI.page==='acompanhamentos'){ c.innerHTML = renderAcompanhamentos(); bindAcompanhamentos(); }
+  else if(UI.page==='indicadores'){ c.innerHTML = renderIndicadores(); bindIndicadores(); }
   else if(UI.page==='colaboradores'){ c.innerHTML = renderColaboradoresPage(); bindColaboradoresPage(); }
   else if(UI.page==='colaboradorDetail'){ c.innerHTML = renderColaboradorDetail(); bindColaboradorDetail(); }
 }
@@ -2623,6 +2627,222 @@ function bindColaboradorDetail(){
       rerender();
     });
   });
+}
+
+/* =========================================================
+   INDICADORES (COMPARATIVOS)
+========================================================= */
+function buildMonthLabels(n){
+  const out = [];
+  const now = new Date();
+  for(let i=n-1;i>=0;i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const MNAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    out.push({key: d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'), label: MNAMES[d.getMonth()]+'/'+d.getFullYear(), year:d.getFullYear(), month:d.getMonth()});
+  }
+  return out;
+}
+
+function countByMonth(items, dateField, months){
+  const counts = {};
+  months.forEach(m=>{ counts[m.key]=0; });
+  items.forEach(item=>{
+    const raw = item[dateField];
+    if(!raw) return;
+    const d = raw instanceof Date ? raw : new Date(raw);
+    if(isNaN(d)) return;
+    const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    if(counts[key]!==undefined) counts[key]++;
+  });
+  return months.map(m=>counts[m.key]);
+}
+
+function renderIndicadores(){
+  const bp = currentBP();
+  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+  const myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
+  const myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
+  const myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
+  const myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+
+  // Summary KPIs
+  const totalAtivos = myColabs.length;
+  const totalDeslig = myDeslig.length;
+  const totalPromos = myPromos.length;
+  const avgEnps = myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0;
+  const avgLnps = myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0;
+
+  // Desligamentos by tipo
+  const tipoCount = {};
+  myDeslig.forEach(d=>{ const t=d.tipo||'Não informado'; tipoCount[t]=(tipoCount[t]||0)+1; });
+  const tipoLabels = Object.keys(tipoCount);
+
+  // Desligamentos by motivo
+  const motivoCount = {};
+  myDeslig.forEach(d=>{ const m=d.motivo||'Não informado'; motivoCount[m]=(motivoCount[m]||0)+1; });
+  const motivoLabels = Object.keys(motivoCount).sort((a,b)=>motivoCount[b]-motivoCount[a]);
+
+  return `
+    <div style="margin-bottom:20px;">
+      <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">${ICONS.chart} Indicadores e Comparativos</h2>
+      <p style="margin:4px 0 0;color:#888;font-size:13px;">Evolução mensal dos dados importados e registrados. Últimos 12 meses.</p>
+    </div>
+
+    <div class="grid grid-4" style="margin-bottom:20px;">
+      <div class="card kpi-card"><div class="kpi-value" style="color:var(--primary);">${totalAtivos}</div><div class="kpi-label">Colaboradores ativos</div></div>
+      <div class="card kpi-card"><div class="kpi-value" style="color:#ef4444;">${totalDeslig}</div><div class="kpi-label">Desligamentos total</div></div>
+      <div class="card kpi-card"><div class="kpi-value" style="color:#8b5cf6;">${totalPromos}</div><div class="kpi-label">Promoções total</div></div>
+      <div class="card kpi-card"><div class="kpi-value">${avgEnps} <span style="font-size:14px;color:#888;">/ ${avgLnps}</span></div><div class="kpi-label">eNPS / lNPS médio</div></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:20px;">
+      <div class="card"><div class="section-title">Admissões vs Desligamentos (por mês)</div><canvas id="chartAdmDesl" height="220"></canvas></div>
+      <div class="card"><div class="section-title">Promoções (por mês)</div><canvas id="chartPromos" height="220"></canvas></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:20px;">
+      <div class="card"><div class="section-title">eNPS — Evolução por período</div><canvas id="chartEnps" height="220"></canvas></div>
+      <div class="card"><div class="section-title">lNPS — Evolução por período</div><canvas id="chartLnps" height="220"></canvas></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:20px;">
+      <div class="card"><div class="section-title">Headcount — Evolução por período</div><canvas id="chartHCevo" height="220"></canvas></div>
+      <div class="card"><div class="section-title">Turnover (%) — Evolução por período</div><canvas id="chartTOevo" height="220"></canvas></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:20px;">
+      <div class="card"><div class="section-title">Desligamentos por Tipo</div><canvas id="chartDeslTipo" height="220"></canvas></div>
+      <div class="card"><div class="section-title">Desligamentos por Motivo</div><canvas id="chartDeslMotivo" height="220"></canvas></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title">Resumo Mensal Detalhado</div>
+      <div style="overflow-x:auto;">
+        <table id="tblResumoMensal" style="width:100%;border-collapse:collapse;font-size:13px;"></table>
+      </div>
+    </div>`;
+}
+
+function bindIndicadores(){
+  const bp = currentBP();
+  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+  const months = buildMonthLabels(12);
+  const labels = months.map(m=>m.label);
+
+  const myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
+  const myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
+  const myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
+  const myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+
+  // Admissões vs Desligamentos
+  const admData = countByMonth(myColabs, 'admissao', months);
+  const deslData = countByMonth(myDeslig, 'ultimoDia', months);
+  destroyChart('chartAdmDesl');
+  CHARTS.chartAdmDesl = new Chart(document.getElementById('chartAdmDesl'), {
+    type:'bar',
+    data:{labels, datasets:[
+      {label:'Admissões', data:admData, backgroundColor:'#00BFA5'},
+      {label:'Desligamentos', data:deslData, backgroundColor:'#ef4444'}
+    ]},
+    options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
+  });
+
+  // Promoções
+  const promoData = countByMonth(myPromos, 'mesDate', months);
+  destroyChart('chartPromos');
+  CHARTS.chartPromos = new Chart(document.getElementById('chartPromos'), {
+    type:'bar',
+    data:{labels, datasets:[{label:'Promoções', data:promoData, backgroundColor:'#8b5cf6'}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
+  });
+
+  // eNPS / lNPS / Headcount / Turnover by period
+  const periods = CONFIG.periods;
+  const periodEnps = periods.map(p=>{
+    const ms = myMeetings.filter(m=>m.period===p);
+    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.enps||0),0)/ms.length) : null;
+  });
+  const periodLnps = periods.map(p=>{
+    const ms = myMeetings.filter(m=>m.period===p);
+    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.lnps||0),0)/ms.length) : null;
+  });
+  const periodHC = periods.map(p=>{
+    const ms = myMeetings.filter(m=>m.period===p);
+    return ms.length ? ms.reduce((s,m)=>s+(m.headcount||0),0) : null;
+  });
+  const periodTO = periods.map(p=>{
+    const ms = myMeetings.filter(m=>m.period===p);
+    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.turnover||0),0)/ms.length*100)/100 : null;
+  });
+
+  destroyChart('chartEnps');
+  CHARTS.chartEnps = new Chart(document.getElementById('chartEnps'), {
+    type:'line',
+    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#00BFA5', backgroundColor:'rgba(0,191,165,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+  });
+
+  destroyChart('chartLnps');
+  CHARTS.chartLnps = new Chart(document.getElementById('chartLnps'), {
+    type:'line',
+    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#1B1B2F', backgroundColor:'rgba(27,27,47,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+  });
+
+  destroyChart('chartHCevo');
+  CHARTS.chartHCevo = new Chart(document.getElementById('chartHCevo'), {
+    type:'bar',
+    data:{labels:periods, datasets:[{label:'Headcount', data:periodHC, backgroundColor:'#0ea5e9'}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}
+  });
+
+  destroyChart('chartTOevo');
+  CHARTS.chartTOevo = new Chart(document.getElementById('chartTOevo'), {
+    type:'line',
+    data:{labels:periods, datasets:[{label:'Turnover %', data:periodTO, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}
+  });
+
+  // Desligamentos by tipo (doughnut)
+  const tipoCount = {};
+  myDeslig.forEach(d=>{ const t=d.tipo||'Não informado'; tipoCount[t]=(tipoCount[t]||0)+1; });
+  const tipoLabels = Object.keys(tipoCount);
+  const tipoColors = ['#ef4444','#f59e0b','#8b5cf6','#0ea5e9','#10b981','#ec4899','#64748b'];
+  destroyChart('chartDeslTipo');
+  CHARTS.chartDeslTipo = new Chart(document.getElementById('chartDeslTipo'), {
+    type:'doughnut',
+    data:{labels:tipoLabels, datasets:[{data:tipoLabels.map(t=>tipoCount[t]), backgroundColor:tipoColors}]},
+    options:{responsive:true, plugins:{legend:{position:'bottom'}}}
+  });
+
+  // Desligamentos by motivo (horizontal bar)
+  const motivoCount = {};
+  myDeslig.forEach(d=>{ const m=d.motivo||'Não informado'; motivoCount[m]=(motivoCount[m]||0)+1; });
+  const motivoLabels = Object.keys(motivoCount).sort((a,b)=>motivoCount[b]-motivoCount[a]);
+  destroyChart('chartDeslMotivo');
+  CHARTS.chartDeslMotivo = new Chart(document.getElementById('chartDeslMotivo'), {
+    type:'bar',
+    data:{labels:motivoLabels, datasets:[{label:'Qtd', data:motivoLabels.map(m=>motivoCount[m]), backgroundColor:'#ef4444'}]},
+    options:{indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true, ticks:{stepSize:1}}}}
+  });
+
+  // Summary table
+  const tbl = document.getElementById('tblResumoMensal');
+  let html = '<thead><tr style="background:#f9fafb;"><th style="padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Mês</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Admissões</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Desligamentos</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Promoções</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Saldo</th></tr></thead><tbody>';
+  months.forEach((m,i)=>{
+    const saldo = admData[i]-deslData[i];
+    const saldoColor = saldo>0?'#10b981':saldo<0?'#ef4444':'#888';
+    const saldoSign = saldo>0?'+':'';
+    html += '<tr style="border-bottom:1px solid #f0f0f0;">';
+    html += '<td style="padding:10px 12px;font-weight:600;">'+m.label+'</td>';
+    html += '<td style="padding:10px 12px;text-align:center;color:#00BFA5;font-weight:700;">'+admData[i]+'</td>';
+    html += '<td style="padding:10px 12px;text-align:center;color:#ef4444;font-weight:700;">'+deslData[i]+'</td>';
+    html += '<td style="padding:10px 12px;text-align:center;color:#8b5cf6;font-weight:700;">'+promoData[i]+'</td>';
+    html += '<td style="padding:10px 12px;text-align:center;color:'+saldoColor+';font-weight:700;">'+saldoSign+saldo+'</td>';
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  tbl.innerHTML = html;
 }
 
 /* =========================================================
