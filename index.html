@@ -831,7 +831,8 @@ let UI = {
   acompFilterMonth: '',
   colabFilterArea: '',
   colabSearch: '',
-  colabDetailNome: null
+  colabDetailNome: null,
+  indFilterArea: ''
 };
 let CHARTS = {};
 function destroyChart(id){ if(CHARTS[id]){ CHARTS[id].destroy(); delete CHARTS[id]; } }
@@ -2657,35 +2658,46 @@ function countByMonth(items, dateField, months){
   return months.map(m=>counts[m.key]);
 }
 
-function renderIndicadores(){
+function getIndicadoresData(filterArea){
   const bp = currentBP();
   const bpAreas = bp.areas.map(a=>normalizeStr(a));
-  const myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
-  const myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
-  const myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
-  const myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+  let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
+  let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
+  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
+  let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+  if(filterArea){
+    myColabs = myColabs.filter(c=>(c.area||c.departamento||'')===filterArea);
+    myDeslig = myDeslig.filter(d=>(d.area||'')===filterArea);
+    myPromos = myPromos.filter(p=>(p.area||'')===filterArea);
+    myMeetings = myMeetings.filter(m=> normalizeStr(m.area||'')===normalizeStr(filterArea));
+  }
+  return {bp, bpAreas, myColabs, myDeslig, myPromos, myMeetings};
+}
 
-  // Summary KPIs
+function renderIndicadores(){
+  const fArea = UI.indFilterArea || '';
+  const {bp, bpAreas, myColabs, myDeslig, myPromos, myMeetings} = getIndicadoresData(fArea);
+  const allAreasList = bp.areas.slice().sort();
+
   const totalAtivos = myColabs.length;
   const totalDeslig = myDeslig.length;
   const totalPromos = myPromos.length;
   const avgEnps = myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0;
   const avgLnps = myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0;
 
-  // Desligamentos by tipo
-  const tipoCount = {};
-  myDeslig.forEach(d=>{ const t=d.tipo||'Não informado'; tipoCount[t]=(tipoCount[t]||0)+1; });
-  const tipoLabels = Object.keys(tipoCount);
-
-  // Desligamentos by motivo
-  const motivoCount = {};
-  myDeslig.forEach(d=>{ const m=d.motivo||'Não informado'; motivoCount[m]=(motivoCount[m]||0)+1; });
-  const motivoLabels = Object.keys(motivoCount).sort((a,b)=>motivoCount[b]-motivoCount[a]);
-
   return `
-    <div style="margin-bottom:20px;">
-      <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">${ICONS.chart} Indicadores e Comparativos</h2>
-      <p style="margin:4px 0 0;color:#888;font-size:13px;">Evolução mensal dos dados importados e registrados. Últimos 12 meses.</p>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">${ICONS.chart} Indicadores e Comparativos</h2>
+        <p style="margin:4px 0 0;color:#888;font-size:13px;">Evolução mensal dos dados importados e registrados. Últimos 12 meses.${fArea?' · Filtrado: '+esc(fArea):''}</p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <select id="indAreaFilter" class="select" style="min-width:150px;">
+          <option value="">Todas as áreas</option>
+          ${allAreasList.map(a=>`<option value="${esc(a)}" ${a===fArea?'selected':''}>${esc(a)}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline" id="btnPdfInd" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.file} Baixar PDF</button>
+      </div>
     </div>
 
     <div class="grid grid-4" style="margin-bottom:20px;">
@@ -2724,15 +2736,16 @@ function renderIndicadores(){
 }
 
 function bindIndicadores(){
-  const bp = currentBP();
-  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+  const rerender = ()=>{ const c=document.getElementById('content'); c.innerHTML=renderIndicadores(); bindIndicadores(); };
+  const areaFilter = document.getElementById('indAreaFilter');
+  if(areaFilter) areaFilter.addEventListener('change', ()=>{ UI.indFilterArea=areaFilter.value; rerender(); });
+  const btnPdf = document.getElementById('btnPdfInd');
+  if(btnPdf) btnPdf.addEventListener('click', ()=>{ exportIndicadoresPDF(); });
+
+  const fArea = UI.indFilterArea || '';
+  const {bp, bpAreas, myColabs, myDeslig, myPromos, myMeetings} = getIndicadoresData(fArea);
   const months = buildMonthLabels(12);
   const labels = months.map(m=>m.label);
-
-  const myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
-  const myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
-  const myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
-  const myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
 
   // Admissões vs Desligamentos
   const admData = countByMonth(myColabs, 'admissao', months);
@@ -3055,6 +3068,131 @@ function exportAcompanhamentosPDF(){
   pdfFooter(doc);
   const fn = 'Acompanhamentos'+(fArea?'_'+fArea:'')+(fMonth?'_'+fMonth:'')+'_'+new Date().toISOString().slice(0,10)+'.pdf';
   doc.save(fn);
+}
+
+function exportIndicadoresPDF(){
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF();
+  const fArea = UI.indFilterArea || '';
+  const {myColabs, myDeslig, myPromos, myMeetings} = getIndicadoresData(fArea);
+  const months = buildMonthLabels(12);
+  const MNAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  const subtitle = (fArea||'Todas as áreas')+' · Últimos 12 meses';
+  let y = pdfHeader(doc, 'Relatório de Indicadores', subtitle);
+
+  // KPIs
+  const avgEnps = myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0;
+  const avgLnps = myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0;
+  doc.autoTable({
+    startY: y,
+    head:[['Indicador','Valor']],
+    body:[
+      ['Colaboradores ativos', String(myColabs.length)],
+      ['Desligamentos total', String(myDeslig.length)],
+      ['Promoções total', String(myPromos.length)],
+      ['eNPS médio', String(avgEnps)],
+      ['lNPS médio', String(avgLnps)]
+    ],
+    styles:{fontSize:10, cellPadding:4},
+    headStyles:{fillColor:[0,191,165], textColor:255, fontStyle:'bold'},
+    columnStyles:{0:{fontStyle:'bold',cellWidth:60}},
+    margin:{left:14,right:14}
+  });
+  y = doc.lastAutoTable.finalY + 12;
+
+  // Monthly summary table
+  const admData = countByMonth(myColabs, 'admissao', months);
+  const deslData = countByMonth(myDeslig, 'ultimoDia', months);
+  const promoData = countByMonth(myPromos, 'mesDate', months);
+  doc.setFontSize(12); doc.setTextColor(27,27,47);
+  doc.text('Resumo Mensal', 14, y); y+=5;
+  doc.autoTable({
+    startY: y,
+    head:[['Mês','Admissões','Desligamentos','Promoções','Saldo']],
+    body: months.map((m,i)=>{
+      const saldo = admData[i]-deslData[i];
+      return [m.label, String(admData[i]), String(deslData[i]), String(promoData[i]), (saldo>=0?'+':'')+saldo];
+    }),
+    styles:{fontSize:9, cellPadding:3, halign:'center'},
+    headStyles:{fillColor:[0,191,165], textColor:255, fontStyle:'bold'},
+    columnStyles:{0:{halign:'left',fontStyle:'bold'}},
+    margin:{left:14,right:14},
+    didParseCell: function(data){
+      if(data.section==='body' && data.column.index===4){
+        const val = parseInt(data.cell.raw);
+        if(val>0) data.cell.styles.textColor=[16,185,129];
+        else if(val<0) data.cell.styles.textColor=[239,68,68];
+      }
+    }
+  });
+  y = doc.lastAutoTable.finalY + 12;
+
+  // Desligamentos by tipo
+  if(myDeslig.length>0){
+    if(y > doc.internal.pageSize.getHeight()-80){ doc.addPage(); y=20; }
+    const tipoCount = {};
+    myDeslig.forEach(d=>{ const t=d.tipo||'Não informado'; tipoCount[t]=(tipoCount[t]||0)+1; });
+    doc.setFontSize(12); doc.setTextColor(27,27,47);
+    doc.text('Desligamentos por Tipo', 14, y); y+=5;
+    doc.autoTable({
+      startY: y,
+      head:[['Tipo','Quantidade','%']],
+      body: Object.entries(tipoCount).sort((a,b)=>b[1]-a[1]).map(([t,c])=>[t, String(c), Math.round(c/myDeslig.length*100)+'%']),
+      styles:{fontSize:9, cellPadding:3},
+      headStyles:{fillColor:[0,191,165], textColor:255, fontStyle:'bold'},
+      margin:{left:14,right:14}
+    });
+    y = doc.lastAutoTable.finalY + 12;
+
+    // By motivo
+    if(y > doc.internal.pageSize.getHeight()-80){ doc.addPage(); y=20; }
+    const motivoCount = {};
+    myDeslig.forEach(d=>{ const m=d.motivo||'Não informado'; motivoCount[m]=(motivoCount[m]||0)+1; });
+    doc.setFontSize(12); doc.setTextColor(27,27,47);
+    doc.text('Desligamentos por Motivo', 14, y); y+=5;
+    doc.autoTable({
+      startY: y,
+      head:[['Motivo','Quantidade','%']],
+      body: Object.entries(motivoCount).sort((a,b)=>b[1]-a[1]).map(([m,c])=>[m, String(c), Math.round(c/myDeslig.length*100)+'%']),
+      styles:{fontSize:9, cellPadding:3},
+      headStyles:{fillColor:[0,191,165], textColor:255, fontStyle:'bold'},
+      margin:{left:14,right:14}
+    });
+    y = doc.lastAutoTable.finalY + 12;
+  }
+
+  // eNPS / lNPS by period
+  const periods = CONFIG.periods;
+  const periodData = periods.map(p=>{
+    const ms = myMeetings.filter(m=>m.period===p);
+    if(!ms.length) return null;
+    return {
+      period: p,
+      enps: Math.round(ms.reduce((s,m)=>s+(m.enps||0),0)/ms.length),
+      lnps: Math.round(ms.reduce((s,m)=>s+(m.lnps||0),0)/ms.length),
+      hc: ms.reduce((s,m)=>s+(m.headcount||0),0),
+      to: Math.round(ms.reduce((s,m)=>s+(m.turnover||0),0)/ms.length*100)/100
+    };
+  }).filter(Boolean);
+
+  if(periodData.length>0){
+    if(y > doc.internal.pageSize.getHeight()-80){ doc.addPage(); y=20; }
+    doc.setFontSize(12); doc.setTextColor(27,27,47);
+    doc.text('Evolução por Período (Reuniões)', 14, y); y+=5;
+    doc.autoTable({
+      startY: y,
+      head:[['Período','eNPS','lNPS','Headcount','Turnover %']],
+      body: periodData.map(d=>[d.period, String(d.enps), String(d.lnps), String(d.hc), String(d.to)+'%']),
+      styles:{fontSize:9, cellPadding:3, halign:'center'},
+      headStyles:{fillColor:[0,191,165], textColor:255, fontStyle:'bold'},
+      columnStyles:{0:{halign:'left',fontStyle:'bold'}},
+      margin:{left:14,right:14}
+    });
+  }
+
+  pdfFooter(doc);
+  doc.save('Indicadores'+(fArea?'_'+fArea:'')+'_'+new Date().toISOString().slice(0,10)+'.pdf');
 }
 
 /* =========================================================
