@@ -541,6 +541,7 @@ const LS = {
   promocoes:'planning_promocoes',
   acompanhamentos:'planning_acompanhamentos',
   oneOnOnes:'planning_one_on_ones',
+  scores:'planning_scores',
   session:'planning_session',
   seeded:'planning_seeded_v1'
 };
@@ -555,7 +556,8 @@ let DB = {
   desligamentos: loadJSON(LS.desligamentos, []),
   promocoes: loadJSON(LS.promocoes, []),
   acompanhamentos: loadJSON(LS.acompanhamentos, []),
-  oneOnOnes: loadJSON(LS.oneOnOnes, [])
+  oneOnOnes: loadJSON(LS.oneOnOnes, []),
+  scores: loadJSON(LS.scores, [])
 };
 function persist(part){ saveJSON(LS[part], DB[part]); }
 
@@ -1330,8 +1332,8 @@ function bindImport(){
   const btnClear = document.getElementById('btnClearAllImport');
   if(btnClear) btnClear.addEventListener('click', ()=>{
     if(!confirm('Tem certeza que deseja limpar TODAS as bases importadas (colaboradores, desligamentos e promoções)?')) return;
-    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[]; DB.oneOnOnes=[];
-    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos'); persist('oneOnOnes');
+    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[]; DB.oneOnOnes=[]; DB.scores=[];
+    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos'); persist('oneOnOnes'); persist('scores');
     renderShellAndPage();
   });
 }
@@ -1408,6 +1410,12 @@ function applyAutoCalc(){
     return {nome:e.nome, cargo:e.cargo, admissao:fmtDate(e.admissao), milestone:e.milestone+' dias', milestoneDate:fmtDate(e.milestoneDate), status: saved ? saved.status : 'Pendente', observacao: saved ? saved.observacao||'' : ''};
   });
   fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, cargoAnterior:p.cargoAtual, cargoNovo:p.cargoAprovado, pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
+  // Pull eNPS/lNPS from scores
+  const scoreMatch = DB.scores.find(s=> normalizeStr(s.area)===normalizeStr(fd.area) && s.period===fd.period);
+  if(scoreMatch){
+    fd.enps = scoreMatch.enps;
+    fd.lnps = scoreMatch.lnps;
+  }
   fd.autoApplied = true;
 }
 function detailMiniTable(title, rows, headers, keys){
@@ -2682,8 +2690,10 @@ function renderIndicadores(){
   const totalAtivos = myColabs.length;
   const totalDeslig = myDeslig.length;
   const totalPromos = myPromos.length;
-  const avgEnps = myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0;
-  const avgLnps = myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0;
+  // Use scores for eNPS/lNPS (fallback to meetings)
+  const myScores = fArea ? DB.scores.filter(s=>normalizeStr(s.area)===normalizeStr(fArea)) : DB.scores.filter(s=>bpAreas.includes(normalizeStr(s.area||'')));
+  const avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0);
+  const avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0);
 
   return `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:16px;">
@@ -2732,6 +2742,54 @@ function renderIndicadores(){
       <div style="overflow-x:auto;">
         <table id="tblResumoMensal" style="width:100%;border-collapse:collapse;font-size:13px;"></table>
       </div>
+    </div>
+
+    <!-- eNPS / lNPS Registration -->
+    <div class="card" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div>
+          <div class="section-title" style="margin:0;">Registros de eNPS e lNPS</div>
+          <p style="margin:4px 0 0;color:#888;font-size:12px;">Registre as notas por área e período. Ao criar uma reunião, os valores serão puxados automaticamente.</p>
+        </div>
+        <button class="btn btn-primary" id="btnNewScore" style="width:auto;">${ICONS.plus} Novo Registro</button>
+      </div>
+
+      <div id="formScore" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:20px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div class="field"><label>Área</label>
+            <select id="sc_area" class="select">
+              ${bp.areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}
+            </select>
+          </div>
+          <div class="field"><label>Período</label>
+            <select id="sc_period" class="select">
+              ${CONFIG.periods.map(p=>'<option value="'+p+'">'+p+'</option>').join('')}
+            </select>
+          </div>
+          <div class="field"><label>eNPS</label><input type="number" id="sc_enps" placeholder="-100 a 100"></div>
+          <div class="field"><label>lNPS</label><input type="number" id="sc_lnps" placeholder="-100 a 100"></div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button class="btn btn-outline" id="btnCancelScore">Cancelar</button>
+          <button class="btn btn-primary" id="btnSaveScore" style="width:auto;">Salvar</button>
+        </div>
+      </div>
+
+      ${(()=>{
+        const bpScores = DB.scores.filter(s=> bp.areas.map(a=>normalizeStr(a)).includes(normalizeStr(s.area||'')));
+        const filtered = fArea ? bpScores.filter(s=>(s.area||'')===fArea) : bpScores;
+        filtered.sort((a,b)=> (b.period||'').localeCompare(a.period||'') || (a.area||'').localeCompare(b.area||''));
+        if(filtered.length===0) return '<div style="text-align:center;padding:30px;color:#aaa;font-size:13px;border:1px dashed #ddd;border-radius:10px;">Nenhum registro de eNPS/lNPS ainda.</div>';
+        const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+        return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Data registro</th><th style="padding:10px 14px;"></th></tr></thead><tbody>'+
+        filtered.map((s,i)=>{
+          const ac = areaColors[s.area]||'#64748b';
+          const enpsColor = s.enps>=50?'#16a34a':s.enps>=0?'#f59e0b':'#ef4444';
+          const lnpsColor = s.lnps>=50?'#16a34a':s.lnps>=0?'#f59e0b':'#ef4444';
+          const dtStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '';
+          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="padding:10px 14px;"><span style="background:'+ac+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+esc(s.area)+'</span></td><td style="padding:10px 14px;font-weight:600;">'+esc(s.period)+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td><td style="padding:10px 14px;text-align:center;font-size:12px;color:#888;">'+dtStr+'</td><td style="padding:10px 14px;text-align:center;"><button class="btn btn-danger btn-sm score-delete" data-score-id="'+esc(s.id)+'">'+ICONS.trash+'</button></td></tr>';
+        }).join('')+'</tbody></table></div>';
+      })()}
     </div>`;
 }
 
@@ -2769,13 +2827,18 @@ function bindIndicadores(){
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
   });
 
-  // eNPS / lNPS by period (from meetings)
+  // eNPS / lNPS by period (from scores, fallback to meetings)
+  const myScores = fArea ? DB.scores.filter(s=>normalizeStr(s.area)===normalizeStr(fArea)) : DB.scores.filter(s=>bpAreas.includes(normalizeStr(s.area||'')));
   const periods = CONFIG.periods;
   const periodEnps = periods.map(p=>{
+    const sc = myScores.filter(s=>s.period===p);
+    if(sc.length) return Math.round(sc.reduce((s,r)=>s+(r.enps||0),0)/sc.length);
     const ms = myMeetings.filter(m=>m.period===p);
     return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.enps||0),0)/ms.length) : null;
   });
   const periodLnps = periods.map(p=>{
+    const sc = myScores.filter(s=>s.period===p);
+    if(sc.length) return Math.round(sc.reduce((s,r)=>s+(r.lnps||0),0)/sc.length);
     const ms = myMeetings.filter(m=>m.period===p);
     return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.lnps||0),0)/ms.length) : null;
   });
@@ -2879,6 +2942,40 @@ function bindIndicadores(){
   });
   html += '</tbody>';
   tbl.innerHTML = html;
+
+  // Score bindings
+  const btnNewScore = document.getElementById('btnNewScore');
+  const formScore = document.getElementById('formScore');
+  if(btnNewScore && formScore) btnNewScore.addEventListener('click', ()=>{ formScore.style.display = formScore.style.display==='none'?'block':'none'; });
+  const btnCancelScore = document.getElementById('btnCancelScore');
+  if(btnCancelScore) btnCancelScore.addEventListener('click', ()=>{ formScore.style.display='none'; });
+
+  const btnSaveScore = document.getElementById('btnSaveScore');
+  if(btnSaveScore) btnSaveScore.addEventListener('click', ()=>{
+    const area = document.getElementById('sc_area').value;
+    const period = document.getElementById('sc_period').value;
+    const enps = Number(document.getElementById('sc_enps').value);
+    const lnps = Number(document.getElementById('sc_lnps').value);
+    if(!area){ alert('Selecione a área.'); return; }
+    if(isNaN(enps)){ alert('Informe o eNPS.'); return; }
+    if(isNaN(lnps)){ alert('Informe o lNPS.'); return; }
+    // Check if exists for same area+period, update it
+    const existing = DB.scores.findIndex(s=> normalizeStr(s.area)===normalizeStr(area) && s.period===period);
+    const record = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), area, period, enps, lnps, createdAt: new Date().toISOString() };
+    if(existing>=0) DB.scores[existing] = record;
+    else DB.scores.push(record);
+    persist('scores');
+    rerender();
+  });
+
+  document.querySelectorAll('.score-delete').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(!confirm('Excluir este registro?')) return;
+      DB.scores = DB.scores.filter(s=>s.id!==btn.getAttribute('data-score-id'));
+      persist('scores');
+      rerender();
+    });
+  });
 }
 
 /* =========================================================
