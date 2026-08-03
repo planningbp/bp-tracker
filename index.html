@@ -704,7 +704,7 @@ function parseDesligamentos(rows){
       departamentoRaw: r[4], area: matchArea(r[4]),
       lider: r[5], coordenacao: r[6], empresa: r[7],
       dtAdmissao: parseExcelDate(r[8]), ultimoDia: parseExcelDate(r[9]),
-      tempoDeCasa: r[10], tipo: r[11], motivo: r[12], submotivo: r[13]
+      tempoDeCasa: r[10], tipo: (r[11]||'').toString().trim(), motivo: (r[12]||'').toString().trim(), submotivo: r[13]
     });
   }
   return out;
@@ -1411,7 +1411,7 @@ function applyAutoCalc(){
   });
   fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, cargoAnterior:p.cargoAtual, cargoNovo:p.cargoAprovado, pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
   // Pull eNPS/lNPS from scores
-  const scoreMatch = DB.scores.find(s=> normalizeStr(s.area)===normalizeStr(fd.area) && s.period===fd.period);
+  const scoreMatch = DB.scores.find(s=> (s.tipo||'area')==='area' && normalizeStr(s.area)===normalizeStr(fd.area) && s.period===fd.period);
   if(scoreMatch){
     fd.enps = scoreMatch.enps;
     fd.lnps = scoreMatch.lnps;
@@ -2690,10 +2690,10 @@ function renderIndicadores(){
   const totalAtivos = myColabs.length;
   const totalDeslig = myDeslig.length;
   const totalPromos = myPromos.length;
-  // Use scores for eNPS/lNPS (fallback to meetings)
-  const myScores = fArea ? DB.scores.filter(s=>normalizeStr(s.area)===normalizeStr(fArea)) : DB.scores.filter(s=>bpAreas.includes(normalizeStr(s.area||'')));
-  const avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0);
-  const avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0);
+  // Use area-level scores for eNPS/lNPS (fallback to meetings)
+  const kpiScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
+  const avgEnps = kpiScores.length ? Math.round(kpiScores.reduce((s,r)=>s+(r.enps||0),0)/kpiScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0);
+  const avgLnps = kpiScores.length ? Math.round(kpiScores.reduce((s,r)=>s+(r.lnps||0),0)/kpiScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0);
 
   return `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:16px;">
@@ -2749,17 +2749,30 @@ function renderIndicadores(){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <div>
           <div class="section-title" style="margin:0;">Registros de eNPS e lNPS</div>
-          <p style="margin:4px 0 0;color:#888;font-size:12px;">Registre as notas por área e período. Ao criar uma reunião, os valores serão puxados automaticamente.</p>
+          <p style="margin:4px 0 0;color:#888;font-size:12px;">Registre as notas por empresa, área ou líder. Ao criar uma reunião, os valores da área serão puxados automaticamente.</p>
         </div>
         <button class="btn btn-primary" id="btnNewScore" style="width:auto;">${ICONS.plus} Novo Registro</button>
       </div>
 
       <div id="formScore" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:20px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
-          <div class="field"><label>Área</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div class="field"><label>Nível</label>
+            <select id="sc_tipo" class="select">
+              <option value="area">Área</option>
+              <option value="empresa">Empresa Geral</option>
+              <option value="lider">Líder</option>
+            </select>
+          </div>
+          <div class="field" id="sc_area_wrap"><label>Área</label>
             <select id="sc_area" class="select">
               ${bp.areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}
             </select>
+          </div>
+          <div class="field" id="sc_lider_wrap" style="display:none;"><label>Líder</label>
+            <input type="text" id="sc_lider" list="sc_lider_list" placeholder="Nome do líder" class="select">
+            <datalist id="sc_lider_list">
+              ${[...new Set(DB.colaboradores.filter(c=>c.lider).map(c=>c.lider))].sort().map(l=>'<option value="'+esc(l)+'">').join('')}
+            </datalist>
           </div>
           <div class="field"><label>Período</label>
             <select id="sc_period" class="select">
@@ -2776,18 +2789,25 @@ function renderIndicadores(){
       </div>
 
       ${(()=>{
-        const bpScores = DB.scores.filter(s=> bp.areas.map(a=>normalizeStr(a)).includes(normalizeStr(s.area||'')));
-        const filtered = fArea ? bpScores.filter(s=>(s.area||'')===fArea) : bpScores;
-        filtered.sort((a,b)=> (b.period||'').localeCompare(a.period||'') || (a.area||'').localeCompare(b.area||''));
+        const bpAreas = bp.areas.map(a=>normalizeStr(a));
+        const bpScores = DB.scores.filter(s=> s.tipo==='empresa' || bpAreas.includes(normalizeStr(s.area||'')) || bpAreas.includes(normalizeStr(s.liderArea||'')));
+        const filtered = fArea ? bpScores.filter(s=> s.tipo==='empresa' || (s.area||'')===fArea || (s.liderArea||'')===fArea) : bpScores;
+        filtered.sort((a,b)=> (b.period||'').localeCompare(a.period||'') || (a.tipo||'area').localeCompare(b.tipo||'area') || (a.area||'').localeCompare(b.area||''));
         if(filtered.length===0) return '<div style="text-align:center;padding:30px;color:#aaa;font-size:13px;border:1px dashed #ddd;border-radius:10px;">Nenhum registro de eNPS/lNPS ainda.</div>';
         const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
-        return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Data registro</th><th style="padding:10px 14px;"></th></tr></thead><tbody>'+
+        const tipoLabels = {empresa:'Empresa',area:'Área',lider:'Líder'};
+        const tipoBg = {empresa:'#1B1B2F',area:'#00BFA5',lider:'#8b5cf6'};
+        return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nível</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área / Líder</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Data</th><th style="padding:10px 14px;"></th></tr></thead><tbody>'+
         filtered.map((s,i)=>{
-          const ac = areaColors[s.area]||'#64748b';
+          const tipo = s.tipo||'area';
           const enpsColor = s.enps>=50?'#16a34a':s.enps>=0?'#f59e0b':'#ef4444';
           const lnpsColor = s.lnps>=50?'#16a34a':s.lnps>=0?'#f59e0b':'#ef4444';
           const dtStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '';
-          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="padding:10px 14px;"><span style="background:'+ac+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+esc(s.area)+'</span></td><td style="padding:10px 14px;font-weight:600;">'+esc(s.period)+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td><td style="padding:10px 14px;text-align:center;font-size:12px;color:#888;">'+dtStr+'</td><td style="padding:10px 14px;text-align:center;"><button class="btn btn-danger btn-sm score-delete" data-score-id="'+esc(s.id)+'">'+ICONS.trash+'</button></td></tr>';
+          let refLabel = '';
+          if(tipo==='empresa') refLabel = '<span style="color:#888;font-style:italic;">Geral</span>';
+          else if(tipo==='lider') refLabel = '<span style="font-weight:600;">'+esc(s.lider||'')+'</span>'+(s.area?' <span style="font-size:11px;color:#888;">('+esc(s.area)+')</span>':'');
+          else { const ac = areaColors[s.area]||'#64748b'; refLabel = '<span style="background:'+ac+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+esc(s.area)+'</span>'; }
+          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="padding:10px 14px;"><span style="background:'+(tipoBg[tipo]||'#64748b')+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+(tipoLabels[tipo]||tipo)+'</span></td><td style="padding:10px 14px;">'+refLabel+'</td><td style="padding:10px 14px;font-weight:600;">'+esc(s.period)+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td><td style="padding:10px 14px;text-align:center;font-size:12px;color:#888;">'+dtStr+'</td><td style="padding:10px 14px;text-align:center;"><button class="btn btn-danger btn-sm score-delete" data-score-id="'+esc(s.id)+'">'+ICONS.trash+'</button></td></tr>';
         }).join('')+'</tbody></table></div>';
       })()}
     </div>`;
@@ -2827,8 +2847,8 @@ function bindIndicadores(){
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
   });
 
-  // eNPS / lNPS by period (from scores, fallback to meetings)
-  const myScores = fArea ? DB.scores.filter(s=>normalizeStr(s.area)===normalizeStr(fArea)) : DB.scores.filter(s=>bpAreas.includes(normalizeStr(s.area||'')));
+  // eNPS / lNPS by period (from area-level scores, fallback to meetings)
+  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
   const periods = CONFIG.periods;
   const periodEnps = periods.map(p=>{
     const sc = myScores.filter(s=>s.period===p);
@@ -2904,7 +2924,7 @@ function bindIndicadores(){
 
   // Desligamentos by tipo (doughnut)
   const tipoCount = {};
-  myDeslig.forEach(d=>{ const t=d.tipo||'Não informado'; tipoCount[t]=(tipoCount[t]||0)+1; });
+  myDeslig.forEach(d=>{ const t=(d.tipo||'Não informado').trim(); tipoCount[t]=(tipoCount[t]||0)+1; });
   const tipoLabels = Object.keys(tipoCount);
   const tipoColors = ['#ef4444','#f59e0b','#8b5cf6','#0ea5e9','#10b981','#ec4899','#64748b'];
   destroyChart('chartDeslTipo');
@@ -2916,7 +2936,7 @@ function bindIndicadores(){
 
   // Desligamentos by motivo (horizontal bar)
   const motivoCount = {};
-  myDeslig.forEach(d=>{ const m=d.motivo||'Não informado'; motivoCount[m]=(motivoCount[m]||0)+1; });
+  myDeslig.forEach(d=>{ const m=(d.motivo||'Não informado').trim(); motivoCount[m]=(motivoCount[m]||0)+1; });
   const motivoLabels = Object.keys(motivoCount).sort((a,b)=>motivoCount[b]-motivoCount[a]);
   destroyChart('chartDeslMotivo');
   CHARTS.chartDeslMotivo = new Chart(document.getElementById('chartDeslMotivo'), {
@@ -2950,18 +2970,34 @@ function bindIndicadores(){
   const btnCancelScore = document.getElementById('btnCancelScore');
   if(btnCancelScore) btnCancelScore.addEventListener('click', ()=>{ formScore.style.display='none'; });
 
+  // Tipo toggle
+  const scTipo = document.getElementById('sc_tipo');
+  const scAreaWrap = document.getElementById('sc_area_wrap');
+  const scLiderWrap = document.getElementById('sc_lider_wrap');
+  if(scTipo) scTipo.addEventListener('change', ()=>{
+    const v = scTipo.value;
+    if(scAreaWrap) scAreaWrap.style.display = v==='empresa'?'none':'block';
+    if(scLiderWrap) scLiderWrap.style.display = v==='lider'?'block':'none';
+  });
+
   const btnSaveScore = document.getElementById('btnSaveScore');
   if(btnSaveScore) btnSaveScore.addEventListener('click', ()=>{
+    const tipo = document.getElementById('sc_tipo').value;
     const area = document.getElementById('sc_area').value;
+    const lider = (document.getElementById('sc_lider')||{}).value||'';
     const period = document.getElementById('sc_period').value;
     const enps = Number(document.getElementById('sc_enps').value);
     const lnps = Number(document.getElementById('sc_lnps').value);
-    if(!area){ alert('Selecione a área.'); return; }
+    if(tipo==='area' && !area){ alert('Selecione a área.'); return; }
+    if(tipo==='lider' && !lider.trim()){ alert('Informe o nome do líder.'); return; }
     if(isNaN(enps)){ alert('Informe o eNPS.'); return; }
     if(isNaN(lnps)){ alert('Informe o lNPS.'); return; }
-    // Check if exists for same area+period, update it
-    const existing = DB.scores.findIndex(s=> normalizeStr(s.area)===normalizeStr(area) && s.period===period);
-    const record = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), area, period, enps, lnps, createdAt: new Date().toISOString() };
+    // Duplicate check based on tipo
+    let existing = -1;
+    if(tipo==='empresa') existing = DB.scores.findIndex(s=> s.tipo==='empresa' && s.period===period);
+    else if(tipo==='area') existing = DB.scores.findIndex(s=> (s.tipo||'area')==='area' && normalizeStr(s.area)===normalizeStr(area) && s.period===period);
+    else existing = DB.scores.findIndex(s=> s.tipo==='lider' && normalizeStr(s.lider||'')===normalizeStr(lider) && s.period===period);
+    const record = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), tipo, area: tipo==='empresa'?'':area, lider: tipo==='lider'?lider.trim():'', period, enps, lnps, createdAt: new Date().toISOString() };
     if(existing>=0) DB.scores[existing] = record;
     else DB.scores.push(record);
     persist('scores');
@@ -3268,7 +3304,7 @@ function exportIndicadoresPDF(){
     // By motivo
     if(y > doc.internal.pageSize.getHeight()-80){ doc.addPage(); y=20; }
     const motivoCount = {};
-    myDeslig.forEach(d=>{ const m=d.motivo||'Não informado'; motivoCount[m]=(motivoCount[m]||0)+1; });
+    myDeslig.forEach(d=>{ const m=(d.motivo||'Não informado').trim(); motivoCount[m]=(motivoCount[m]||0)+1; });
     doc.setFontSize(12); doc.setTextColor(27,27,47);
     doc.text('Desligamentos por Motivo', 14, y); y+=5;
     doc.autoTable({
