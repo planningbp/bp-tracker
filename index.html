@@ -1557,7 +1557,7 @@ function blankMeeting(bp){
     status:'Não iniciada',
     dataInicio:'', dataFim:'',
     headcount:0, admissoesCount:0, desligamentosCount:0, turnover:0, vagasAbertas:0, movimentacoes:0, experienciaCount:0,
-    pdis:0, sucessores:0, talentos:0, enps:0, lnps:0,
+    pdis:0, sucessores:0, talentos:0, enps:0, lnps:0, semNota:false,
     riscos:[], feriasVencidas:0, bancoHoras:0, horasExtras:0, pendenciasPonto:0,
     feriasTable:[], bancoHorasTable:[], horasExtrasTable:[], pendenciasPontoTable:[],
     planoAcao:'', observacoes:'',
@@ -1724,9 +1724,17 @@ function renderMeetingForm(){
 
         <div class="form-section ${UI.formSection===3?'active':''}" data-panel="3">
           <div class="section-title">Clima e Engajamento</div>
-          <div class="field-grid">
-            <div class="field"><label>eNPS</label><input id="f_enps" type="number" value="${fd.enps}"></div>
-            <div class="field"><label>lNPS (liderança)</label><input id="f_lnps" type="number" value="${fd.lnps}"></div>
+          <div style="margin-bottom:12px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#555;">
+              <input type="checkbox" id="f_semNota" ${fd.semNota?'checked':''} style="width:16px;height:16px;accent-color:#00BFA5;">
+              Sem nota de eNPS / lNPS no período
+            </label>
+          </div>
+          <div id="enpsFields" style="${fd.semNota?'opacity:0.4;pointer-events:none':''}">
+            <div class="field-grid">
+              <div class="field"><label>eNPS</label><input id="f_enps" type="number" value="${fd.enps}"></div>
+              <div class="field"><label>lNPS (liderança)</label><input id="f_lnps" type="number" value="${fd.lnps}"></div>
+            </div>
           </div>
         </div>
 
@@ -1792,8 +1800,9 @@ function collectFormBasics(){
   if(el('f_pdis')) fd.pdis = Number(el('f_pdis').value)||0;
   if(el('f_sucessores')) fd.sucessores = Number(el('f_sucessores').value)||0;
   if(el('f_talentos')) fd.talentos = Number(el('f_talentos').value)||0;
-  if(el('f_enps')) fd.enps = Number(el('f_enps').value)||0;
-  if(el('f_lnps')) fd.lnps = Number(el('f_lnps').value)||0;
+  if(el('f_semNota')) fd.semNota = el('f_semNota').checked;
+  if(fd.semNota){ fd.enps = 0; fd.lnps = 0; }
+  else { if(el('f_enps')) fd.enps = Number(el('f_enps').value)||0; if(el('f_lnps')) fd.lnps = Number(el('f_lnps').value)||0; }
   fd.feriasVencidas = (fd.feriasTable||[]).length;
   fd.bancoHoras = (fd.bancoHorasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0);
   fd.horasExtras = (fd.horasExtrasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0);
@@ -1849,6 +1858,11 @@ function bindMeetingForm(){
     inp.addEventListener('blur', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
   });
   const liderSel = document.getElementById('f_gerente'); if(liderSel) liderSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
+  const semNotaChk = document.getElementById('f_semNota');
+  if(semNotaChk) semNotaChk.addEventListener('change', ()=>{
+    const fields = document.getElementById('enpsFields');
+    if(fields) fields.style.cssText = semNotaChk.checked ? 'opacity:0.4;pointer-events:none' : '';
+  });
   const btnAddRisk = document.getElementById('btnAddRisk');
   if(btnAddRisk) btnAddRisk.addEventListener('click', ()=>{ collectFormBasics(); UI.formData.riscos.push({nome:'',cargo:'',motivo:'',criticidade:'Média'}); renderShellAndPage(); });
   document.querySelectorAll('[data-risk-remove]').forEach(b=>{
@@ -1939,8 +1953,8 @@ function renderMeetingDetail(){
     </div>
     <div class="card"><div class="section-title">Clima e Riscos</div>
       <table><tbody>
-        <tr><td>eNPS</td><td><strong>${m.enps}</strong></td></tr>
-        <tr><td>lNPS</td><td><strong>${m.lnps}</strong></td></tr>
+        <tr><td>eNPS</td><td><strong>${m.semNota?'<span style="color:#888;font-style:italic;">Sem nota</span>':m.enps}</strong></td></tr>
+        <tr><td>lNPS</td><td><strong>${m.semNota?'<span style="color:#888;font-style:italic;">Sem nota</span>':m.lnps}</strong></td></tr>
         <tr><td>Férias vencidas</td><td><strong>${(m.feriasTable||[]).length}</strong></td></tr>
         <tr><td>Banco de horas</td><td><strong>${(m.bancoHorasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
         <tr><td>Horas extras</td><td><strong>${(m.horasExtrasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
