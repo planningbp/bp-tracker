@@ -1705,33 +1705,20 @@ function renderMeetingForm(){
               <div style="font-size:11px;color:#888;">Áreas finalizadas</div>
             </div>
           </div>
-          <div style="margin-top:12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-              <div class="section-title" style="margin:0;font-size:13px;">PDIs da área (${areaPdis.length})</div>
-            </div>
-            <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
-              <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
-                <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th>
-                <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Líder</th>
-                <th style="padding:8px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Aprovado?</th>
-                <th style="padding:8px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Total Áreas</th>
-                <th style="padding:8px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Não iniciada</th>
-                <th style="padding:8px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Em progresso</th>
-                <th style="padding:8px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Finalizada</th>
-              </tr></thead>
-              <tbody>${areaPdis.map((p,i)=>{
-                const apColor = p.aprovado==='Sim'?'#16a34a':'#f59e0b';
-                return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
-                  '<td style="padding:8px 10px;font-weight:600;">'+esc(p.nome)+'</td>'+
-                  '<td style="padding:8px 10px;">'+esc(p.lider)+'</td>'+
-                  '<td style="padding:8px 10px;text-align:center;"><span style="color:'+apColor+';font-weight:700;">'+esc(p.aprovado)+'</span></td>'+
-                  '<td style="padding:8px 10px;text-align:center;font-weight:700;">'+p.totalAreas+'</td>'+
-                  '<td style="padding:8px 10px;text-align:center;color:#ef4444;font-weight:600;">'+(p.naoIniciada||0)+'</td>'+
-                  '<td style="padding:8px 10px;text-align:center;color:#f59e0b;font-weight:600;">'+(p.emProgresso||0)+'</td>'+
-                  '<td style="padding:8px 10px;text-align:center;color:#16a34a;font-weight:600;">'+(p.finalizada||0)+'</td></tr>';
-              }).join('')}</tbody>
-            </table></div>
-          </div>`:'<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Nenhum PDI importado para esta área. Importe a planilha de PDIs na aba "Importar Dados".</p>'}`;
+          ${(()=>{
+            const byLider = {};
+            areaPdis.forEach(p=>{ const lk=p.lider||'Sem líder'; if(!byLider[lk]) byLider[lk]=[]; byLider[lk].push(p); });
+            return Object.keys(byLider).sort().map(lider=>{
+              const team = byLider[lider];
+              return '<div style="margin-top:14px;"><div style="font-size:13px;font-weight:700;color:#1B1B2F;margin-bottom:6px;padding:6px 10px;background:#f1f5f9;border-radius:6px;">Equipe '+esc(lider)+' <span style="font-size:11px;color:#888;font-weight:400;">('+team.length+' pessoas)</span></div>'+
+                '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'+
+                '<thead><tr style="border-bottom:1px solid #e5e7eb;"><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Aprovado?</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Áreas</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Não iniciada</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Em progresso</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Finalizada</th></tr></thead>'+
+                '<tbody>'+team.map((p,i)=>{
+                  const apColor = p.aprovado==='Sim'?'#16a34a':'#f59e0b';
+                  return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="padding:6px 10px;">'+esc(p.nome)+'</td><td style="padding:6px 10px;text-align:center;"><span style="color:'+apColor+';font-weight:700;">'+esc(p.aprovado)+'</span></td><td style="padding:6px 10px;text-align:center;font-weight:700;">'+p.totalAreas+'</td><td style="padding:6px 10px;text-align:center;color:#ef4444;font-weight:600;">'+(p.naoIniciada||0)+'</td><td style="padding:6px 10px;text-align:center;color:#f59e0b;font-weight:600;">'+(p.emProgresso||0)+'</td><td style="padding:6px 10px;text-align:center;color:#16a34a;font-weight:600;">'+(p.finalizada||0)+'</td></tr>';
+                }).join('')+'</tbody></table></div></div>';
+            }).join('');
+          })()}`:'<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Nenhum PDI importado para esta área. Importe a planilha de PDIs na aba "Importar Dados".</p>'}`;
           })()}
         </div>
 
