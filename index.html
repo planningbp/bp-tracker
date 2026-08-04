@@ -766,9 +766,17 @@ function isHead(liderName){
   const match = DB.colaboradores.find(c=>normalizeStr(c.nome)===normalizeStr(liderName));
   return match && match.cargo && /head/i.test(match.cargo);
 }
-function computeAutoData(area, period, lider){
+function computeAutoData(area, period, lider, customStart, customEnd){
   if(!area || !period) return null;
-  const {start,end,months,year} = periodBounds(period);
+  let start, end;
+  if(customStart && customEnd){
+    start = new Date(customStart+'T00:00:00');
+    end = new Date(customEnd+'T23:59:59');
+  } else {
+    const pb = periodBounds(period);
+    start = pb.start; end = pb.end;
+  }
+  const inRange = (d) => d && d>=start && d<=end;
   // If leader is Head or no leader selected → full area; otherwise filter by leader's direct reports
   const fullArea = !lider || isHead(lider);
   const colabs = DB.colaboradores.filter(c=>{
@@ -782,12 +790,12 @@ function computeAutoData(area, period, lider){
     if(!fullArea) return colabNames.has(normalizeStr(d.nome)) || normalizeStr(d.lider)===normalizeStr(lider);
     return true;
   });
-  const desligsPeriod = desligsAll.filter(d=> d.mesDate && d.mesDate.getFullYear()===year && months.includes(d.mesDate.getMonth()+1));
+  const desligsPeriod = desligsAll.filter(d=> d.mesDate && inRange(d.mesDate));
   const promosPeriod = DB.promocoes.filter(p=>{
     if(p.area!==area) return false;
     if(!fullArea) return colabNames.has(normalizeStr(p.nome));
     return true;
-  }).filter(p=> p.mesDate && p.mesDate.getFullYear()===year && months.includes(p.mesDate.getMonth()+1));
+  }).filter(p=> p.mesDate && inRange(p.mesDate));
 
   const desligadosByEnd = new Set(
     desligsAll.filter(d=>d.ultimoDia && d.ultimoDia<=end).map(d=>normalizeStr(d.nome))
@@ -795,7 +803,7 @@ function computeAutoData(area, period, lider){
   const activeColabs = colabs.filter(c=>!desligadosByEnd.has(normalizeStr(c.nome)));
   const headcount = activeColabs.length;
 
-  const admissoes = colabs.filter(c=>c.admissao && c.admissao.getFullYear()===year && months.includes(c.admissao.getMonth()+1));
+  const admissoes = colabs.filter(c=> c.admissao && inRange(c.admissao));
 
   const turnover = headcount>0 ? (desligsPeriod.length/headcount*100) : 0;
 
@@ -1504,6 +1512,7 @@ function blankMeeting(bp){
   return {
     id: uid(), bpId: bp.id, area: bp.areas[0], gerente:'', date: fmtDate(new Date()), period: currentPeriodGuess(),
     status:'Não iniciada',
+    dataInicio:'', dataFim:'',
     headcount:0, admissoesCount:0, desligamentosCount:0, turnover:0, vagasAbertas:0, movimentacoes:0, experienciaCount:0,
     pdis:0, sucessores:0, talentos:0, enps:0, lnps:0,
     riscos:[], feriasVencidas:0, bancoHoras:0, horasExtras:0, pendenciasPonto:0,
@@ -1529,7 +1538,7 @@ function openMeetingForm(id){
 }
 function applyAutoCalc(){
   const fd = UI.formData;
-  const auto = computeAutoData(fd.area, fd.period, fd.gerente);
+  const auto = computeAutoData(fd.area, fd.period, fd.gerente, fd.dataInicio, fd.dataFim);
   if(!auto) return;
   fd.headcount = auto.headcount;
   fd.admissoesCount = auto.admissoes.length;
@@ -1589,6 +1598,14 @@ function renderMeetingForm(){
             <div class="field"><label>Líder responsável</label><select id="f_gerente"><option value="">Selecione...</option>${[...new Set(DB.colaboradores.filter(c=>c.area===fd.area && c.lider).map(c=>c.lider))].sort().map(l=>`<option value="${l}" ${fd.gerente===l?'selected':''}>${l}</option>`).join('')}${fd.gerente && ![...new Set(DB.colaboradores.filter(c=>c.area===fd.area && c.lider).map(c=>c.lider))].includes(fd.gerente)?`<option value="${esc(fd.gerente)}" selected>${esc(fd.gerente)}</option>`:''}</select></div>
             <div class="field"><label>Data da reunião</label><input id="f_date" type="text" value="${esc(fd.date)}" placeholder="dd/mm/aaaa"></div>
             <div class="field"><label>Período</label><select id="f_period">${CONFIG.periods.map(p=>`<option value="${p}" ${fd.period===p?'selected':''}>${p}</option>`).join('')}</select></div>
+          </div>
+          <div style="margin-top:14px;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+            <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:8px;">Período dos dados (filtro personalizado)</div>
+            <div class="field-grid">
+              <div class="field"><label>Data início</label><input id="f_dataInicio" type="date" value="${fd.dataInicio||''}"></div>
+              <div class="field"><label>Data fim</label><input id="f_dataFim" type="date" value="${fd.dataFim||''}"></div>
+            </div>
+            <p style="font-size:11px;color:#888;margin:6px 0 0;">Defina o intervalo exato para filtrar admissões, desligamentos e acompanhamentos. Se vazio, usa o período bimestral acima.</p>
           </div>
           ${hasImport? '<p style="font-size:12px;color:var(--primary-dark);margin-top:10px;">Dados importados detectados: os campos automáticos da seção 2 serão calculados ao avançar.</p>' : '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Nenhum dado importado ainda. Acesse "Importar Dados" para habilitar o cálculo automático.</p>'}
         </div>
@@ -1678,6 +1695,8 @@ function collectFormBasics(){
   if(el('f_gerente')) fd.gerente = el('f_gerente').value;
   if(el('f_date')) fd.date = el('f_date').value;
   if(el('f_period')) fd.period = el('f_period').value;
+  if(el('f_dataInicio')) fd.dataInicio = el('f_dataInicio').value;
+  if(el('f_dataFim')) fd.dataFim = el('f_dataFim').value;
   if(el('f_headcount')) fd.headcount = Number(el('f_headcount').value)||0;
   if(el('f_admissoes')) fd.admissoesCount = Number(el('f_admissoes').value)||0;
   if(el('f_desligamentos')) fd.desligamentosCount = Number(el('f_desligamentos').value)||0;
@@ -1730,6 +1749,8 @@ function bindMeetingForm(){
   });
   const areaSel = document.getElementById('f_area'); if(areaSel) areaSel.addEventListener('change', ()=>{ collectFormBasics(); UI.formData.gerente=''; applyAutoCalc(); renderShellAndPage(); });
   const periodSel = document.getElementById('f_period'); if(periodSel) periodSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
+  const diSel = document.getElementById('f_dataInicio'); if(diSel) diSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
+  const dfSel = document.getElementById('f_dataFim'); if(dfSel) dfSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
   const liderSel = document.getElementById('f_gerente'); if(liderSel) liderSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
   const btnAddRisk = document.getElementById('btnAddRisk');
   if(btnAddRisk) btnAddRisk.addEventListener('click', ()=>{ collectFormBasics(); UI.formData.riscos.push({nome:'',cargo:'',motivo:'',criticidade:'Média'}); renderShellAndPage(); });
