@@ -1549,7 +1549,8 @@ const FORM_SECTIONS = [
   {key:'dev', label:'3. Desenvolvimento'},
   {key:'clima', label:'4. Clima e Engajamento'},
   {key:'riscos', label:'5. Riscos e Pendências'},
-  {key:'plano', label:'6. Plano de Ação'}
+  {key:'plano', label:'6. Plano de Ação'},
+  {key:'acoes', label:'7. Ações do Período'}
 ];
 function blankMeeting(bp){
   return {
@@ -1561,6 +1562,7 @@ function blankMeeting(bp){
     riscos:[], feriasVencidas:0, bancoHoras:0, horasExtras:0, pendenciasPonto:0,
     feriasTable:[], bancoHorasTable:[], horasExtrasTable:[], pendenciasPontoTable:[],
     planoAcao:'', observacoes:'',
+    acoes:[],
     admissoesTable:[], desligamentosTable:[], experienciaTable:[], promocoesTable:[],
     autoApplied:false,
     createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()
@@ -1610,6 +1612,45 @@ function detailMiniTable(title, rows, headers, keys){
     <div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>
     ${rows.map(r=>`<tr>${keys.map(k=>`<td>${esc(r[k]||'')}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></div>`;
+}
+function renderBancoHorasGrouped(tableId, title, rows, area){
+  rows = rows||[];
+  // Build collaborator options filtered by area
+  const areaColabs = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamentoRaw||'')===normalizeStr(area||''));
+  const colabOpts = areaColabs.map(c=>`<option value="${esc(c.nome)}" data-cargo="${esc(c.cargo||'')}" data-lider="${esc(c.lider||'')}">${esc(c.nome)}</option>`).join('');
+  // Group by lider
+  const byLider = {};
+  rows.forEach((r,i)=>{
+    const lKey = r.lider||'Sem líder';
+    if(!byLider[lKey]) byLider[lKey]=[];
+    byLider[lKey].push({...r, _idx:i});
+  });
+  const liders = Object.keys(byLider).sort();
+  const grouped = liders.length>0 ? liders.map(lider=>{
+    const team = byLider[lider];
+    return `<div style="margin-top:10px;"><div style="font-size:12px;font-weight:700;color:#1B1B2F;padding:5px 10px;background:#f1f5f9;border-radius:6px;margin-bottom:4px;">Equipe ${esc(lider)} <span style="font-size:10px;color:#888;font-weight:400;">(${team.length})</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th style="text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;">Cargo</th><th style="text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;">Horas</th><th style="text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;">Observação</th><th style="width:36px;"></th></tr></thead><tbody>
+      ${team.map(r=>`<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 8px;"><input class="mini-input" value="${esc(r.nome)}" data-table="${tableId}" data-row="${r._idx}" data-col="nome" style="border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;"></td><td style="padding:4px 8px;"><input class="mini-input" value="${esc(r.cargo)}" data-table="${tableId}" data-row="${r._idx}" data-col="cargo" style="border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;"></td><td style="padding:4px 8px;"><input class="mini-input" value="${esc(r.horas)}" data-table="${tableId}" data-row="${r._idx}" data-col="horas" style="border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;"></td><td style="padding:4px 8px;"><input class="mini-input" value="${esc(r.observacao||'')}" data-table="${tableId}" data-row="${r._idx}" data-col="observacao" style="border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;"></td><td><button class="btn-icon-del" data-del-table="${tableId}" data-del-row="${r._idx}" title="Remover" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:2px 6px;">✕</button></td></tr>`).join('')}
+      </tbody></table></div>`;
+  }).join('') : '<div style="text-align:center;color:var(--text-light);padding:12px;font-size:13px;">Nenhum registro.</div>';
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;">
+    <div class="mini-table-title" style="margin:0;">${title} <span style="color:var(--text-light);font-weight:400;">(${rows.length})</span></div>
+    <button class="btn btn-outline btn-sm" id="btnAddBancoHoras" style="width:auto;font-size:11px;padding:4px 10px;">${ICONS.plus} Adicionar</button>
+  </div>
+  <div id="addBancoHorasInline" style="display:none;margin-top:10px;padding:14px;border:1.5px solid var(--primary);border-radius:10px;background:var(--primary-light);">
+    <div class="field-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="field"><label>Colaborador</label><select id="bhSelectColab" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;"><option value="">Selecione...</option>${colabOpts}</select></div>
+      <div class="field"><label>Líder (automático)</label><input id="bhLider" readonly style="background:#f0f0f0;" value=""></div>
+      <div class="field"><label>Cargo (automático)</label><input id="bhCargo" readonly style="background:#f0f0f0;" value=""></div>
+      <div class="field"><label>Horas</label><input id="bhHoras" placeholder="Ex.: +08:54"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Observação</label><input id="bhObs" placeholder="Observação (opcional)"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn btn-primary btn-sm" id="btnConfirmBH" style="width:auto;">Confirmar</button>
+      <button class="btn btn-outline btn-sm" id="btnCancelBH" style="width:auto;">Cancelar</button>
+    </div>
+  </div>
+  ${grouped}`;
 }
 function renderMiniTable(tableId, title, rows, cols){
   return `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;">
@@ -1745,7 +1786,7 @@ function renderMeetingForm(){
           </div>
           <button class="btn btn-outline btn-sm" id="btnAddRisk" style="width:auto;margin-bottom:20px;">${ICONS.plus} Adicionar risco</button>
           ${renderMiniTable('feriasTable','Férias vencidas', fd.feriasTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'diasVencidos',label:'Dias vencidos'},{key:'observacao',label:'Observação'}])}
-          ${renderMiniTable('bancoHorasTable','Banco de horas', fd.bancoHorasTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'horas',label:'Horas'},{key:'observacao',label:'Observação'}])}
+          ${renderBancoHorasGrouped('bancoHorasTable','Banco de horas', fd.bancoHorasTable, fd.area)}
           ${renderMiniTable('horasExtrasTable','Horas extras', fd.horasExtrasTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'horas',label:'Horas'},{key:'observacao',label:'Observação'}])}
           ${renderMiniTable('pendenciasPontoTable','Pendências de ponto', fd.pendenciasPontoTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'tipo',label:'Tipo pendência'},{key:'observacao',label:'Observação'}])}
         </div>
@@ -1759,6 +1800,15 @@ function renderMeetingForm(){
               ${['Não iniciada','Em andamento','Concluída'].map(s=>`<option value="${s}" ${fd.status===s?'selected':''}>${s}</option>`).join('')}
             </select>
           </div>
+        </div>
+
+        <div class="form-section ${UI.formSection===6?'active':''}" data-panel="6">
+          <div class="section-title">Ações do Período</div>
+          <p style="font-size:12.5px;color:var(--text-light);margin:0 0 16px;">Registre ações realizadas durante o período (ex.: reuniões 1:1, relatórios, treinamentos). Cada ação pode ter uma descrição e anexos.</p>
+          <div id="acoesContainer">
+            ${(fd.acoes||[]).map((a,i)=> renderAcaoCard(a,i)).join('')}
+          </div>
+          <button class="btn btn-outline btn-sm" id="btnAddAcao" style="width:auto;margin-top:10px;">${ICONS.plus} Adicionar ação</button>
         </div>
       </div>
       <div class="form-actions no-print">
@@ -1780,6 +1830,34 @@ function renderRiskRow(r,i){
       ${['Baixa','Média','Alta'].map(c=>`<option value="${c}" ${r.criticidade===c?'selected':''}>${c}</option>`).join('')}
     </select>
     <button class="btn btn-danger btn-sm" data-risk-remove="${i}">${ICONS.trash}</button>
+  </div>`;
+}
+function renderAcaoCard(a, i){
+  a = a || {titulo:'', descricao:'', anexos:[]};
+  const anexosHtml = (a.anexos||[]).map((anx,j)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#f8fafc;border-radius:6px;margin-bottom:4px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+      <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(anx.nome)}</span>
+      <span style="font-size:10px;color:#888;">${anx.tamanho||''}</span>
+      <button class="btn btn-danger btn-sm" style="padding:2px 6px;font-size:10px;" data-remove-anexo="${i}-${j}">${ICONS.trash}</button>
+    </div>
+  `).join('');
+  return `<div class="card" style="margin-bottom:12px;border:1.5px solid var(--border);padding:16px;" data-acao-card="${i}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+      <span style="font-size:12px;font-weight:700;color:var(--primary);">Ação ${i+1}</span>
+      <button class="btn btn-danger btn-sm" style="padding:3px 8px;" data-remove-acao="${i}">${ICONS.trash}</button>
+    </div>
+    <div class="field"><label>Título</label><input data-acao-field="titulo" data-acao-idx="${i}" value="${esc(a.titulo)}" placeholder="Ex.: 1:1 com equipe do gestor X"></div>
+    <div class="field"><label>Descrição</label><textarea data-acao-field="descricao" data-acao-idx="${i}" rows="3" placeholder="Descreva o que foi feito, resultados, observações...">${esc(a.descricao)}</textarea></div>
+    <div class="field">
+      <label>Anexos</label>
+      <div id="anexosList_${i}">${anexosHtml}</div>
+      <label class="btn btn-outline btn-sm" style="width:auto;margin-top:6px;cursor:pointer;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+        Anexar arquivo
+        <input type="file" multiple style="display:none;" data-acao-file="${i}">
+      </label>
+    </div>
   </div>`;
 }
 function collectFormBasics(){
@@ -1825,6 +1903,12 @@ function collectFormBasics(){
     if(fd[tbl] && fd[tbl][row]) fd[tbl][row][col] = inp.value;
   });
   if(el('f_exp')) fd.experienciaCount = Number(el('f_exp').value)||0;
+  // Collect ações text fields
+  document.querySelectorAll('[data-acao-field]').forEach(inp=>{
+    const idx = Number(inp.getAttribute('data-acao-idx'));
+    const field = inp.getAttribute('data-acao-field');
+    if(fd.acoes && fd.acoes[idx]) fd.acoes[idx][field] = inp.value;
+  });
 }
 function bindMeetingForm(){
   document.querySelectorAll('[data-section]').forEach(el=>{
@@ -1875,7 +1959,7 @@ function bindMeetingForm(){
     experienciaTable: {nome:'',cargo:'',admissao:'',milestone:'',milestoneDate:'',status:'Pendente',observacao:''},
     promocoesTable: {nome:'',cargoAnterior:'',cargoNovo:'',pct:''},
     feriasTable: {nome:'',cargo:'',diasVencidos:'',observacao:''},
-    bancoHorasTable: {nome:'',cargo:'',horas:'',observacao:''},
+    bancoHorasTable: {nome:'',cargo:'',lider:'',horas:'',observacao:''},
     horasExtrasTable: {nome:'',cargo:'',horas:'',observacao:''},
     pendenciasPontoTable: {nome:'',cargo:'',tipo:'',observacao:''}
   };
@@ -1898,6 +1982,72 @@ function bindMeetingForm(){
       renderShellAndPage();
     });
   });
+  // Ações do Período
+  const btnAddAcao = document.getElementById('btnAddAcao');
+  if(btnAddAcao) btnAddAcao.addEventListener('click', ()=>{
+    collectFormBasics();
+    if(!UI.formData.acoes) UI.formData.acoes=[];
+    UI.formData.acoes.push({titulo:'',descricao:'',anexos:[]});
+    renderShellAndPage();
+  });
+  document.querySelectorAll('[data-remove-acao]').forEach(b=>{
+    b.addEventListener('click', ()=>{ collectFormBasics(); UI.formData.acoes.splice(Number(b.getAttribute('data-remove-acao')),1); renderShellAndPage(); });
+  });
+  document.querySelectorAll('[data-remove-anexo]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      collectFormBasics();
+      const [ai,aj] = b.getAttribute('data-remove-anexo').split('-').map(Number);
+      if(UI.formData.acoes[ai] && UI.formData.acoes[ai].anexos) UI.formData.acoes[ai].anexos.splice(aj,1);
+      renderShellAndPage();
+    });
+  });
+  document.querySelectorAll('[data-acao-file]').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const idx = Number(inp.getAttribute('data-acao-file'));
+      collectFormBasics();
+      if(!UI.formData.acoes[idx]) return;
+      const files = inp.files;
+      let pending = files.length;
+      for(let f of files){
+        const reader = new FileReader();
+        reader.onload = ()=>{
+          const sizeKB = Math.round(f.size/1024);
+          const sizeStr = sizeKB > 1024 ? (sizeKB/1024).toFixed(1)+' MB' : sizeKB+' KB';
+          UI.formData.acoes[idx].anexos.push({nome:f.name, tipo:f.type, tamanho:sizeStr, data:reader.result});
+          pending--;
+          if(pending===0) renderShellAndPage();
+        };
+        reader.readAsDataURL(f);
+      }
+    });
+  });
+  // Banco de horas: add with collaborator selector
+  const btnAddBH = document.getElementById('btnAddBancoHoras');
+  const addBHPanel = document.getElementById('addBancoHorasInline');
+  if(btnAddBH && addBHPanel){
+    btnAddBH.addEventListener('click', ()=>{ addBHPanel.style.display='block'; btnAddBH.style.display='none'; });
+    const bhSel = document.getElementById('bhSelectColab');
+    if(bhSel) bhSel.addEventListener('change', ()=>{
+      const opt = bhSel.options[bhSel.selectedIndex];
+      const liderInp = document.getElementById('bhLider');
+      const cargoInp = document.getElementById('bhCargo');
+      if(liderInp) liderInp.value = opt.getAttribute('data-lider')||'';
+      if(cargoInp) cargoInp.value = opt.getAttribute('data-cargo')||'';
+    });
+    document.getElementById('btnCancelBH').addEventListener('click', ()=>{ addBHPanel.style.display='none'; btnAddBH.style.display=''; });
+    document.getElementById('btnConfirmBH').addEventListener('click', ()=>{
+      collectFormBasics();
+      const nome = document.getElementById('bhSelectColab').value;
+      if(!nome){ alert('Selecione um colaborador.'); return; }
+      const cargo = document.getElementById('bhCargo').value;
+      const lider = document.getElementById('bhLider').value;
+      const horas = document.getElementById('bhHoras').value;
+      const obs = document.getElementById('bhObs').value;
+      if(!UI.formData.bancoHorasTable) UI.formData.bancoHorasTable=[];
+      UI.formData.bancoHorasTable.push({nome, cargo, lider, horas, observacao:obs});
+      renderShellAndPage();
+    });
+  }
 }
 function saveMeetingForm(){
   const fd = UI.formData;
@@ -2013,9 +2163,37 @@ function renderMeetingDetail(){
     </tbody></table></div>` : '<div class="empty-state">Nenhum risco registrado.</div>'}
   </div>
   ${detailMiniTable('Férias vencidas', m.feriasTable, ['Nome','Cargo','Dias vencidos','Observação'], ['nome','cargo','diasVencidos','observacao'])}
-  ${detailMiniTable('Banco de horas', m.bancoHorasTable, ['Nome','Cargo','Horas','Observação'], ['nome','cargo','horas','observacao'])}
+  ${(()=>{
+    const bh = m.bancoHorasTable||[];
+    if(!bh.length) return '';
+    const byL = {};
+    bh.forEach(r=>{ const k=r.lider||'Sem líder'; if(!byL[k]) byL[k]=[]; byL[k].push(r); });
+    const ls = Object.keys(byL).sort();
+    return '<div class="card" style="margin-bottom:20px;"><div class="section-title">Banco de Horas ('+bh.length+')</div>'+
+      ls.map(l=>'<div style="margin-bottom:12px;"><div style="font-size:12px;font-weight:700;color:#1B1B2F;padding:5px 10px;background:#f1f5f9;border-radius:6px;margin-bottom:4px;">Equipe '+esc(l)+' <span style="font-size:10px;color:#888;font-weight:400;">('+byL[l].length+')</span></div>'+
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:1px solid #e5e7eb;"><th style="padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Cargo</th><th style="padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Horas</th><th style="padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Observação</th></tr></thead><tbody>'+
+        byL[l].map((r,i)=>'<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="padding:5px 10px;">'+esc(r.nome)+'</td><td style="padding:5px 10px;">'+esc(r.cargo)+'</td><td style="padding:5px 10px;font-weight:600;">'+esc(r.horas)+'</td><td style="padding:5px 10px;">'+esc(r.observacao||'')+'</td></tr>').join('')+
+        '</tbody></table></div>').join('')+'</div>';
+  })()}
   ${detailMiniTable('Horas extras', m.horasExtrasTable, ['Nome','Cargo','Horas','Observação'], ['nome','cargo','horas','observacao'])}
   ${detailMiniTable('Pendências de ponto', m.pendenciasPontoTable, ['Nome','Cargo','Tipo pendência','Observação'], ['nome','cargo','tipo','observacao'])}
+  ${(()=>{
+    const acoes = m.acoes||[];
+    if(!acoes.length) return '';
+    return '<div class="card" style="margin-bottom:20px;"><div class="section-title">Ações do Período ('+acoes.length+')</div>'+
+      acoes.map((a,i)=>{
+        const anexosHtml = (a.anexos||[]).length ? '<div style="margin-top:8px;">'+
+          (a.anexos||[]).map(anx=>'<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#f0f4f8;border-radius:6px;margin:3px 4px 3px 0;font-size:11px;">'+
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>'+
+            '<a href="'+anx.data+'" download="'+esc(anx.nome)+'" style="color:var(--primary);font-weight:600;">'+esc(anx.nome)+'</a>'+
+            '<span style="color:#888;">('+( anx.tamanho||'')+')</span></div>'
+          ).join('')+'</div>' : '';
+        return '<div style="padding:12px 14px;background:#fafbfc;border-radius:8px;margin-bottom:10px;border-left:3px solid var(--primary);">'+
+          '<div style="font-weight:700;font-size:13.5px;margin-bottom:4px;">'+esc(a.titulo||'Ação '+(i+1))+'</div>'+
+          (a.descricao? '<p style="font-size:13px;line-height:1.6;white-space:pre-wrap;margin:0;">'+esc(a.descricao)+'</p>' : '')+
+          anexosHtml+'</div>';
+      }).join('')+'</div>';
+  })()}
   <div class="card">
     <div class="section-title">Plano de Ação</div>
     <p style="white-space:pre-wrap;font-size:13.5px;line-height:1.6;">${esc(m.planoAcao)||'—'}</p>
