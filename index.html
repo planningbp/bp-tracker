@@ -1618,6 +1618,13 @@ function renderBancoHorasGrouped(tableId, title, rows, area){
   // Build collaborator options filtered by area
   const areaColabs = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamentoRaw||'')===normalizeStr(area||''));
   const colabOpts = areaColabs.map(c=>`<option value="${esc(c.nome)}" data-cargo="${esc(c.cargo||'')}" data-lider="${esc(c.lider||'')}">${esc(c.nome)}</option>`).join('');
+  // Auto-fill lider/cargo from colaboradores if missing
+  rows.forEach(r=>{
+    if(!r.lider || !r.cargo){
+      const match = DB.colaboradores.find(c=> normalizeStr(c.nome)===normalizeStr(r.nome));
+      if(match){ if(!r.lider) r.lider = match.lider||''; if(!r.cargo) r.cargo = match.cargo||''; }
+    }
+  });
   // Group by lider
   const byLider = {};
   rows.forEach((r,i)=>{
@@ -2166,6 +2173,7 @@ function renderMeetingDetail(){
   ${(()=>{
     const bh = m.bancoHorasTable||[];
     if(!bh.length) return '';
+    bh.forEach(r=>{ if(!r.lider){ const match=DB.colaboradores.find(c=>normalizeStr(c.nome)===normalizeStr(r.nome)); if(match) r.lider=match.lider||''; }});
     const byL = {};
     bh.forEach(r=>{ const k=r.lider||'Sem líder'; if(!byL[k]) byL[k]=[]; byL[k].push(r); });
     const ls = Object.keys(byL).sort();
