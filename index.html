@@ -1225,7 +1225,7 @@ function renderImportPreviewTables(){
   const c = DB.colaboradores, d = DB.desligamentos, p = DB.promocoes;
   let html = '';
   const S = 'border:none;background:transparent;width:100%;font-size:12px;padding:2px 0;';
-  const del = (db,i) => `<button class="imp-del" data-imp-db="${db}" data-imp-row="${i}" title="Remover" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:2px 6px;">✕</button>`;
+  const del = (db,i) => `<button class="imp-del" data-imp-db="${db}" data-imp-row="${i}" title="Remover" style="background:#fee2e2;border:1px solid #fca5a5;color:#dc2626;cursor:pointer;font-size:13px;padding:4px 8px;border-radius:6px;font-weight:700;">✕</button>`;
   const add = (db,label) => `<button class="btn btn-outline btn-sm imp-add" data-imp-add="${db}" style="width:auto;font-size:11px;padding:4px 10px;">${ICONS.plus} Adicionar ${label}</button>`;
   const inp = (db,i,col,val) => `<input class="imp-inp" data-imp-db="${db}" data-imp-row="${i}" data-imp-col="${col}" value="${esc(val||'')}" style="${S}">`;
   const areaCell = (r) => r.area?'<span class="badge badge-green">'+r.area+'</span>':'<span class="badge badge-red">sem match</span>';
@@ -1241,7 +1241,7 @@ function renderImportPreviewTables(){
         if(k==='_area') return '<td>'+areaCell(r)+'</td>';
         if(k==='nascimento'||k==='admissao'||k==='efetivacao'||k==='pejotizacao') return '<td>'+inp('colaboradores',i,k+'Str',fmtDate(r[k]))+'</td>';
         return '<td>'+inp('colaboradores',i,k,r[k])+'</td>';
-      }).join('')}<td>${del('colaboradores',i)}</td></tr>`).join('')}
+      }).join('')}<td style="position:sticky;right:0;background:#fff;z-index:1;box-shadow:-4px 0 8px rgba(0,0,0,0.05);">${del('colaboradores',i)}</td></tr>`).join('')}
     </tbody></table></div>
   </div>`;
 
@@ -1256,7 +1256,7 @@ function renderImportPreviewTables(){
         if(k==='_area') return '<td>'+areaCell(r)+'</td>';
         if(k==='mesDate'||k==='dtAdmissao'||k==='ultimoDia') return '<td>'+inp('desligamentos',i,k+'Str',fmtDate(r[k]))+'</td>';
         return '<td>'+inp('desligamentos',i,k,r[k])+'</td>';
-      }).join('')}<td>${del('desligamentos',i)}</td></tr>`).join('')}
+      }).join('')}<td style="position:sticky;right:0;background:#fff;z-index:1;box-shadow:-4px 0 8px rgba(0,0,0,0.05);">${del('desligamentos',i)}</td></tr>`).join('')}
     </tbody></table></div>
   </div>`;
 
@@ -1272,7 +1272,7 @@ function renderImportPreviewTables(){
         if(k==='mesDate') return '<td>'+inp('promocoes',i,k+'Str',fmtDate(r[k]))+'</td>';
         if(k==='pct') return '<td>'+inp('promocoes',i,'pctStr',r.pct!=null?fmtPct(r.pct*100):'')+'</td>';
         return '<td>'+inp('promocoes',i,k,r[k])+'</td>';
-      }).join('')}<td>${del('promocoes',i)}</td></tr>`).join('')}
+      }).join('')}<td style="position:sticky;right:0;background:#fff;z-index:1;box-shadow:-4px 0 8px rgba(0,0,0,0.05);">${del('promocoes',i)}</td></tr>`).join('')}
     </tbody></table></div>
   </div>`;
 
@@ -1301,19 +1301,151 @@ function bindImportPreview(){
     btn.addEventListener('click', ()=>{
       const db = btn.getAttribute('data-imp-db');
       const row = Number(btn.getAttribute('data-imp-row'));
+      if(!confirm('Excluir este registro?')) return;
       if(DB[db]){ DB[db].splice(row,1); persist(db); renderImportPreviewTables(); }
     });
   });
-  // Add row
+  // Add row — open modal form
   document.querySelectorAll('.imp-add').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const db = btn.getAttribute('data-imp-add');
-      if(db==='colaboradores') DB[db].push({id:uid(),nome:'',email:'',lider:'',nascimento:'',departamentoRaw:'',area:'',cargo:'',admissao:'',faixaSalarial:'',cpf:'',regime:'',efetivacao:'',pejotizacao:'',promocoes:'',cargoAdmissao:'',salarioAdmissao:'',cargoDominio:'',bpResponsavel:''});
-      else if(db==='desligamentos') DB[db].push({id:uid(),mesDate:'',nome:'',cargo:'',regime:'',departamentoRaw:'',area:'',lider:'',coordenacao:'',empresa:'',dtAdmissao:'',ultimoDia:'',tempoDeCasa:'',tipo:'',motivo:'',submotivo:''});
-      else if(db==='promocoes') DB[db].push({id:uid(),mesDate:'',nome:'',departamentoRaw:'',area:'',gestor:'',aprovador:'',cargoAtual:'',salarioAtual:'',cargoAprovado:'',valorAprovado:'',reajuste:'',pct:null});
-      persist(db);
-      renderImportPreviewTables();
+      openAddModal(db);
     });
+  });
+}
+function openAddModal(db){
+  const bp = currentBP();
+  const allAreas = bp.areas;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  let title='', fields='';
+  const fld = (label,id,type,opts) => {
+    if(type==='select'){
+      return `<div class="field" style="margin-bottom:12px;"><label style="font-size:12px;font-weight:600;color:#555;">${label}</label><select id="${id}" class="select" style="width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;">${(opts||[]).map(o=>'<option value="'+esc(o)+'">'+esc(o)+'</option>').join('')}</select></div>`;
+    }
+    return `<div class="field" style="margin-bottom:12px;"><label style="font-size:12px;font-weight:600;color:#555;">${label}</label><input id="${id}" type="${type||'text'}" style="width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;" ${opts||''}></div>`;
+  };
+  if(db==='colaboradores'){
+    title='Adicionar Colaborador';
+    fields = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
+        ${fld('Nome *','add_nome','text','placeholder="Nome completo"')}
+        ${fld('Email','add_email','text','placeholder="email@exemplo.com"')}
+        ${fld('Líder','add_lider','text','placeholder="Nome do líder"')}
+        ${fld('Data de Nascimento','add_nascimento','date')}
+        ${fld('Departamento','add_departamentoRaw','text','placeholder="Ex: FISCAL"')}
+        ${fld('Área','add_area','select',allAreas)}
+        ${fld('Cargo *','add_cargo','text','placeholder="Ex: Analista Fiscal"')}
+        ${fld('Data de Admissão *','add_admissao','date')}
+        ${fld('Faixa Salarial','add_faixaSalarial','text','placeholder="Ex: 3500.00"')}
+        ${fld('CPF','add_cpf','text','placeholder="000.000.000-00"')}
+        ${fld('Regime','add_regime','select',['clt','pj','estagio','temporario'])}
+        ${fld('Data Efetivação','add_efetivacao','date')}
+        ${fld('Data Pejotização','add_pejotizacao','date')}
+        ${fld('Cargo na Admissão','add_cargoAdmissao','text')}
+        ${fld('Salário na Admissão','add_salarioAdmissao','text')}
+        ${fld('BP Responsável','add_bpResponsavel','text','value="'+esc(bp.name)+'"')}
+      </div>`;
+  } else if(db==='desligamentos'){
+    title='Adicionar Desligamento';
+    fields = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
+        ${fld('Mês Referência','add_mesDate','date')}
+        ${fld('Nome Completo *','add_nome','text','placeholder="Nome completo"')}
+        ${fld('Cargo','add_cargo','text')}
+        ${fld('Regime','add_regime','select',['clt','pj','estagio','temporario'])}
+        ${fld('Departamento','add_departamentoRaw','text','placeholder="Ex: FISCAL"')}
+        ${fld('Área','add_area','select',allAreas)}
+        ${fld('Líder','add_lider','text')}
+        ${fld('Coordenação/Gerente/Head','add_coordenacao','text')}
+        ${fld('Empresa','add_empresa','text')}
+        ${fld('Data Admissão','add_dtAdmissao','date')}
+        ${fld('Último Dia *','add_ultimoDia','date')}
+        ${fld('Tempo de Casa','add_tempoDeCasa','text','placeholder="Ex: 2 anos"')}
+        ${fld('Tipo','add_tipo','select',['Voluntário','Involuntário','Acordo mútuo','Término de contrato'])}
+        ${fld('Motivo','add_motivo','select',['Motivos pessoais','Remuneração','Proposta externa','Liderança','Clima organizacional','Falta de crescimento','Mudança de carreira','Problemas de comportamento','Baixa performance','Reestruturação','Término de contrato','Outro'])}
+        ${fld('Submotivo','add_submotivo','text')}
+      </div>`;
+  } else {
+    title='Adicionar Promoção';
+    fields = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
+        ${fld('Mês Referência','add_mesDate','date')}
+        ${fld('Nome *','add_nome','text','placeholder="Nome completo"')}
+        ${fld('Departamento','add_departamentoRaw','text','placeholder="Ex: FISCAL"')}
+        ${fld('Área','add_area','select',allAreas)}
+        ${fld('Gestor Solicitante','add_gestor','text')}
+        ${fld('Aprovador','add_aprovador','text')}
+        ${fld('Cargo Atual','add_cargoAtual','text')}
+        ${fld('Salário Atual','add_salarioAtual','text')}
+        ${fld('Cargo Aprovado *','add_cargoAprovado','text')}
+        ${fld('Valor Aprovado','add_valorAprovado','text')}
+        ${fld('Reajuste','add_reajuste','text')}
+        ${fld('% Reajuste','add_pct','text','placeholder="Ex: 15"')}
+      </div>`;
+  }
+  overlay.innerHTML = `<div style="background:#fff;border-radius:16px;padding:28px;max-width:680px;width:95%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="margin:0;font-size:18px;">${title}</h3>
+      <button id="addModalClose" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888;padding:4px 8px;">✕</button>
+    </div>
+    ${fields}
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+      <button id="addModalCancel" class="btn btn-outline" style="width:auto;">Cancelar</button>
+      <button id="addModalSave" class="btn btn-primary" style="width:auto;">Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=> document.body.removeChild(overlay);
+  overlay.querySelector('#addModalClose').addEventListener('click', close);
+  overlay.querySelector('#addModalCancel').addEventListener('click', close);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+  overlay.querySelector('#addModalSave').addEventListener('click', ()=>{
+    const v = id => (document.getElementById(id)||{}).value||'';
+    if(db==='colaboradores'){
+      if(!v('add_nome').trim()){ alert('Informe o nome.'); return; }
+      DB.colaboradores.push({
+        id:uid(), nome:v('add_nome').trim(), email:v('add_email').trim(), lider:v('add_lider').trim(),
+        nascimento:v('add_nascimento')?new Date(v('add_nascimento')):'',
+        departamentoRaw:v('add_departamentoRaw').trim(), area:v('add_area')||matchArea(v('add_departamentoRaw')),
+        cargo:v('add_cargo').trim(),
+        admissao:v('add_admissao')?new Date(v('add_admissao')):'',
+        faixaSalarial:v('add_faixaSalarial').trim(), cpf:v('add_cpf').trim(), regime:v('add_regime'),
+        efetivacao:v('add_efetivacao')?new Date(v('add_efetivacao')):'',
+        pejotizacao:v('add_pejotizacao')?new Date(v('add_pejotizacao')):'',
+        promocoes:'', cargoAdmissao:v('add_cargoAdmissao').trim(), salarioAdmissao:v('add_salarioAdmissao').trim(),
+        cargoDominio:'', bpResponsavel:v('add_bpResponsavel').trim()
+      });
+      persist('colaboradores');
+    } else if(db==='desligamentos'){
+      if(!v('add_nome').trim()){ alert('Informe o nome.'); return; }
+      DB.desligamentos.push({
+        id:uid(), mesRaw:'', mesDate:v('add_mesDate')?new Date(v('add_mesDate')):'',
+        nome:v('add_nome').trim(), cargo:v('add_cargo').trim(), regime:v('add_regime'),
+        departamentoRaw:v('add_departamentoRaw').trim(), area:v('add_area')||matchArea(v('add_departamentoRaw')),
+        lider:v('add_lider').trim(), coordenacao:v('add_coordenacao').trim(), empresa:v('add_empresa').trim(),
+        dtAdmissao:v('add_dtAdmissao')?new Date(v('add_dtAdmissao')):'',
+        ultimoDia:v('add_ultimoDia')?new Date(v('add_ultimoDia')):'',
+        tempoDeCasa:v('add_tempoDeCasa').trim(), tipo:v('add_tipo').trim(), motivo:v('add_motivo').trim(), submotivo:v('add_submotivo').trim()
+      });
+      persist('desligamentos');
+    } else {
+      if(!v('add_nome').trim()){ alert('Informe o nome.'); return; }
+      const pctVal = parseFloat(v('add_pct'));
+      DB.promocoes.push({
+        id:uid(), mesRaw:'', mesDate:v('add_mesDate')?new Date(v('add_mesDate')):'',
+        nome:v('add_nome').trim(), departamentoRaw:v('add_departamentoRaw').trim(),
+        area:v('add_area')||matchArea(v('add_departamentoRaw')),
+        gestor:v('add_gestor').trim(), aprovador:v('add_aprovador').trim(),
+        cargoAtual:v('add_cargoAtual').trim(), salarioAtual:v('add_salarioAtual').trim(),
+        cargoAprovado:v('add_cargoAprovado').trim(), valorAprovado:v('add_valorAprovado').trim(),
+        reajuste:v('add_reajuste').trim(), pct:isNaN(pctVal)?null:pctVal/100
+      });
+      persist('promocoes');
+      applyPromocoes();
+    }
+    close();
+    renderImportPreviewTables();
   });
 }
 function bindImport(){
