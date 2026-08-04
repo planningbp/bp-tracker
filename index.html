@@ -769,10 +769,13 @@ function isHead(liderName){
 function computeAutoData(area, period, lider, customStart, customEnd){
   if(!area || !period) return null;
   let start, end;
-  if(customStart && customEnd){
-    start = new Date(customStart+'T00:00:00');
-    end = new Date(customEnd+'T23:59:59');
-  } else {
+  function parseBRDate(s){ const p=s.split('/'); return p.length===3?new Date(Number(p[2]),Number(p[1])-1,Number(p[0])):null; }
+  if(customStart && customEnd && customStart.includes('/') && customEnd.includes('/')){
+    start = parseBRDate(customStart);
+    end = parseBRDate(customEnd); if(end) end.setHours(23,59,59);
+    if(!start||!end||isNaN(start)||isNaN(end)){ start=null; end=null; }
+  }
+  if(!start||!end){
     const pb = periodBounds(period);
     start = pb.start; end = pb.end;
   }
@@ -1602,10 +1605,10 @@ function renderMeetingForm(){
           <div style="margin-top:14px;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
             <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:8px;">Período dos dados (filtro personalizado)</div>
             <div class="field-grid">
-              <div class="field"><label>Data início</label><input id="f_dataInicio" type="date" value="${fd.dataInicio||''}"></div>
-              <div class="field"><label>Data fim</label><input id="f_dataFim" type="date" value="${fd.dataFim||''}"></div>
+              <div class="field"><label>Data início</label><input id="f_dataInicio" type="text" placeholder="dd/mm/aaaa" value="${fd.dataInicio||''}" maxlength="10"></div>
+              <div class="field"><label>Data fim</label><input id="f_dataFim" type="text" placeholder="dd/mm/aaaa" value="${fd.dataFim||''}" maxlength="10"></div>
             </div>
-            <p style="font-size:11px;color:#888;margin:6px 0 0;">Defina o intervalo exato para filtrar admissões, desligamentos e acompanhamentos. Se vazio, usa o período bimestral acima.</p>
+            <p style="font-size:11px;color:#888;margin:6px 0 0;">Defina o intervalo exato (dd/mm/aaaa) para filtrar admissões, desligamentos e acompanhamentos. Se vazio, usa o período bimestral acima.</p>
           </div>
           ${hasImport? '<p style="font-size:12px;color:var(--primary-dark);margin-top:10px;">Dados importados detectados: os campos automáticos da seção 2 serão calculados ao avançar.</p>' : '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Nenhum dado importado ainda. Acesse "Importar Dados" para habilitar o cálculo automático.</p>'}
         </div>
@@ -1749,8 +1752,19 @@ function bindMeetingForm(){
   });
   const areaSel = document.getElementById('f_area'); if(areaSel) areaSel.addEventListener('change', ()=>{ collectFormBasics(); UI.formData.gerente=''; applyAutoCalc(); renderShellAndPage(); });
   const periodSel = document.getElementById('f_period'); if(periodSel) periodSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
-  const diSel = document.getElementById('f_dataInicio'); if(diSel) diSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
-  const dfSel = document.getElementById('f_dataFim'); if(dfSel) dfSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
+  // Date mask dd/mm/aaaa + recalc
+  ['f_dataInicio','f_dataFim'].forEach(fid=>{
+    const inp = document.getElementById(fid);
+    if(!inp) return;
+    inp.addEventListener('input', ()=>{
+      let v = inp.value.replace(/\D/g,'');
+      if(v.length>2) v = v.slice(0,2)+'/'+v.slice(2);
+      if(v.length>5) v = v.slice(0,5)+'/'+v.slice(5);
+      if(v.length>10) v = v.slice(0,10);
+      inp.value = v;
+    });
+    inp.addEventListener('blur', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
+  });
   const liderSel = document.getElementById('f_gerente'); if(liderSel) liderSel.addEventListener('change', ()=>{ collectFormBasics(); applyAutoCalc(); renderShellAndPage(); });
   const btnAddRisk = document.getElementById('btnAddRisk');
   if(btnAddRisk) btnAddRisk.addEventListener('click', ()=>{ collectFormBasics(); UI.formData.riscos.push({nome:'',cargo:'',motivo:'',criticidade:'Média'}); renderShellAndPage(); });
