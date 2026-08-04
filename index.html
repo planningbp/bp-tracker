@@ -1402,17 +1402,18 @@ function openAddModal(db){
   overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
   overlay.querySelector('#addModalSave').addEventListener('click', ()=>{
     const v = id => (document.getElementById(id)||{}).value||'';
+    const safeDate = id => { const s=v(id); return s ? new Date(s+'T12:00:00') : ''; };
     if(db==='colaboradores'){
       if(!v('add_nome').trim()){ alert('Informe o nome.'); return; }
       DB.colaboradores.push({
         id:uid(), nome:v('add_nome').trim(), email:v('add_email').trim(), lider:v('add_lider').trim(),
-        nascimento:v('add_nascimento')?new Date(v('add_nascimento')):'',
+        nascimento:safeDate('add_nascimento'),
         departamentoRaw:v('add_departamentoRaw').trim(), area:v('add_area')||matchArea(v('add_departamentoRaw')),
         cargo:v('add_cargo').trim(),
-        admissao:v('add_admissao')?new Date(v('add_admissao')):'',
+        admissao:safeDate('add_admissao'),
         faixaSalarial:v('add_faixaSalarial').trim(), cpf:v('add_cpf').trim(), regime:v('add_regime'),
-        efetivacao:v('add_efetivacao')?new Date(v('add_efetivacao')):'',
-        pejotizacao:v('add_pejotizacao')?new Date(v('add_pejotizacao')):'',
+        efetivacao:safeDate('add_efetivacao'),
+        pejotizacao:safeDate('add_pejotizacao'),
         promocoes:'', cargoAdmissao:v('add_cargoAdmissao').trim(), salarioAdmissao:v('add_salarioAdmissao').trim(),
         cargoDominio:'', bpResponsavel:v('add_bpResponsavel').trim()
       });
@@ -1420,12 +1421,12 @@ function openAddModal(db){
     } else if(db==='desligamentos'){
       if(!v('add_nome').trim()){ alert('Informe o nome.'); return; }
       DB.desligamentos.push({
-        id:uid(), mesRaw:'', mesDate:v('add_mesDate')?new Date(v('add_mesDate')):'',
+        id:uid(), mesRaw:'', mesDate:safeDate('add_mesDate'),
         nome:v('add_nome').trim(), cargo:v('add_cargo').trim(), regime:v('add_regime'),
         departamentoRaw:v('add_departamentoRaw').trim(), area:v('add_area')||matchArea(v('add_departamentoRaw')),
         lider:v('add_lider').trim(), coordenacao:v('add_coordenacao').trim(), empresa:v('add_empresa').trim(),
-        dtAdmissao:v('add_dtAdmissao')?new Date(v('add_dtAdmissao')):'',
-        ultimoDia:v('add_ultimoDia')?new Date(v('add_ultimoDia')):'',
+        dtAdmissao:safeDate('add_dtAdmissao'),
+        ultimoDia:safeDate('add_ultimoDia'),
         tempoDeCasa:v('add_tempoDeCasa').trim(), tipo:v('add_tipo').trim(), motivo:v('add_motivo').trim(), submotivo:v('add_submotivo').trim()
       });
       persist('desligamentos');
@@ -1433,7 +1434,7 @@ function openAddModal(db){
       if(!v('add_nome').trim()){ alert('Informe o nome.'); return; }
       const pctVal = parseFloat(v('add_pct'));
       DB.promocoes.push({
-        id:uid(), mesRaw:'', mesDate:v('add_mesDate')?new Date(v('add_mesDate')):'',
+        id:uid(), mesRaw:'', mesDate:safeDate('add_mesDate'),
         nome:v('add_nome').trim(), departamentoRaw:v('add_departamentoRaw').trim(),
         area:v('add_area')||matchArea(v('add_departamentoRaw')),
         gestor:v('add_gestor').trim(), aprovador:v('add_aprovador').trim(),
