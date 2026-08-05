@@ -1530,10 +1530,34 @@ function handleImportFile(type, file){
     else if(type==='desligamentos') parsed = parseDesligamentos(rows);
     else if(type==='pdis') parsed = parsePDIs(rows);
     else parsed = parsePromocoes(rows);
-    DB[type] = parsed;
+    // Merge: append new records, skip duplicates
+    const existing = DB[type]||[];
+    function dedupKey(r){
+      if(type==='colaboradores') return normalizeStr(r.nome)+'|'+normalizeStr(r.cpf||'');
+      if(type==='desligamentos') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
+      if(type==='promocoes') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
+      if(type==='pdis') return normalizeStr(r.nome);
+      return r.id;
+    }
+    const existingKeys = new Set(existing.map(dedupKey));
+    let added=0, updated=0;
+    parsed.forEach(p=>{
+      const key = dedupKey(p);
+      if(existingKeys.has(key)){
+        // Update existing record with new data
+        const idx = existing.findIndex(e=> dedupKey(e)===key);
+        if(idx>=0){ const id=existing[idx].id; existing[idx]={...p, id}; updated++; }
+      } else {
+        existing.push(p); added++;
+      }
+    });
+    DB[type] = existing;
     persist(type);
     if(type==='promocoes' || type==='colaboradores') applyPromocoes();
-    statusEl.textContent = parsed.length + ' registros importados de "'+file.name+'"';
+    const parts = [];
+    if(added) parts.push(added+' novos');
+    if(updated) parts.push(updated+' atualizados');
+    statusEl.textContent = (parts.length? parts.join(', ') : 'Nenhum novo registro') + ' — total: '+existing.length+' registros';
     statusEl.className = 'import-status ok';
     renderImportPreviewTables();
     renderShellAndPage(); // refresh sidebar dot
