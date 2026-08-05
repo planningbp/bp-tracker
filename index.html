@@ -1637,9 +1637,24 @@ function detailMiniTable(title, rows, headers, keys){
     ${rows.map(r=>`<tr>${keys.map(k=>`<td>${esc(r[k]||'')}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></div>`;
 }
-function renderBancoHorasGrouped(tableId, title, rows, area){
+function detailGroupedTable(title, rows, extraHeaders, extraKeys){
+  if(!rows || !rows.length) return '';
+  // Auto-fill lider from colaboradores
+  rows.forEach(r=>{ if(!r.lider){ const m=DB.colaboradores.find(c=>normalizeStr(c.nome)===normalizeStr(r.nome)); if(m) r.lider=m.lider||''; }});
+  const byL={};
+  rows.forEach(r=>{ const k=r.lider||'Sem líder'; if(!byL[k]) byL[k]=[]; byL[k].push(r); });
+  const ls=Object.keys(byL).sort();
+  const th='padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;';
+  const td='padding:5px 10px;';
+  return '<div class="card" style="margin-bottom:20px;"><div class="section-title">'+title+' ('+rows.length+')</div>'+
+    ls.map(l=>'<div style="margin-bottom:12px;"><div style="font-size:12px;font-weight:700;color:#1B1B2F;padding:5px 10px;background:#f1f5f9;border-radius:6px;margin-bottom:4px;">Equipe '+esc(l)+' <span style="font-size:10px;color:#888;font-weight:400;">('+byL[l].length+')</span></div>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:1px solid #e5e7eb;"><th style="'+th+'">Nome</th><th style="'+th+'">Cargo</th>'+extraHeaders.map(h=>'<th style="'+th+'">'+h+'</th>').join('')+'</tr></thead><tbody>'+
+      byL[l].map((r,i)=>'<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="'+td+'">'+esc(r.nome)+'</td><td style="'+td+'">'+esc(r.cargo||'')+'</td>'+extraKeys.map(k=>'<td style="'+td+'">'+esc(r[k]||'')+'</td>').join('')+'</tr>').join('')+
+      '</tbody></table></div>').join('')+'</div>';
+}
+function renderSmartTable(tableId, title, rows, extraCols, area){
+  // extraCols: [{key,label,placeholder}] — columns besides nome/cargo/lider
   rows = rows||[];
-  // Build collaborator options filtered by area
   const areaColabs = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamentoRaw||'')===normalizeStr(area||''));
   const colabOpts = areaColabs.map(c=>`<option value="${esc(c.nome)}" data-cargo="${esc(c.cargo||'')}" data-lider="${esc(c.lider||'')}">${esc(c.nome)}</option>`).join('');
   // Auto-fill lider/cargo from colaboradores if missing
@@ -1651,34 +1666,33 @@ function renderBancoHorasGrouped(tableId, title, rows, area){
   });
   // Group by lider
   const byLider = {};
-  rows.forEach((r,i)=>{
-    const lKey = r.lider||'Sem líder';
-    if(!byLider[lKey]) byLider[lKey]=[];
-    byLider[lKey].push({...r, _idx:i});
-  });
+  rows.forEach((r,i)=>{ const k=r.lider||'Sem líder'; if(!byLider[k]) byLider[k]=[]; byLider[k].push({...r,_idx:i}); });
   const liders = Object.keys(byLider).sort();
+  const thStyle = 'text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;';
+  const tdStyle = 'padding:4px 8px;';
+  const inpStyle = 'border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;';
   const grouped = liders.length>0 ? liders.map(lider=>{
     const team = byLider[lider];
     return `<div style="margin-top:10px;"><div style="font-size:12px;font-weight:700;color:#1B1B2F;padding:5px 10px;background:#f1f5f9;border-radius:6px;margin-bottom:4px;">Equipe ${esc(lider)} <span style="font-size:10px;color:#888;font-weight:400;">(${team.length})</span></div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th style="text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;">Cargo</th><th style="text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;">Horas</th><th style="text-align:left;padding:4px 8px;font-size:10px;text-transform:uppercase;color:#888;">Observação</th><th style="width:36px;"></th></tr></thead><tbody>
-      ${team.map(r=>`<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 8px;"><input class="mini-input" value="${esc(r.nome)}" data-table="${tableId}" data-row="${r._idx}" data-col="nome" style="border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;"></td><td style="padding:4px 8px;"><input class="mini-input" value="${esc(r.cargo)}" data-table="${tableId}" data-row="${r._idx}" data-col="cargo" style="border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;"></td><td style="padding:4px 8px;"><input class="mini-input" value="${esc(r.horas)}" data-table="${tableId}" data-row="${r._idx}" data-col="horas" style="border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;"></td><td style="padding:4px 8px;"><input class="mini-input" value="${esc(r.observacao||'')}" data-table="${tableId}" data-row="${r._idx}" data-col="observacao" style="border:none;background:transparent;width:100%;font-size:13px;padding:2px 0;"></td><td><button class="btn-icon-del" data-del-table="${tableId}" data-del-row="${r._idx}" title="Remover" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:2px 6px;">✕</button></td></tr>`).join('')}
+      <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th style="${thStyle}">Nome</th><th style="${thStyle}">Cargo</th>${extraCols.map(c=>`<th style="${thStyle}">${c.label}</th>`).join('')}<th style="width:36px;"></th></tr></thead><tbody>
+      ${team.map(r=>`<tr style="border-bottom:1px solid #f0f0f0;"><td style="${tdStyle}"><input class="mini-input" value="${esc(r.nome)}" data-table="${tableId}" data-row="${r._idx}" data-col="nome" style="${inpStyle}"></td><td style="${tdStyle}"><input class="mini-input" value="${esc(r.cargo)}" data-table="${tableId}" data-row="${r._idx}" data-col="cargo" style="${inpStyle}"></td>${extraCols.map(c=>`<td style="${tdStyle}"><input class="mini-input" value="${esc(r[c.key]||'')}" data-table="${tableId}" data-row="${r._idx}" data-col="${c.key}" style="${inpStyle}"></td>`).join('')}<td><button class="btn-icon-del" data-del-table="${tableId}" data-del-row="${r._idx}" title="Remover" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:2px 6px;">✕</button></td></tr>`).join('')}
       </tbody></table></div>`;
   }).join('') : '<div style="text-align:center;color:var(--text-light);padding:12px;font-size:13px;">Nenhum registro.</div>';
+  const extraFields = extraCols.map(c=>`<div class="field"><label>${c.label}</label><input id="st_${tableId}_${c.key}" placeholder="${c.placeholder||''}"></div>`).join('');
   return `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;">
     <div class="mini-table-title" style="margin:0;">${title} <span style="color:var(--text-light);font-weight:400;">(${rows.length})</span></div>
-    <button class="btn btn-outline btn-sm" id="btnAddBancoHoras" style="width:auto;font-size:11px;padding:4px 10px;">${ICONS.plus} Adicionar</button>
+    <button class="btn btn-outline btn-sm btnSmartAdd" data-smart-table="${tableId}" style="width:auto;font-size:11px;padding:4px 10px;">${ICONS.plus} Adicionar</button>
   </div>
-  <div id="addBancoHorasInline" style="display:none;margin-top:10px;padding:14px;border:1.5px solid var(--primary);border-radius:10px;background:var(--primary-light);">
+  <div id="smartAdd_${tableId}" style="display:none;margin-top:10px;padding:14px;border:1.5px solid var(--primary);border-radius:10px;background:var(--primary-light);">
     <div class="field-grid" style="grid-template-columns:1fr 1fr;">
-      <div class="field"><label>Colaborador</label><select id="bhSelectColab" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;"><option value="">Selecione...</option>${colabOpts}</select></div>
-      <div class="field"><label>Líder (automático)</label><input id="bhLider" readonly style="background:#f0f0f0;" value=""></div>
-      <div class="field"><label>Cargo (automático)</label><input id="bhCargo" readonly style="background:#f0f0f0;" value=""></div>
-      <div class="field"><label>Horas</label><input id="bhHoras" placeholder="Ex.: +08:54"></div>
-      <div class="field" style="grid-column:1/-1;"><label>Observação</label><input id="bhObs" placeholder="Observação (opcional)"></div>
+      <div class="field"><label>Colaborador</label><select id="st_${tableId}_colab" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;"><option value="">Selecione...</option>${colabOpts}</select></div>
+      <div class="field"><label>Líder (automático)</label><input id="st_${tableId}_lider" readonly style="background:#f0f0f0;" value=""></div>
+      <div class="field"><label>Cargo (automático)</label><input id="st_${tableId}_cargo" readonly style="background:#f0f0f0;" value=""></div>
+      ${extraFields}
     </div>
     <div style="display:flex;gap:8px;margin-top:10px;">
-      <button class="btn btn-primary btn-sm" id="btnConfirmBH" style="width:auto;">Confirmar</button>
-      <button class="btn btn-outline btn-sm" id="btnCancelBH" style="width:auto;">Cancelar</button>
+      <button class="btn btn-primary btn-sm btnSmartConfirm" data-smart-table="${tableId}" style="width:auto;">Confirmar</button>
+      <button class="btn btn-outline btn-sm btnSmartCancel" data-smart-table="${tableId}" style="width:auto;">Cancelar</button>
     </div>
   </div>
   ${grouped}`;
@@ -1816,10 +1830,10 @@ function renderMeetingForm(){
             ${fd.riscos.map((r,i)=>renderRiskRow(r,i)).join('')}
           </div>
           <button class="btn btn-outline btn-sm" id="btnAddRisk" style="width:auto;margin-bottom:20px;">${ICONS.plus} Adicionar risco</button>
-          ${renderMiniTable('feriasTable','Férias vencidas', fd.feriasTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'diasVencidos',label:'Dias vencidos'},{key:'observacao',label:'Observação'}])}
-          ${renderBancoHorasGrouped('bancoHorasTable','Banco de horas', fd.bancoHorasTable, fd.area)}
-          ${renderMiniTable('horasExtrasTable','Horas extras', fd.horasExtrasTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'horas',label:'Horas'},{key:'observacao',label:'Observação'}])}
-          ${renderMiniTable('pendenciasPontoTable','Pendências de ponto', fd.pendenciasPontoTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'tipo',label:'Tipo pendência'},{key:'observacao',label:'Observação'}])}
+          ${renderSmartTable('feriasTable','Férias vencidas', fd.feriasTable, [{key:'diasVencidos',label:'Dias vencidos',placeholder:'Ex.: 15'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
+          ${renderSmartTable('bancoHorasTable','Banco de horas', fd.bancoHorasTable, [{key:'horas',label:'Horas',placeholder:'Ex.: +08:54'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
+          ${renderSmartTable('horasExtrasTable','Horas extras', fd.horasExtrasTable, [{key:'horas',label:'Horas',placeholder:'Ex.: +08:54'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
+          ${renderSmartTable('pendenciasPontoTable','Pendências de ponto', fd.pendenciasPontoTable, [{key:'tipo',label:'Tipo pendência',placeholder:'Ex.: Falta de marcação'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
         </div>
 
         <div class="form-section ${UI.formSection===5?'active':''}" data-panel="5">
@@ -1989,10 +2003,10 @@ function bindMeetingForm(){
     desligamentosTable: {nome:'',cargo:'',lider:'',tipo:'',motivo:'',submotivo:'',dtAdmissao:'',ultimoDia:'',tempoDeCasa:''},
     experienciaTable: {nome:'',cargo:'',admissao:'',milestone:'',milestoneDate:'',status:'Pendente',observacao:''},
     promocoesTable: {nome:'',gestor:'',aprovador:'',cargoAnterior:'',salarioAnterior:'',cargoNovo:'',salarioNovo:'',reajuste:'',pct:''},
-    feriasTable: {nome:'',cargo:'',diasVencidos:'',observacao:''},
+    feriasTable: {nome:'',cargo:'',lider:'',diasVencidos:'',observacao:''},
     bancoHorasTable: {nome:'',cargo:'',lider:'',horas:'',observacao:''},
-    horasExtrasTable: {nome:'',cargo:'',horas:'',observacao:''},
-    pendenciasPontoTable: {nome:'',cargo:'',tipo:'',observacao:''}
+    horasExtrasTable: {nome:'',cargo:'',lider:'',horas:'',observacao:''},
+    pendenciasPontoTable: {nome:'',cargo:'',lider:'',tipo:'',observacao:''}
   };
   document.querySelectorAll('[data-add-table]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -2052,33 +2066,58 @@ function bindMeetingForm(){
       }
     });
   });
-  // Banco de horas: add with collaborator selector
-  const btnAddBH = document.getElementById('btnAddBancoHoras');
-  const addBHPanel = document.getElementById('addBancoHorasInline');
-  if(btnAddBH && addBHPanel){
-    btnAddBH.addEventListener('click', ()=>{ addBHPanel.style.display='block'; btnAddBH.style.display='none'; });
-    const bhSel = document.getElementById('bhSelectColab');
-    if(bhSel) bhSel.addEventListener('change', ()=>{
-      const opt = bhSel.options[bhSel.selectedIndex];
-      const liderInp = document.getElementById('bhLider');
-      const cargoInp = document.getElementById('bhCargo');
+  // Smart tables: collaborator selector with auto-fill for all tables
+  const SMART_EXTRA = {
+    feriasTable: ['diasVencidos','observacao'],
+    bancoHorasTable: ['horas','observacao'],
+    horasExtrasTable: ['horas','observacao'],
+    pendenciasPontoTable: ['tipo','observacao']
+  };
+  document.querySelectorAll('.btnSmartAdd').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const tbl = btn.getAttribute('data-smart-table');
+      const panel = document.getElementById('smartAdd_'+tbl);
+      if(panel){ panel.style.display='block'; btn.style.display='none'; }
+    });
+  });
+  document.querySelectorAll('.btnSmartCancel').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const tbl = btn.getAttribute('data-smart-table');
+      const panel = document.getElementById('smartAdd_'+tbl);
+      if(panel) panel.style.display='none';
+      const addBtn = document.querySelector('.btnSmartAdd[data-smart-table="'+tbl+'"]');
+      if(addBtn) addBtn.style.display='';
+    });
+  });
+  // Auto-fill on collaborator select
+  document.querySelectorAll('[id^="st_"][id$="_colab"]').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const tbl = sel.id.replace('st_','').replace('_colab','');
+      const opt = sel.options[sel.selectedIndex];
+      const liderInp = document.getElementById('st_'+tbl+'_lider');
+      const cargoInp = document.getElementById('st_'+tbl+'_cargo');
       if(liderInp) liderInp.value = opt.getAttribute('data-lider')||'';
       if(cargoInp) cargoInp.value = opt.getAttribute('data-cargo')||'';
     });
-    document.getElementById('btnCancelBH').addEventListener('click', ()=>{ addBHPanel.style.display='none'; btnAddBH.style.display=''; });
-    document.getElementById('btnConfirmBH').addEventListener('click', ()=>{
+  });
+  document.querySelectorAll('.btnSmartConfirm').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
       collectFormBasics();
-      const nome = document.getElementById('bhSelectColab').value;
+      const tbl = btn.getAttribute('data-smart-table');
+      const nome = document.getElementById('st_'+tbl+'_colab').value;
       if(!nome){ alert('Selecione um colaborador.'); return; }
-      const cargo = document.getElementById('bhCargo').value;
-      const lider = document.getElementById('bhLider').value;
-      const horas = document.getElementById('bhHoras').value;
-      const obs = document.getElementById('bhObs').value;
-      if(!UI.formData.bancoHorasTable) UI.formData.bancoHorasTable=[];
-      UI.formData.bancoHorasTable.push({nome, cargo, lider, horas, observacao:obs});
+      const cargo = document.getElementById('st_'+tbl+'_cargo').value;
+      const lider = document.getElementById('st_'+tbl+'_lider').value;
+      const row = {nome, cargo, lider};
+      (SMART_EXTRA[tbl]||[]).forEach(k=>{
+        const inp = document.getElementById('st_'+tbl+'_'+k);
+        row[k] = inp ? inp.value : '';
+      });
+      if(!UI.formData[tbl]) UI.formData[tbl]=[];
+      UI.formData[tbl].push(row);
       renderShellAndPage();
     });
-  }
+  });
 }
 function saveMeetingForm(){
   const fd = UI.formData;
@@ -2193,22 +2232,10 @@ function renderMeetingDetail(){
       ${m.riscos.map(r=>`<tr><td>${esc(r.nome)}</td><td>${esc(r.cargo)}</td><td>${esc(r.motivo)}</td><td>${r.criticidade==='Alta'?'<span class="badge badge-red">Alta</span>':r.criticidade==='Média'?'<span class="badge badge-yellow">Média</span>':'<span class="badge badge-gray">Baixa</span>'}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty-state">Nenhum risco registrado.</div>'}
   </div>
-  ${detailMiniTable('Férias vencidas', m.feriasTable, ['Nome','Cargo','Dias vencidos','Observação'], ['nome','cargo','diasVencidos','observacao'])}
-  ${(()=>{
-    const bh = m.bancoHorasTable||[];
-    if(!bh.length) return '';
-    bh.forEach(r=>{ if(!r.lider){ const match=DB.colaboradores.find(c=>normalizeStr(c.nome)===normalizeStr(r.nome)); if(match) r.lider=match.lider||''; }});
-    const byL = {};
-    bh.forEach(r=>{ const k=r.lider||'Sem líder'; if(!byL[k]) byL[k]=[]; byL[k].push(r); });
-    const ls = Object.keys(byL).sort();
-    return '<div class="card" style="margin-bottom:20px;"><div class="section-title">Banco de Horas ('+bh.length+')</div>'+
-      ls.map(l=>'<div style="margin-bottom:12px;"><div style="font-size:12px;font-weight:700;color:#1B1B2F;padding:5px 10px;background:#f1f5f9;border-radius:6px;margin-bottom:4px;">Equipe '+esc(l)+' <span style="font-size:10px;color:#888;font-weight:400;">('+byL[l].length+')</span></div>'+
-        '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:1px solid #e5e7eb;"><th style="padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Cargo</th><th style="padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Horas</th><th style="padding:5px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Observação</th></tr></thead><tbody>'+
-        byL[l].map((r,i)=>'<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="padding:5px 10px;">'+esc(r.nome)+'</td><td style="padding:5px 10px;">'+esc(r.cargo)+'</td><td style="padding:5px 10px;font-weight:600;">'+esc(r.horas)+'</td><td style="padding:5px 10px;">'+esc(r.observacao||'')+'</td></tr>').join('')+
-        '</tbody></table></div>').join('')+'</div>';
-  })()}
-  ${detailMiniTable('Horas extras', m.horasExtrasTable, ['Nome','Cargo','Horas','Observação'], ['nome','cargo','horas','observacao'])}
-  ${detailMiniTable('Pendências de ponto', m.pendenciasPontoTable, ['Nome','Cargo','Tipo pendência','Observação'], ['nome','cargo','tipo','observacao'])}
+  ${detailGroupedTable('Férias vencidas', m.feriasTable, ['Dias vencidos','Observação'], ['diasVencidos','observacao'])}
+  ${detailGroupedTable('Banco de Horas', m.bancoHorasTable, ['Horas','Observação'], ['horas','observacao'])}
+  ${detailGroupedTable('Horas extras', m.horasExtrasTable, ['Horas','Observação'], ['horas','observacao'])}
+  ${detailGroupedTable('Pendências de ponto', m.pendenciasPontoTable, ['Tipo pendência','Observação'], ['tipo','observacao'])}
   ${(()=>{
     const acoes = m.acoes||[];
     if(!acoes.length) return '';
