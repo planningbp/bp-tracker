@@ -543,6 +543,7 @@ const LS = {
   oneOnOnes:'planning_one_on_ones',
   scores:'planning_scores',
   pdis:'planning_pdis',
+  bancoHorasImport:'planning_banco_horas',
   session:'planning_session',
   seeded:'planning_seeded_v1'
 };
@@ -559,7 +560,8 @@ let DB = {
   acompanhamentos: loadJSON(LS.acompanhamentos, []),
   oneOnOnes: loadJSON(LS.oneOnOnes, []),
   scores: loadJSON(LS.scores, []),
-  pdis: loadJSON(LS.pdis, [])
+  pdis: loadJSON(LS.pdis, []),
+  bancoHorasImport: loadJSON(LS.bancoHorasImport, [])
 };
 function persist(part){ saveJSON(LS[part], DB[part]); }
 
@@ -740,6 +742,32 @@ function parsePDIs(rows){
       atualizadoEm: r[5]||'', naoIniciada: Number(r[6])||0,
       emProgresso: Number(r[7])||0, finalizada: Number(r[8])||0,
       area: colabMatch ? (colabMatch.area||colabMatch.departamentoRaw||'') : ''
+    });
+  }
+  return out;
+}
+
+function parseBancoHorasImport(rows){
+  // Flexible: tries to detect columns by header names
+  const header = (rows[0]||[]).map(h=>(h||'').toString().toLowerCase().trim());
+  const colIdx = (keywords) => header.findIndex(h=> keywords.some(k=>h.includes(k)));
+  const iNome = colIdx(['nome','colaborador','funcionário','funcionario']);
+  const iHoras = colIdx(['hora','banco','saldo']);
+  const iObs = colIdx(['obs','observ','comentário','comentario']);
+  const out = [];
+  for(let i=1; i<rows.length; i++){
+    const r = rows[i]; if(!r) continue;
+    const nome = (r[iNome>=0?iNome:0]||'').toString().trim();
+    if(!nome) continue;
+    const horas = (r[iHoras>=0?iHoras:1]||'').toString().trim();
+    const obs = iObs>=0 ? (r[iObs]||'').toString().trim() : '';
+    // Lookup colaborador for cargo, lider, area
+    const colab = DB.colaboradores.find(c=> normalizeStr(c.nome)===normalizeStr(nome));
+    out.push({
+      id: uid(), nome, horas, observacao: obs,
+      cargo: colab ? colab.cargo||'' : '',
+      lider: colab ? colab.lider||'' : '',
+      area: colab ? (colab.area||colab.departamentoRaw||'') : ''
     });
   }
   return out;
@@ -1241,15 +1269,16 @@ function renderImportZone(type, title, desc){
   </div>`;
 }
 function renderImport(){
-  const hasAny = DB.colaboradores.length || DB.desligamentos.length || DB.promocoes.length || DB.pdis.length;
+  const hasAny = DB.colaboradores.length || DB.desligamentos.length || DB.promocoes.length || DB.pdis.length || DB.bancoHorasImport.length;
   return `
   <div class="grid grid-3" style="margin-bottom:20px;">
     ${renderImportZone('colaboradores','Colaboradores','Base completa de colaboradores ativos e histórico.')}
     ${renderImportZone('desligamentos','Desligamentos','Registros de desligamento por competência.')}
     ${renderImportZone('promocoes','Promoções','Movimentações salariais e de cargo.')}
   </div>
-  <div style="margin-bottom:20px;">
+  <div class="grid grid-2" style="margin-bottom:20px;">
     ${renderImportZone('pdis','PDIs','Planos de Desenvolvimento Individual — importar planilha de PDIs.')}
+    ${renderImportZone('bancoHorasImport','Banco de Horas','Importar planilha com nome do colaborador e saldo de horas. Colunas: Nome, Horas, Observação (opcional).')}
   </div>
   ${hasAny?'<div style="margin-bottom:20px;"><button class="btn btn-outline btn-sm" id="btnClearAllImport" style="width:auto;padding:6px 16px;color:var(--red);border-color:var(--red);">'+ICONS.trash+' Limpar todas as bases</button></div>':''}
   <div id="importPreview"></div>`;
@@ -1515,8 +1544,8 @@ function bindImport(){
   const btnClear = document.getElementById('btnClearAllImport');
   if(btnClear) btnClear.addEventListener('click', ()=>{
     if(!confirm('Tem certeza que deseja limpar TODAS as bases importadas (colaboradores, desligamentos e promoções)?')) return;
-    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[]; DB.oneOnOnes=[]; DB.scores=[]; DB.pdis=[];
-    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos'); persist('oneOnOnes'); persist('scores'); persist('pdis');
+    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[]; DB.oneOnOnes=[]; DB.scores=[]; DB.pdis=[]; DB.bancoHorasImport=[];
+    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos'); persist('oneOnOnes'); persist('scores'); persist('pdis'); persist('bancoHorasImport');
     renderShellAndPage();
   });
 }
@@ -1529,6 +1558,7 @@ function handleImportFile(type, file){
     if(type==='colaboradores') parsed = parseColaboradores(rows);
     else if(type==='desligamentos') parsed = parseDesligamentos(rows);
     else if(type==='pdis') parsed = parsePDIs(rows);
+    else if(type==='bancoHorasImport') parsed = parseBancoHorasImport(rows);
     else parsed = parsePromocoes(rows);
     // Merge: append new records, skip duplicates
     const existing = DB[type]||[];
@@ -1537,6 +1567,7 @@ function handleImportFile(type, file){
       if(type==='desligamentos') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
       if(type==='promocoes') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
       if(type==='pdis') return normalizeStr(r.nome);
+      if(type==='bancoHorasImport') return normalizeStr(r.nome);
       return r.id;
     }
     const existingKeys = new Set(existing.map(dedupKey));
@@ -1626,6 +1657,11 @@ function applyAutoCalc(){
   if(scoreMatch){
     fd.enps = scoreMatch.enps;
     fd.lnps = scoreMatch.lnps;
+  }
+  // Auto-populate banco de horas from imported data
+  if(DB.bancoHorasImport.length){
+    const areaBH = DB.bancoHorasImport.filter(b=> normalizeStr(b.area)===normalizeStr(fd.area));
+    if(areaBH.length) fd.bancoHorasTable = areaBH.map(b=>({nome:b.nome, cargo:b.cargo||'', lider:b.lider||'', horas:b.horas||'', observacao:b.observacao||''}));
   }
   fd.autoApplied = true;
 }
@@ -3944,6 +3980,7 @@ function renderSettings(){
       <tr><td>Acompanhamentos</td><td><strong>${DB.acompanhamentos.length}</strong> registros</td></tr>
       <tr><td>Notas eNPS/lNPS</td><td><strong>${DB.scores.length}</strong> registros</td></tr>
       <tr><td>Registros 1:1</td><td><strong>${DB.oneOnOnes.length}</strong> registros</td></tr>
+      <tr><td>Banco de Horas</td><td><strong>${DB.bancoHorasImport.length}</strong> registros</td></tr>
     </tbody></table>
   </div>
   <div class="card" style="margin-top:20px;">
