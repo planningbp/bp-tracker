@@ -3912,10 +3912,80 @@ function renderSettings(){
       <tr><td>Colaboradores</td><td><strong>${DB.colaboradores.length}</strong> registros</td></tr>
       <tr><td>Desligamentos</td><td><strong>${DB.desligamentos.length}</strong> registros</td></tr>
       <tr><td>Promoções</td><td><strong>${DB.promocoes.length}</strong> registros</td></tr>
+      <tr><td>PDIs</td><td><strong>${DB.pdis.length}</strong> registros</td></tr>
+      <tr><td>Reuniões</td><td><strong>${DB.meetings.length}</strong> registros</td></tr>
+      <tr><td>Acompanhamentos</td><td><strong>${DB.acompanhamentos.length}</strong> registros</td></tr>
+      <tr><td>Notas eNPS/lNPS</td><td><strong>${DB.scores.length}</strong> registros</td></tr>
+      <tr><td>Registros 1:1</td><td><strong>${DB.oneOnOnes.length}</strong> registros</td></tr>
     </tbody></table>
+  </div>
+  <div class="card" style="margin-top:20px;">
+    <div class="section-title" style="margin-bottom:6px;">Backup de Dados</div>
+    <p style="font-size:12.5px;color:var(--text-light);margin:0 0 16px;">Exporte todos os seus dados como arquivo de backup. Use para restaurar quando trocar o arquivo HTML ou limpar o navegador.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-primary" style="width:auto;" id="btnExportBackup">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar Backup
+      </button>
+      <label class="btn btn-outline" style="width:auto;cursor:pointer;" id="btnImportBackupLabel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Importar Backup
+        <input type="file" accept=".json" style="display:none;" id="btnImportBackup">
+      </label>
+    </div>
+    <div id="backupStatus" style="margin-top:10px;font-size:12.5px;"></div>
   </div>`;
 }
-function bindSettings(){}
+function bindSettings(){
+  const btnExport = document.getElementById('btnExportBackup');
+  if(btnExport) btnExport.addEventListener('click', ()=>{
+    const backup = {};
+    Object.keys(LS).forEach(k=>{ if(k==='session'||k==='seeded') return; backup[k] = DB[k]||[]; });
+    // Also save session info
+    backup._session = loadJSON(LS.session, null);
+    backup._exportDate = new Date().toISOString();
+    backup._version = 'bp-tracker-v2';
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date();
+    const dateStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    a.href = url; a.download = 'bp-tracker-backup-'+dateStr+'.json'; a.click();
+    URL.revokeObjectURL(url);
+    const st = document.getElementById('backupStatus');
+    if(st){ st.innerHTML = '<span style="color:#16a34a;font-weight:600;">✓ Backup exportado com sucesso!</span>'; }
+  });
+  const btnImport = document.getElementById('btnImportBackup');
+  if(btnImport) btnImport.addEventListener('change', ()=>{
+    const file = btnImport.files[0];
+    if(!file) return;
+    const st = document.getElementById('backupStatus');
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const data = JSON.parse(reader.result);
+        if(!data._version && !data.meetings && !data.colaboradores){ throw new Error('Arquivo inválido'); }
+        const counts = [];
+        Object.keys(LS).forEach(k=>{
+          if(k==='session'||k==='seeded') return;
+          if(data[k] && Array.isArray(data[k])){
+            DB[k] = data[k];
+            persist(k);
+            counts.push(k+': '+data[k].length);
+          }
+        });
+        if(data._session){
+          localStorage.setItem(LS.session, JSON.stringify(data._session));
+        }
+        if(st) st.innerHTML = '<span style="color:#16a34a;font-weight:600;">✓ Backup restaurado! '+counts.join(', ')+'</span>';
+        setTimeout(()=> renderShellAndPage(), 1000);
+      } catch(e){
+        if(st) st.innerHTML = '<span style="color:var(--red);font-weight:600;">✕ Erro: arquivo de backup inválido.</span>';
+      }
+    };
+    reader.readAsText(file);
+  });
+}
 
 /* =========================================================
    INIT
