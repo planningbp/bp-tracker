@@ -1590,13 +1590,13 @@ function applyAutoCalc(){
   fd.desligamentosCount = auto.desligamentos.length;
   fd.turnover = Math.round(auto.turnover*100)/100;
   fd.experienciaCount = auto.experiencia.length;
-  fd.admissoesTable = auto.admissoes.map(a=>({nome:a.nome, cargo:a.cargo, admissao:fmtDate(a.admissao)}));
-  fd.desligamentosTable = auto.desligamentos.map(d=>({nome:d.nome, cargo:d.cargo, tipo:d.tipo, motivo:d.motivo}));
+  fd.admissoesTable = auto.admissoes.map(a=>({nome:a.nome, cargo:a.cargo, lider:a.lider||'', departamento:a.departamentoRaw||a.area||'', regime:a.regime||'', admissao:fmtDate(a.admissao)}));
+  fd.desligamentosTable = auto.desligamentos.map(d=>({nome:d.nome, cargo:d.cargo, lider:d.lider||'', tipo:d.tipo, motivo:d.motivo, submotivo:d.submotivo||'', dtAdmissao:d.dtAdmissao?fmtDate(d.dtAdmissao):'', ultimoDia:d.ultimoDia?fmtDate(d.ultimoDia):'', tempoDeCasa:d.tempoDeCasa||''}));
   fd.experienciaTable = auto.experiencia.map(e=>{
     const saved = DB.acompanhamentos.find(a=> normalizeStr(a.nome)===normalizeStr(e.nome) && a.milestone===e.milestone);
     return {nome:e.nome, cargo:e.cargo, admissao:fmtDate(e.admissao), milestone:e.milestone+' dias', milestoneDate:fmtDate(e.milestoneDate), status: saved ? saved.status : 'Pendente', observacao: saved ? saved.observacao||'' : ''};
   });
-  fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, cargoAnterior:p.cargoAtual, cargoNovo:p.cargoAprovado, pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
+  fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, gestor:p.gestor||'', aprovador:p.aprovador||'', cargoAnterior:p.cargoAtual||'', salarioAnterior:p.salarioAtual||'', cargoNovo:p.cargoAprovado||'', salarioNovo:p.valorAprovado||'', reajuste:p.reajuste||'', pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
   // Pull eNPS/lNPS from scores
   const scoreMatch = DB.scores.find(s=> (s.tipo||'area')==='area' && normalizeStr(s.area)===normalizeStr(fd.area) && s.period===fd.period);
   if(scoreMatch){
@@ -1712,10 +1712,10 @@ function renderMeetingForm(){
             <div class="field"><label>Movimentações internas</label><input id="f_mov" type="number" value="${fd.movimentacoes}"></div>
             <div class="field"><label>Acompanhamentos ${fd.autoApplied?'<span class="auto-tag">(automático)</span>':''}</label><input id="f_exp" type="number" value="${fd.experienciaCount}" class="${fd.autoApplied?'field-auto':''}"></div>
           </div>
-          ${renderMiniTable('admissoesTable','Admissões no período', fd.admissoesTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'admissao',label:'Data admissão'}])}
-          ${renderMiniTable('desligamentosTable','Desligamentos no período', fd.desligamentosTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'tipo',label:'Tipo'},{key:'motivo',label:'Motivo'}])}
+          ${renderMiniTable('admissoesTable','Admissões no período', fd.admissoesTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'lider',label:'Líder'},{key:'departamento',label:'Departamento'},{key:'regime',label:'Regime'},{key:'admissao',label:'Data admissão'}])}
+          ${renderMiniTable('desligamentosTable','Desligamentos no período', fd.desligamentosTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'lider',label:'Líder'},{key:'tipo',label:'Tipo'},{key:'motivo',label:'Motivo'},{key:'submotivo',label:'Submotivo'},{key:'dtAdmissao',label:'Admissão'},{key:'ultimoDia',label:'Último dia'},{key:'tempoDeCasa',label:'Tempo de casa'}])}
           ${renderMiniTable('experienciaTable','Acompanhamentos (7/15/45/90 dias)', fd.experienciaTable, [{key:'nome',label:'Nome'},{key:'cargo',label:'Cargo'},{key:'admissao',label:'Admissão'},{key:'milestone',label:'Marco'},{key:'milestoneDate',label:'Data'},{key:'status',label:'Status'},{key:'observacao',label:'Observações'}])}
-          ${renderMiniTable('promocoesTable','Promoções / Movimentações', fd.promocoesTable, [{key:'nome',label:'Nome'},{key:'cargoAnterior',label:'Cargo anterior'},{key:'cargoNovo',label:'Cargo novo'},{key:'pct',label:'Reajuste'}])}
+          ${renderMiniTable('promocoesTable','Promoções / Movimentações', fd.promocoesTable, [{key:'nome',label:'Nome'},{key:'gestor',label:'Gestor'},{key:'aprovador',label:'Aprovador'},{key:'cargoAnterior',label:'Cargo anterior'},{key:'salarioAnterior',label:'Salário anterior'},{key:'cargoNovo',label:'Cargo novo'},{key:'salarioNovo',label:'Salário novo'},{key:'reajuste',label:'Reajuste'},{key:'pct',label:'%'}])}
         </div>
 
         <div class="form-section ${UI.formSection===2?'active':''}" data-panel="2">
@@ -1961,10 +1961,10 @@ function bindMeetingForm(){
   });
   // Mini-table: Add row
   const EMPTY_ROWS = {
-    admissoesTable: {nome:'',cargo:'',admissao:''},
-    desligamentosTable: {nome:'',cargo:'',tipo:'',motivo:''},
+    admissoesTable: {nome:'',cargo:'',lider:'',departamento:'',regime:'',admissao:''},
+    desligamentosTable: {nome:'',cargo:'',lider:'',tipo:'',motivo:'',submotivo:'',dtAdmissao:'',ultimoDia:'',tempoDeCasa:''},
     experienciaTable: {nome:'',cargo:'',admissao:'',milestone:'',milestoneDate:'',status:'Pendente',observacao:''},
-    promocoesTable: {nome:'',cargoAnterior:'',cargoNovo:'',pct:''},
+    promocoesTable: {nome:'',gestor:'',aprovador:'',cargoAnterior:'',salarioAnterior:'',cargoNovo:'',salarioNovo:'',reajuste:'',pct:''},
     feriasTable: {nome:'',cargo:'',diasVencidos:'',observacao:''},
     bancoHorasTable: {nome:'',cargo:'',lider:'',horas:'',observacao:''},
     horasExtrasTable: {nome:'',cargo:'',horas:'',observacao:''},
@@ -2118,10 +2118,10 @@ function renderMeetingDetail(){
       </tbody></table>
     </div>
   </div>
-  ${detailMiniTable('Admissões no período', m.admissoesTable, ['Nome','Cargo','Data admissão'], ['nome','cargo','admissao'])}
-  ${detailMiniTable('Desligamentos no período', m.desligamentosTable, ['Nome','Cargo','Tipo','Motivo'], ['nome','cargo','tipo','motivo'])}
+  ${detailMiniTable('Admissões no período', m.admissoesTable, ['Nome','Cargo','Líder','Departamento','Regime','Data admissão'], ['nome','cargo','lider','departamento','regime','admissao'])}
+  ${detailMiniTable('Desligamentos no período', m.desligamentosTable, ['Nome','Cargo','Líder','Tipo','Motivo','Submotivo','Admissão','Último dia','Tempo de casa'], ['nome','cargo','lider','tipo','motivo','submotivo','dtAdmissao','ultimoDia','tempoDeCasa'])}
   ${detailMiniTable('Acompanhamentos (7/15/45/90 dias)', m.experienciaTable, ['Nome','Cargo','Admissão','Marco','Data','Status','Observações'], ['nome','cargo','admissao','milestone','milestoneDate','status','observacao'])}
-  ${detailMiniTable('Promoções / Movimentações', m.promocoesTable, ['Nome','Cargo anterior','Cargo novo','Reajuste'], ['nome','cargoAnterior','cargoNovo','pct'])}
+  ${detailMiniTable('Promoções / Movimentações', m.promocoesTable, ['Nome','Gestor','Aprovador','Cargo anterior','Salário anterior','Cargo novo','Salário novo','Reajuste','%'], ['nome','gestor','aprovador','cargoAnterior','salarioAnterior','cargoNovo','salarioNovo','reajuste','pct'])}
   ${(()=>{
     const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(m.area));
     if(!areaPdis.length) return '';
