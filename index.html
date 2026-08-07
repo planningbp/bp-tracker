@@ -3027,7 +3027,7 @@ function renderColaboradorDetail(){
     <div class="card" style="margin-bottom:20px;">
       <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;">
         <div class="avatar" style="width:64px;height:64px;font-size:22px;background:${aColor};">${initial}</div>
-        <div>
+        <div style="flex:1;">
           <div style="font-size:22px;font-weight:800;">${esc(nome)}</div>
           <div style="font-size:14px;color:#888;">${esc(cargo)}</div>
           <div style="margin-top:6px;display:flex;gap:8px;align-items:center;">
@@ -3035,27 +3035,61 @@ function renderColaboradorDetail(){
             ${regime?'<span style="background:#f1f5f9;color:#64748b;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;text-transform:uppercase;">'+esc(regime)+'</span>':''}
           </div>
         </div>
+        <button class="btn btn-outline" id="btnEditColab" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.edit || '&#9998;'} Editar</button>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+      <div id="colabFieldsView" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
         ${[
-          ['Email', email],
-          ['Líder', lider],
-          ['Departamento', depto],
-          ['Dt Admissão', admStr],
-          ['Dt Nascimento', nascStr],
-          ['Faixa Salarial', salarioStr],
-          ['CPF', cpf],
-          ['Dt Efetivação', efetivacao],
-          ['Dt Pejotização', pejotizacao],
-          ['Promoções', promocoes],
-          ['Cargo Admissão', cargoAdm],
-          ['Salário Admissão', salarioAdmStr]
+          ['Email', email, 'email'],
+          ['Cargo', cargo, 'cargo'],
+          ['Líder', lider, 'lider'],
+          ['Departamento', depto, 'departamento'],
+          ['Área', area, 'area'],
+          ['Dt Admissão', admStr, 'admissao'],
+          ['Dt Nascimento', nascStr, 'nascimento'],
+          ['Faixa Salarial', salarioStr, 'faixaSalarial'],
+          ['Regime', regime, 'regime'],
+          ['CPF', cpf, 'cpf'],
+          ['Dt Efetivação', efetivacao, 'dt_efetivacao'],
+          ['Dt Pejotização', pejotizacao, 'dt_pejotizacao'],
+          ['Promoções', promocoes, 'promocoes'],
+          ['Cargo Admissão', cargoAdm, 'cargo_admissao'],
+          ['Salário Admissão', salarioAdmStr, 'salario_admissao']
         ].filter(([,v])=>v).map(([label,val])=>`
           <div style="background:#f9fafb;border-radius:8px;padding:10px 14px;">
             <div style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600;letter-spacing:0.3px;margin-bottom:2px;">${label}</div>
             <div style="font-size:14px;font-weight:600;">${esc(String(val))}</div>
           </div>
         `).join('')}
+      </div>
+      <div id="colabFieldsEdit" style="display:none;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+          ${[
+            ['Email', email, 'cd_email', 'text'],
+            ['Cargo', cargo, 'cd_cargo', 'text'],
+            ['Líder', lider, 'cd_lider', 'text'],
+            ['Departamento', depto, 'cd_departamento', 'text'],
+            ['Área', area, 'cd_area', 'text'],
+            ['Dt Admissão', adm&&!isNaN(adm)?adm.toISOString().slice(0,10):'', 'cd_admissao', 'date'],
+            ['Dt Nascimento', nasc&&!isNaN(nasc)?nasc.toISOString().slice(0,10):'', 'cd_nascimento', 'date'],
+            ['Faixa Salarial', salario, 'cd_faixaSalarial', 'text'],
+            ['Regime', regime, 'cd_regime', 'text'],
+            ['CPF', cpf, 'cd_cpf', 'text'],
+            ['Dt Efetivação', efetivacao, 'cd_dt_efetivacao', 'text'],
+            ['Dt Pejotização', pejotizacao, 'cd_dt_pejotizacao', 'text'],
+            ['Promoções', promocoes, 'cd_promocoes', 'text'],
+            ['Cargo Admissão', cargoAdm, 'cd_cargo_admissao', 'text'],
+            ['Salário Admissão', salarioAdm, 'cd_salario_admissao', 'text']
+          ].map(([label, val, id, type])=>`
+            <div class="field">
+              <label>${label}</label>
+              <input type="${type}" id="${id}" value="${esc(String(val||''))}" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;">
+            </div>
+          `).join('')}
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+          <button class="btn btn-outline" id="btnCancelEditColab" style="width:auto;">Cancelar</button>
+          <button class="btn" id="btnSaveEditColab" style="width:auto;">Salvar Alterações</button>
+        </div>
       </div>
     </div>
 
@@ -3141,6 +3175,34 @@ function bindColaboradorDetail(){
     renderShellAndPage();
   });
   document.getElementById('btnPdfDetail').addEventListener('click', ()=>{ exportColaboradorDetailPDF(nome); });
+
+  // Edit collaborator fields
+  const btnEdit = document.getElementById('btnEditColab');
+  const viewDiv = document.getElementById('colabFieldsView');
+  const editDiv = document.getElementById('colabFieldsEdit');
+  if(btnEdit && viewDiv && editDiv){
+    btnEdit.addEventListener('click', ()=>{ viewDiv.style.display='none'; editDiv.style.display='block'; btnEdit.style.display='none'; });
+    document.getElementById('btnCancelEditColab').addEventListener('click', ()=>{ viewDiv.style.display='grid'; editDiv.style.display='none'; btnEdit.style.display='flex'; });
+    document.getElementById('btnSaveEditColab').addEventListener('click', ()=>{
+      const idx = DB.colaboradores.findIndex(x=>(x.nome||x.Nome||'')===nome);
+      if(idx<0){ alert('Colaborador não encontrado.'); return; }
+      const c = DB.colaboradores[idx];
+      const v = id => (document.getElementById(id)||{}).value||'';
+      c.email = v('cd_email'); c.cargo = v('cd_cargo'); c.lider = v('cd_lider');
+      c.departamento = v('cd_departamento'); c.area = v('cd_area');
+      const admV = v('cd_admissao'); c.admissao = admV ? new Date(admV+'T00:00:00') : c.admissao;
+      const nascV = v('cd_nascimento'); c.nascimento = nascV ? new Date(nascV+'T00:00:00') : c.nascimento;
+      c.faixaSalarial = v('cd_faixaSalarial'); c.regime = v('cd_regime'); c.cpf = v('cd_cpf');
+      c.dt_efetivacao = v('cd_dt_efetivacao'); c.dt_pejotizacao = v('cd_dt_pejotizacao');
+      c.promocoes = v('cd_promocoes'); c.cargo_admissao = v('cd_cargo_admissao');
+      c.salario_admissao = v('cd_salario_admissao');
+      // Update nome reference if cargo changed for display
+      const newNome = c.nome||c.Nome||'';
+      UI.colabDetailNome = newNome;
+      persist('colaboradores');
+      rerender();
+    });
+  }
 
   // Desligamento
   const btnDesligar = document.getElementById('btnDesligar');
