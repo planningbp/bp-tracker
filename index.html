@@ -2983,7 +2983,8 @@ function renderColaboradorDetail(){
     <div style="margin-bottom:16px;display:flex;gap:10px;">
       <button class="btn btn-outline" id="btnBackColabs" style="width:auto;">&larr; Voltar para Colaboradores</button>
       <button class="btn btn-outline" id="btnPdfDetail" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.file} Baixar PDF</button>
-      <button class="btn btn-danger" id="btnDesligar" style="width:auto;margin-left:auto;display:flex;align-items:center;gap:6px;">${ICONS.logout} Desligar Colaborador</button>
+      <button class="btn btn-outline" id="btnRemoverBase" style="width:auto;margin-left:auto;color:#f59e0b;border-color:#f59e0b;">Remover da Base</button>
+      <button class="btn btn-danger" id="btnDesligar" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.logout} Desligar Colaborador</button>
     </div>
 
     <div id="formDesligamento" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:20px;margin-bottom:20px;">
@@ -3203,6 +3204,16 @@ function bindColaboradorDetail(){
       rerender();
     });
   }
+
+  // Remover da base (sem desligamento)
+  const btnRemover = document.getElementById('btnRemoverBase');
+  if(btnRemover) btnRemover.addEventListener('click', ()=>{
+    if(!confirm('Remover '+nome+' da sua base?\n\nIsso NÃO registra desligamento nem gera turnover. Use para transferências de área ou mudança de BP.')) return;
+    const idx = DB.colaboradores.findIndex(x=>(x.nome||x.Nome||'')===nome);
+    if(idx>=0){ DB.colaboradores.splice(idx,1); persist('colaboradores'); }
+    UI.page='colaboradores';
+    renderShellAndPage();
+  });
 
   // Desligamento
   const btnDesligar = document.getElementById('btnDesligar');
