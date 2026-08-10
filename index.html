@@ -3148,7 +3148,42 @@ function renderColaboradoresPage(){
           <option value="">Todas as áreas</option>
           ${areas.map(a=>`<option value="${esc(a)}" ${a===fArea?'selected':''}>${esc(a)}</option>`).join('')}
         </select>
+        <button class="btn" id="btnAddColab" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.plus} Adicionar</button>
         <button class="btn btn-outline" id="btnPdfColabs" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.file} Baixar PDF</button>
+      </div>
+    </div>
+
+    <div id="formAddColab" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin-bottom:20px;">
+      <div style="font-weight:700;font-size:15px;color:var(--primary);margin-bottom:14px;">Novo Colaborador</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:14px;">
+        <div class="field"><label>Nome *</label><input type="text" id="newColab_nome" placeholder="Nome completo" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>Cargo</label><input type="text" id="newColab_cargo" placeholder="Cargo" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>Líder</label><input type="text" id="newColab_lider" placeholder="Líder" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>Área</label>
+          <select id="newColab_area" class="select">
+            <option value="">Selecione...</option>
+            ${areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}
+          </select>
+        </div>
+        <div class="field"><label>Departamento</label><input type="text" id="newColab_departamento" placeholder="Departamento" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>Dt Admissão</label><input type="date" id="newColab_admissao" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>Email</label><input type="email" id="newColab_email" placeholder="email@empresa.com" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>CPF</label><input type="text" id="newColab_cpf" placeholder="000.000.000-00" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>Faixa Salarial</label><input type="text" id="newColab_faixaSalarial" placeholder="0,00" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>Regime</label>
+          <select id="newColab_regime" class="select">
+            <option value="">Selecione...</option>
+            <option value="CLT">CLT</option>
+            <option value="PJ">PJ</option>
+            <option value="ESTAGIO">Estágio</option>
+            <option value="TEMPORARIO">Temporário</option>
+          </select>
+        </div>
+        <div class="field"><label>Dt Nascimento</label><input type="date" id="newColab_nascimento" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-outline" id="btnCancelAddColab" style="width:auto;">Cancelar</button>
+        <button class="btn" id="btnSaveAddColab" style="width:auto;">Salvar Colaborador</button>
       </div>
     </div>
 
@@ -3219,6 +3254,35 @@ function bindColaboradoresPage(){
   if(areaFilter) areaFilter.addEventListener('change', ()=>{ UI.colabFilterArea=areaFilter.value; rerender(); });
   const btnPdf = document.getElementById('btnPdfColabs');
   if(btnPdf) btnPdf.addEventListener('click', ()=>{ exportColaboradoresPDF(UI.colabFilterArea||''); });
+
+  // Add collaborator
+  const btnAdd = document.getElementById('btnAddColab');
+  const formAdd = document.getElementById('formAddColab');
+  if(btnAdd && formAdd) btnAdd.addEventListener('click', ()=>{ formAdd.style.display = formAdd.style.display==='none'?'block':'none'; });
+  const btnCancel = document.getElementById('btnCancelAddColab');
+  if(btnCancel) btnCancel.addEventListener('click', ()=>{ formAdd.style.display='none'; });
+  const btnSave = document.getElementById('btnSaveAddColab');
+  if(btnSave) btnSave.addEventListener('click', ()=>{
+    const nome = (document.getElementById('newColab_nome')||{}).value||'';
+    if(!nome.trim()){ alert('Informe o nome do colaborador.'); return; }
+    const admVal = (document.getElementById('newColab_admissao')||{}).value||'';
+    const nascVal = (document.getElementById('newColab_nascimento')||{}).value||'';
+    DB.colaboradores.push({
+      id: uid(), nome: nome.trim(),
+      cargo: (document.getElementById('newColab_cargo')||{}).value||'',
+      lider: (document.getElementById('newColab_lider')||{}).value||'',
+      area: (document.getElementById('newColab_area')||{}).value||'',
+      departamento: (document.getElementById('newColab_departamento')||{}).value||'',
+      admissao: admVal ? new Date(admVal+'T00:00:00') : '',
+      email: (document.getElementById('newColab_email')||{}).value||'',
+      cpf: (document.getElementById('newColab_cpf')||{}).value||'',
+      faixaSalarial: (document.getElementById('newColab_faixaSalarial')||{}).value||'',
+      regime: (document.getElementById('newColab_regime')||{}).value||'',
+      nascimento: nascVal ? new Date(nascVal+'T00:00:00') : ''
+    });
+    persist('colaboradores');
+    rerender();
+  });
 
   document.querySelectorAll('.colab-row').forEach(row=>{
     row.addEventListener('click', ()=>{
