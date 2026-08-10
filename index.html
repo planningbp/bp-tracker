@@ -433,7 +433,7 @@ const CONFIG = {
     { id:1, name:"Carolina Lira", email:"carolina.lira@planning.com.br", avatar:"CL",
       areas:["Contábil","Contábil/Fiscal","Consultoria","Construção Civil","Gestão de Risco"] },
     { id:2, name:"Julia Soares", email:"julia.soares@planning.com.br", avatar:"JS",
-      areas:["Fiscal","Folha","Seguros","Societário","DOC","Integração de Novos Clientes"] },
+      areas:["Contábil","Contábil/Fiscal","Fiscal","Folha","Seguros","Societário","DOC","Integração de Novos Clientes"] },
     { id:3, name:"Maryanna Moura", email:"maryanna.moura@planning.com.br", avatar:"MM",
       areas:["TI","BPO Financeiro","Financeiro Interno","Controladoria","Desenvolvedores","Comercial","Marketing","Expansão"] }
   ],
@@ -3119,8 +3119,9 @@ function getMyColaboradores(){
 
 function renderColaboradoresPage(){
   const colabs = getMyColaboradores();
+  const bp = currentBP();
   const colabAreas = colabs.map(c=>c.area||c.departamento||'').filter(Boolean);
-  const areas = [...new Set([...allAreas(), ...colabAreas])].sort();
+  const areas = [...new Set([...(bp?bp.areas:[]), ...colabAreas])].sort();
   const fArea = UI.colabFilterArea || '';
   const fSearch = (UI.colabSearch || '').toLowerCase();
 
@@ -3266,28 +3267,46 @@ function bindColaboradoresPage(){
   const btnCancel = document.getElementById('btnCancelAddColab');
   if(btnCancel) btnCancel.addEventListener('click', ()=>{ formAdd.style.display='none'; });
   const btnSave = document.getElementById('btnSaveAddColab');
-  if(btnSave) btnSave.addEventListener('click', ()=>{
-    const nome = (document.getElementById('newColab_nome')||{}).value||'';
-    if(!nome.trim()){ alert('Informe o nome do colaborador.'); return; }
-    const admVal = (document.getElementById('newColab_admissao')||{}).value||'';
-    const nascVal = (document.getElementById('newColab_nascimento')||{}).value||'';
-    const areaVal = (document.getElementById('newColab_area')||{}).value||'';
-    const deptoVal = (document.getElementById('newColab_departamento')||{}).value||'';
-    DB.colaboradores.push({
-      id: uid(), nome: nome.trim(),
-      cargo: (document.getElementById('newColab_cargo')||{}).value||'',
-      lider: (document.getElementById('newColab_lider')||{}).value||'',
-      area: areaVal,
-      departamento: deptoVal || areaVal,
-      admissao: admVal ? new Date(admVal+'T00:00:00') : '',
-      email: (document.getElementById('newColab_email')||{}).value||'',
-      cpf: (document.getElementById('newColab_cpf')||{}).value||'',
-      faixaSalarial: (document.getElementById('newColab_faixaSalarial')||{}).value||'',
-      regime: (document.getElementById('newColab_regime')||{}).value||'',
-      nascimento: nascVal ? new Date(nascVal+'T00:00:00') : ''
-    });
-    persist('colaboradores');
-    rerender();
+  if(btnSave) btnSave.addEventListener('click', function(){
+    try {
+      var nomeEl = document.getElementById('newColab_nome');
+      if(!nomeEl || !nomeEl.value.trim()){ alert('Informe o nome do colaborador.'); return; }
+      var nome = nomeEl.value.trim();
+      var admEl = document.getElementById('newColab_admissao');
+      var nascEl = document.getElementById('newColab_nascimento');
+      var areaEl = document.getElementById('newColab_area');
+      var deptoEl = document.getElementById('newColab_departamento');
+      var cargoEl = document.getElementById('newColab_cargo');
+      var liderEl = document.getElementById('newColab_lider');
+      var emailEl = document.getElementById('newColab_email');
+      var cpfEl = document.getElementById('newColab_cpf');
+      var salEl = document.getElementById('newColab_faixaSalarial');
+      var regimeEl = document.getElementById('newColab_regime');
+      var areaVal = areaEl ? areaEl.value : '';
+      var deptoVal = deptoEl ? deptoEl.value : '';
+      var admVal = admEl ? admEl.value : '';
+      var nascVal = nascEl ? nascEl.value : '';
+      var newColab = {
+        id: uid(), nome: nome,
+        cargo: cargoEl ? cargoEl.value : '',
+        lider: liderEl ? liderEl.value : '',
+        area: areaVal,
+        departamento: deptoVal || areaVal,
+        departamentoRaw: deptoVal || areaVal,
+        admissao: admVal ? new Date(admVal+'T00:00:00') : null,
+        email: emailEl ? emailEl.value : '',
+        cpf: cpfEl ? cpfEl.value : '',
+        faixaSalarial: salEl ? salEl.value : '',
+        regime: regimeEl ? regimeEl.value : '',
+        nascimento: nascVal ? new Date(nascVal+'T00:00:00') : null
+      };
+      DB.colaboradores.push(newColab);
+      persist('colaboradores');
+      alert('Colaborador "'+nome+'" salvo! Total: '+DB.colaboradores.length);
+      rerender();
+    } catch(err) {
+      alert('ERRO ao salvar: '+err.message);
+    }
   });
 
   document.querySelectorAll('.colab-row').forEach(row=>{
