@@ -840,26 +840,52 @@ function renderCrudPage(pageKey){
   const cfg = CRUD_PAGES[pageKey];
   if(!cfg) return '<div class="card">Página não encontrada.</div>';
   const data = DB[cfg.dbKey] || [];
-  const filterKey = 'crudFilter_'+pageKey;
   const searchKey = 'crudSearch_'+pageKey;
   const fSearch = (UI[searchKey]||'').toLowerCase();
+  if(!UI.crudFilters) UI.crudFilters = {};
+  if(!UI.crudFilters[pageKey]) UI.crudFilters[pageKey] = {};
+  const colFilters = UI.crudFilters[pageKey];
 
   let filtered = data;
   if(fSearch) filtered = filtered.filter(r=> cfg.cols.some(c=> ((r[c.key]||'').toString().toLowerCase()).includes(fSearch)));
+  // Apply per-column filters
+  Object.keys(colFilters).forEach(ck=>{
+    const fv = colFilters[ck];
+    if(fv) filtered = filtered.filter(r=> normalizeStr((r[ck]||'').toString()).includes(normalizeStr(fv)));
+  });
 
-  const visibleCols = cfg.cols.slice(0, 8); // show max 8 cols in table
+  const visibleCols = cfg.cols.slice(0, 8);
   const allCols = cfg.cols;
+
+  // Collect unique values for filter dropdowns (from full data, not filtered)
+  const colOptions = {};
+  visibleCols.forEach(c=>{
+    const vals = [...new Set(data.map(r=>(r[c.key]||'').toString().trim()).filter(Boolean))].sort();
+    if(vals.length > 1 && vals.length <= 200) colOptions[c.key] = vals;
+  });
+
+  const activeFilterCount = Object.values(colFilters).filter(Boolean).length;
 
   return `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:16px;">
       <div>
-        <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">${ICONS[cfg.icon]||''} ${cfg.title} (${filtered.length})</h2>
+        <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">${ICONS[cfg.icon]||''} ${cfg.title} (${filtered.length}${filtered.length!==data.length?' de '+data.length:''})</h2>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="crudSearch_${pageKey}" placeholder="Buscar..." value="${esc(UI[searchKey]||'')}" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;min-width:200px;">
+        ${activeFilterCount>0?'<button class="btn btn-outline" id="crudClearFilters_'+pageKey+'" style="width:auto;color:#ef4444;border-color:#ef4444;font-size:12px;">Limpar filtros ('+activeFilterCount+')</button>':''}
         <button class="btn" id="crudAdd_${pageKey}" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.plus} Adicionar</button>
         ${cfg.parser ? '<label class="btn btn-outline" style="width:auto;display:flex;align-items:center;gap:6px;cursor:pointer;">'+ICONS.import+' Importar<input type="file" id="crudImport_'+pageKey+'" accept=".xlsx,.xls,.csv" style="display:none;"></label>' : ''}
       </div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      ${visibleCols.filter(c=>colOptions[c.key]).map(c=>`
+        <select class="crudColFilter select" data-crud-page="${pageKey}" data-col-key="${c.key}" style="min-width:130px;font-size:12px;padding:6px 10px;">
+          <option value="">${c.label}: Todos</option>
+          ${colOptions[c.key].map(v=>'<option value="'+esc(v)+'" '+(colFilters[c.key]===v?'selected':'')+'>'+esc(v.length>30?v.slice(0,30)+'…':v)+'</option>').join('')}
+        </select>
+      `).join('')}
     </div>
 
     <div id="crudAddForm_${pageKey}" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin-bottom:20px;">
@@ -926,6 +952,18 @@ function bindCrudPage(pageKey){
   // Search
   const searchInp = document.getElementById('crudSearch_'+pageKey);
   if(searchInp){ let t; searchInp.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(()=>{ UI[searchKey]=searchInp.value; rerender(); },300); }); searchInp.focus(); searchInp.setSelectionRange(searchInp.value.length,searchInp.value.length); }
+
+  // Column filters
+  document.querySelectorAll('.crudColFilter[data-crud-page="'+pageKey+'"]').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      if(!UI.crudFilters) UI.crudFilters={};
+      if(!UI.crudFilters[pageKey]) UI.crudFilters[pageKey]={};
+      UI.crudFilters[pageKey][sel.getAttribute('data-col-key')] = sel.value;
+      rerender();
+    });
+  });
+  const btnClearF = document.getElementById('crudClearFilters_'+pageKey);
+  if(btnClearF) btnClearF.addEventListener('click', ()=>{ UI.crudFilters[pageKey]={}; rerender(); });
 
   // Add
   const btnAdd = document.getElementById('crudAdd_'+pageKey);
