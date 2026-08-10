@@ -3116,7 +3116,8 @@ function getMyColaboradores(){
 
 function renderColaboradoresPage(){
   const colabs = getMyColaboradores();
-  const areas = [...new Set(colabs.map(c=>c.area||c.departamento||'').filter(Boolean))].sort();
+  const colabAreas = colabs.map(c=>c.area||c.departamento||'').filter(Boolean);
+  const areas = [...new Set([...allAreas(), ...colabAreas])].sort();
   const fArea = UI.colabFilterArea || '';
   const fSearch = (UI.colabSearch || '').toLowerCase();
 
