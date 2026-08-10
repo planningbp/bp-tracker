@@ -431,7 +431,7 @@ tr:last-child td{border-bottom:none;}
 const CONFIG = {
   bps: [
     { id:1, name:"Carolina Lira", email:"carolina.lira@planning.com.br", avatar:"CL",
-      areas:["Contábil","Consultoria","Construção Civil","Gestão de Risco"] },
+      areas:["Contábil","Contábil/Fiscal","Consultoria","Construção Civil","Gestão de Risco"] },
     { id:2, name:"Julia Soares", email:"julia.soares@planning.com.br", avatar:"JS",
       areas:["Fiscal","Folha","Seguros","Societário","DOC","Integração de Novos Clientes"] },
     { id:3, name:"Maryanna Moura", email:"maryanna.moura@planning.com.br", avatar:"MM",
@@ -2917,7 +2917,7 @@ function renderAcompanhamentos(){
               const diffLabel = sign + r.diffDays + 'd';
               const admStr = r.admissao instanceof Date ? r.admissao.toLocaleDateString('pt-BR') : '';
               const dueStr = r.dueDate instanceof Date ? r.dueDate.toLocaleDateString('pt-BR') : '';
-              const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+              const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
               const areaColor = areaColors[r.area] || '#64748b';
               const cardBg = r.done ? '#f0fdf4' : '#fff';
               const cardBorder = r.done ? '#bbf7d0' : r.diffDays<0 ? '#fca5a5' : '#e5e7eb';
@@ -3005,7 +3005,7 @@ function renderAcompanhamentos(){
           const dataStr = o.data ? new Date(o.data+'T00:00:00').toLocaleDateString('pt-BR') : '';
           const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(o.nome));
           const area = colab ? (colab.area||colab.departamento||'') : '';
-          const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+          const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
           const areaColor = areaColors[area] || '#64748b';
           return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start;">'+
             '<div style="flex:1;">'+
@@ -3130,7 +3130,7 @@ function renderColaboradoresPage(){
   });
   filtered.sort((a,b)=>(a.nome||a.Nome||'').localeCompare(b.nome||b.Nome||''));
 
-  const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+  const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
 
   // Count 1:1s per collaborator
   const oneOnOneCount = {};
@@ -3324,7 +3324,7 @@ function renderColaboradorDetail(){
   const salarioAdmStr = typeof salarioAdm==='number' ? salarioAdm.toLocaleString('pt-BR',{minimumFractionDigits:2}) : salarioAdm;
   const cpf = c.cpf||c.CPF||'';
 
-  const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+  const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
   const aColor = areaColors[area]||'#64748b';
 
   // Get 1:1 records for this collaborator
@@ -3861,7 +3861,7 @@ function renderIndicadores(){
         const filtered = fArea ? bpScores.filter(s=> s.tipo==='empresa' || (s.area||'')===fArea || (s.liderArea||'')===fArea) : bpScores;
         filtered.sort((a,b)=> (b.period||'').localeCompare(a.period||'') || (a.tipo||'area').localeCompare(b.tipo||'area') || (a.area||'').localeCompare(b.area||''));
         if(filtered.length===0) return '<div style="text-align:center;padding:30px;color:#aaa;font-size:13px;border:1px dashed #ddd;border-radius:10px;">Nenhum registro de eNPS/lNPS ainda.</div>';
-        const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+        const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
         const tipoLabels = {empresa:'Empresa',area:'Área',lider:'Líder'};
         const tipoBg = {empresa:'#1B1B2F',area:'#00BFA5',lider:'#8b5cf6'};
         return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nível</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área / Líder</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Data</th><th style="padding:10px 14px;"></th></tr></thead><tbody>'+
