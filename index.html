@@ -545,7 +545,8 @@ const LS = {
   pdis:'planning_pdis',
   bancoHorasImport:'planning_banco_horas',
   session:'planning_session',
-  seeded:'planning_seeded_v1'
+  seeded:'planning_seeded_v1',
+  liderPasswords:'planning_lider_passwords'
 };
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v?JSON.parse(v):fallback; }catch(e){ return fallback; }
@@ -1118,6 +1119,64 @@ function isHead(liderName){
   const match = DB.colaboradores.find(c=>normalizeStr(c.nome)===normalizeStr(liderName));
   return match && match.cargo && /head/i.test(match.cargo);
 }
+
+/* =========================================================
+   HIERARQUIA ORGANIZACIONAL
+========================================================= */
+// Retorna todos os líderes únicos da base
+function getAllLiders(){
+  const liders = new Set();
+  DB.colaboradores.forEach(c=>{
+    const l = c.lider||c['Líder']||c.Lider||'';
+    if(l.trim()) liders.add(l.trim());
+  });
+  return [...liders].sort();
+}
+
+// Retorna liderados diretos de um líder
+function getDirectReports(liderNome){
+  return DB.colaboradores.filter(c=> normalizeStr(c.lider||c['Líder']||c.Lider||'')===normalizeStr(liderNome));
+}
+
+// Retorna TODA a árvore abaixo de um líder (recursivo)
+function getTeamTree(liderNome, visited){
+  if(!visited) visited = new Set();
+  const key = normalizeStr(liderNome);
+  if(visited.has(key)) return []; // evita loop infinito
+  visited.add(key);
+  const directs = getDirectReports(liderNome);
+  let all = [...directs];
+  // Para cada direto que também é líder de alguém, pega a equipe dele
+  directs.forEach(d=>{
+    const dNome = d.nome||d.Nome||'';
+    const subs = getTeamTree(dNome, visited);
+    all = all.concat(subs);
+  });
+  return all;
+}
+
+// Retorna nomes de todos na equipe (incluindo sublíderes)
+function getTeamNames(liderNome){
+  return getTeamTree(liderNome).map(c=>c.nome||c.Nome||'');
+}
+
+// Verifica se um líder é coordenador (tem liderados que também são líderes)
+function isCoordinator(liderNome){
+  const directs = getDirectReports(liderNome);
+  return directs.some(d=>{
+    const dNome = d.nome||d.Nome||'';
+    return getDirectReports(dNome).length > 0;
+  });
+}
+
+// Senhas dos líderes
+let LIDER_PASSWORDS = loadJSON(LS.liderPasswords, {});
+function saveLiderPasswords(){ saveJSON(LS.liderPasswords, LIDER_PASSWORDS); }
+
+// Session helpers
+function isLiderSession(){ return SESSION && SESSION.type==='lider'; }
+function isBPSession(){ return SESSION && !SESSION.type; }
+
 function computeAutoData(area, period, lider, customStart, customEnd){
   if(!area || !period) return null;
   let start, end;
@@ -1210,39 +1269,78 @@ function currentBP(){ return SESSION ? bpById(SESSION.bpId) : null; }
 function render(){
   const root = document.getElementById('app');
   if(!SESSION){ root.innerHTML = renderLogin(); bindLogin(); return; }
+  if(isLiderSession()){
+    root.innerHTML = renderLiderShell();
+    bindLiderShell();
+    return;
+  }
   root.innerHTML = renderShell();
   bindShell();
   renderPageContent();
 }
 
 /* ---------------- LOGIN ---------------- */
+let loginTab = 'bp';
 function renderLogin(){
+  const liders = getAllLiders();
   return `
   <div class="login-wrap">
     <div class="login-card">
       <div class="login-logo">${logoImg(64)}</div>
       <div class="login-title">Planning</div>
       <div class="login-sub">BP Meeting Tracker</div>
-      <div id="loginErr"></div>
-      <form id="loginForm">
-        <div class="field"><label>E-mail</label><input type="email" id="loginEmail" placeholder="seu.email@planning.com.br" required></div>
-        <div class="field"><label>Senha</label><input type="password" id="loginPass" placeholder="••••••••" required></div>
-        <button type="submit" class="btn btn-primary">Entrar</button>
-      </form>
-      <div class="divider">acesso rápido</div>
-      <div class="quick-access">
-        ${CONFIG.bps.map(bp=>`
-          <button type="button" class="quick-btn" data-quick="${bp.id}">
-            <span class="avatar" style="width:26px;height:26px;font-size:11px;">${bp.avatar}</span>
-            <span>${bp.name}</span>
-          </button>
-        `).join('')}
+
+      <div style="display:flex;gap:0;margin-bottom:20px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+        <button id="tabBP" type="button" style="flex:1;padding:10px;border:none;cursor:pointer;font-weight:700;font-size:13px;transition:all .2s;${loginTab==='bp'?'background:var(--primary);color:#fff;':'background:#f9fafb;color:#888;'}">Business Partner</button>
+        <button id="tabLider" type="button" style="flex:1;padding:10px;border:none;cursor:pointer;font-weight:700;font-size:13px;transition:all .2s;${loginTab==='lider'?'background:var(--primary);color:#fff;':'background:#f9fafb;color:#888;'}">Líder</button>
       </div>
+
+      <div id="loginErr"></div>
+
+      <div id="panelBP" style="display:${loginTab==='bp'?'block':'none'};">
+        <form id="loginForm">
+          <div class="field"><label>E-mail</label><input type="email" id="loginEmail" placeholder="seu.email@planning.com.br" required></div>
+          <div class="field"><label>Senha</label><input type="password" id="loginPass" placeholder="••••••••" required></div>
+          <button type="submit" class="btn btn-primary">Entrar como BP</button>
+        </form>
+        <div class="divider">acesso rápido</div>
+        <div class="quick-access">
+          ${CONFIG.bps.map(bp=>`
+            <button type="button" class="quick-btn" data-quick="${bp.id}">
+              <span class="avatar" style="width:26px;height:26px;font-size:11px;">${bp.avatar}</span>
+              <span>${bp.name}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div id="panelLider" style="display:${loginTab==='lider'?'block':'none'};">
+        <div class="field"><label>Selecione seu nome</label>
+          <select id="liderSelect" class="select" style="font-size:14px;">
+            <option value="">Selecione...</option>
+            ${liders.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('')}
+          </select>
+        </div>
+        <div class="field"><label>Senha</label><input type="password" id="liderPass" placeholder="••••••••"></div>
+        <div id="liderNewPassWrap" style="display:none;">
+          <div style="background:#fef3c7;color:#92400e;padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:12px;">Primeiro acesso! Crie sua senha.</div>
+          <div class="field"><label>Criar senha</label><input type="password" id="liderNewPass" placeholder="Crie sua senha"></div>
+          <div class="field"><label>Confirmar senha</label><input type="password" id="liderNewPass2" placeholder="Confirme a senha"></div>
+        </div>
+        <button type="button" class="btn btn-primary" id="btnLiderLogin">Entrar como Líder</button>
+      </div>
+
     </div>
   </div>`;
 }
 function bindLogin(){
-  document.getElementById('loginForm').addEventListener('submit', function(e){
+  // Tab switching
+  document.getElementById('tabBP').addEventListener('click', ()=>{ loginTab='bp'; render(); });
+  document.getElementById('tabLider').addEventListener('click', ()=>{ loginTab='lider'; render(); });
+
+  // BP login
+  const loginForm = document.getElementById('loginForm');
+  if(loginForm) loginForm.addEventListener('submit', function(e){
     e.preventDefault();
     const email = document.getElementById('loginEmail').value.trim().toLowerCase();
     const pass = document.getElementById('loginPass').value;
@@ -1256,6 +1354,49 @@ function bindLogin(){
   document.querySelectorAll('[data-quick]').forEach(btn=>{
     btn.addEventListener('click', ()=> doLogin(Number(btn.getAttribute('data-quick'))) );
   });
+
+  // Líder login
+  const liderSel = document.getElementById('liderSelect');
+  if(liderSel) liderSel.addEventListener('change', ()=>{
+    const nome = liderSel.value;
+    const wrap = document.getElementById('liderNewPassWrap');
+    const passField = document.getElementById('liderPass');
+    if(!nome){ wrap.style.display='none'; return; }
+    const key = normalizeStr(nome);
+    if(LIDER_PASSWORDS[key]){
+      wrap.style.display='none';
+      passField.style.display='block';
+      passField.placeholder='Sua senha';
+    } else {
+      wrap.style.display='block';
+      passField.style.display='none';
+    }
+  });
+
+  const btnLider = document.getElementById('btnLiderLogin');
+  if(btnLider) btnLider.addEventListener('click', ()=>{
+    const nome = (document.getElementById('liderSelect')||{}).value;
+    if(!nome){ document.getElementById('loginErr').innerHTML='<div class="login-err">Selecione seu nome.</div>'; return; }
+    const key = normalizeStr(nome);
+
+    if(LIDER_PASSWORDS[key]){
+      // Has password — verify
+      const pass = (document.getElementById('liderPass')||{}).value;
+      if(pass !== LIDER_PASSWORDS[key]){
+        document.getElementById('loginErr').innerHTML='<div class="login-err">Senha incorreta.</div>';
+        return;
+      }
+    } else {
+      // First access — create password
+      const p1 = (document.getElementById('liderNewPass')||{}).value;
+      const p2 = (document.getElementById('liderNewPass2')||{}).value;
+      if(!p1 || p1.length < 3){ document.getElementById('loginErr').innerHTML='<div class="login-err">A senha deve ter pelo menos 3 caracteres.</div>'; return; }
+      if(p1 !== p2){ document.getElementById('loginErr').innerHTML='<div class="login-err">As senhas não coincidem.</div>'; return; }
+      LIDER_PASSWORDS[key] = p1;
+      saveLiderPasswords();
+    }
+    doLiderLogin(nome);
+  });
 }
 function doLogin(bpId){
   SESSION = { bpId };
@@ -1263,9 +1404,301 @@ function doLogin(bpId){
   UI.page = 'dashboard';
   render();
 }
+function doLiderLogin(nome){
+  SESSION = { type:'lider', liderNome: nome };
+  saveJSON(LS.session, SESSION);
+  render();
+}
 function doLogout(){
   SESSION = null; localStorage.removeItem(LS.session);
+  loginTab = 'bp';
   render();
+}
+
+/* ---------------- LÍDER PORTAL ---------------- */
+let liderPage = 'lider-dashboard';
+let liderDetailColab = null;
+
+function getLiderTeam(){
+  if(!isLiderSession()) return [];
+  return getTeamTree(SESSION.liderNome);
+}
+
+function getLiderTeamNames(){
+  return getLiderTeam().map(c=> normalizeStr(c.nome||c.Nome||''));
+}
+
+function liderFilter(arr, nameField){
+  const names = getLiderTeamNames();
+  return arr.filter(r=>{
+    const n = normalizeStr(r[nameField]||r.nome||r.Nome||r.colaborador||r.Colaborador||'');
+    return names.includes(n);
+  });
+}
+
+const LIDER_NAV = [
+  {key:'lider-dashboard', label:'Minha Equipe', icon:'users'},
+  {key:'lider-pdis', label:'PDIs', icon:'pdi'},
+  {key:'lider-1on1s', label:'1:1s', icon:'oneone'},
+  {key:'lider-banco', label:'Banco de Horas', icon:'banco'},
+  {key:'lider-acomp', label:'Acompanhamentos', icon:'acomp'},
+  {key:'lider-promo', label:'Promoções', icon:'promo'},
+  {key:'lider-desl', label:'Desligamentos', icon:'desl'}
+];
+
+function renderLiderShell(){
+  const nome = SESSION.liderNome;
+  const initials = nome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  const isH = isHead(nome);
+  const isC = isCoordinator(nome);
+  const role = isH ? 'Head' : isC ? 'Coordenador(a)' : 'Líder';
+  const team = getLiderTeam();
+  const titles = {
+    'lider-dashboard':['Minha Equipe','Visão geral dos seus liderados'],
+    'lider-pdis':['PDIs','Planos de desenvolvimento da sua equipe'],
+    'lider-1on1s':['1:1s','Registros de reuniões individuais'],
+    'lider-banco':['Banco de Horas','Banco de horas da equipe'],
+    'lider-acomp':['Acompanhamentos','Acompanhamento de novos colaboradores'],
+    'lider-promo':['Promoções','Movimentações da equipe'],
+    'lider-desl':['Desligamentos','Desligamentos da equipe'],
+    'lider-colab-detail':['Colaborador','Detalhes do colaborador']
+  };
+  const t = titles[liderPage]||['Portal do Líder',''];
+
+  return `
+  <div class="shell">
+    <div class="sidebar">
+      <div class="brand">${logoImg(32)}<div><div class="brand-sub" style="margin-top:4px;">Portal do Líder</div></div></div>
+      <nav>
+        ${LIDER_NAV.map(item=>`
+          <div class="nav-item ${liderPage===item.key?'active':''}" data-lnav="${item.key}">
+            ${ICONS[item.icon]}<span>${item.label}</span>
+          </div>
+        `).join('')}
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="user-chip">
+          <div class="avatar">${initials}</div>
+          <div><div class="u-name">${esc(nome)}</div><div class="u-role">${role} · ${team.length} pessoas</div></div>
+        </div>
+        <button class="logout-btn" id="btnLogout">${ICONS.logout} Sair</button>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div><h1>${t[0]}</h1><div class="sub">${t[1]}</div></div>
+      </div>
+      <div class="content" id="liderContent"></div>
+    </div>
+  </div>`;
+}
+
+function bindLiderShell(){
+  document.getElementById('btnLogout').addEventListener('click', doLogout);
+  document.querySelectorAll('[data-lnav]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      liderPage = el.getAttribute('data-lnav');
+      liderDetailColab = null;
+      render();
+    });
+  });
+  const ct = document.getElementById('liderContent');
+  if(liderPage==='lider-dashboard') renderLiderDashboard(ct);
+  else if(liderPage==='lider-pdis') renderLiderDataPage(ct, 'pdis', ['nome','titulo','status','prazo','progresso'], ['Colaborador','Título','Status','Prazo','Progresso']);
+  else if(liderPage==='lider-1on1s') renderLiderDataPage(ct, 'oneOnOnes', ['nome','data','tipo','resumo'], ['Colaborador','Data','Tipo','Resumo']);
+  else if(liderPage==='lider-banco') renderLiderDataPage(ct, 'bancoHorasImport', ['nome','mes','saldo','observacao'], ['Colaborador','Mês','Saldo','Observação']);
+  else if(liderPage==='lider-acomp') renderLiderDataPage(ct, 'acompanhamentos', ['colaborador','tipo','data','responsavel','status','observacoes'], ['Colaborador','Tipo','Data','Responsável','Status','Observações']);
+  else if(liderPage==='lider-promo') renderLiderDataPage(ct, 'promocoes', ['nome','de','para','data','motivo'], ['Colaborador','De','Para','Data','Motivo']);
+  else if(liderPage==='lider-desl') renderLiderDataPage(ct, 'desligamentos', ['nome','data','tipo','motivo'], ['Colaborador','Data','Tipo','Motivo']);
+  else if(liderPage==='lider-colab-detail') renderLiderColabDetail(ct);
+}
+
+function renderLiderDashboard(ct){
+  const team = getLiderTeam();
+  const directs = getDirectReports(SESSION.liderNome);
+  const isH = isHead(SESSION.liderNome);
+  const isC = isCoordinator(SESSION.liderNome);
+
+  // Build org tree
+  function buildTree(liderNome, depth){
+    const subs = getDirectReports(liderNome);
+    if(!subs.length) return '';
+    let html = '<div style="margin-left:'+(depth*20)+'px;">';
+    subs.forEach(s=>{
+      const nome = s.nome||s.Nome||'';
+      const cargo = s.cargo||s.Cargo||'';
+      const area = s.area||s.departamento||'';
+      const hasSubs = getDirectReports(nome).length > 0;
+      html += `<div class="card" style="padding:12px 16px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:12px;" data-lider-colab="${esc(nome)}">
+        <div class="avatar" style="width:36px;height:36px;font-size:13px;">${nome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:14px;">${esc(nome)}</div>
+          <div style="font-size:12px;color:#888;">${esc(cargo)}${area?' · '+esc(area):''}</div>
+        </div>
+        ${hasSubs?'<span style="font-size:11px;background:#e0f2f1;color:#00695c;padding:2px 8px;border-radius:10px;">Líder</span>':''}
+      </div>`;
+      html += buildTree(nome, depth+1);
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // Stats
+  const teamNames = getLiderTeamNames();
+  const pdisCount = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+  const oneOnOnesCount = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+  const deslCount = DB.desligamentos.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+  const promoCount = DB.promocoes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+
+  ct.innerHTML = `
+    <div class="grid2">
+      <div class="kpi-card"><div class="kpi-label">Total na Equipe</div><div class="kpi-value">${team.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Diretos</div><div class="kpi-value">${directs.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">PDIs Ativos</div><div class="kpi-value">${pdisCount}</div></div>
+      <div class="kpi-card"><div class="kpi-label">1:1s Registradas</div><div class="kpi-value">${oneOnOnesCount}</div></div>
+    </div>
+    <div class="card" style="margin-top:20px;">
+      <h3 style="margin:0 0 16px;">Árvore da Equipe</h3>
+      ${buildTree(SESSION.liderNome, 0)}
+    </div>
+    <div class="grid2" style="margin-top:20px;">
+      <div class="card" style="padding:16px;">
+        <h4 style="margin:0 0 10px;">Promoções</h4>
+        <div class="kpi-value" style="font-size:28px;">${promoCount}</div>
+      </div>
+      <div class="card" style="padding:16px;">
+        <h4 style="margin:0 0 10px;">Desligamentos</h4>
+        <div class="kpi-value" style="font-size:28px;">${deslCount}</div>
+      </div>
+    </div>`;
+
+  // Bind colab clicks
+  ct.querySelectorAll('[data-lider-colab]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      liderDetailColab = el.getAttribute('data-lider-colab');
+      liderPage = 'lider-colab-detail';
+      render();
+    });
+  });
+}
+
+function renderLiderDataPage(ct, dbKey, fields, labels){
+  const teamNames = getLiderTeamNames();
+  const nameField = fields[0];
+  const data = (DB[dbKey]||[]).filter(r=>{
+    const n = normalizeStr(r[nameField]||r.nome||r.Nome||r.colaborador||r.Colaborador||'');
+    return teamNames.includes(n);
+  });
+
+  let html = `<div class="card"><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr>${labels.map(l=>'<th style="text-align:left;padding:10px 12px;border-bottom:2px solid #e5e7eb;font-size:12px;color:#888;text-transform:uppercase;">'+l+'</th>').join('')}</tr></thead>
+    <tbody>`;
+  if(!data.length){
+    html += `<tr><td colspan="${labels.length}" style="text-align:center;padding:40px;color:#aaa;">Nenhum registro encontrado para sua equipe</td></tr>`;
+  } else {
+    data.forEach(r=>{
+      html += '<tr>';
+      fields.forEach(f=>{
+        const val = r[f]||r[f.charAt(0).toUpperCase()+f.slice(1)]||'';
+        html += `<td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;">${esc(String(val))}</td>`;
+      });
+      html += '</tr>';
+    });
+  }
+  html += '</tbody></table></div></div>';
+  html += `<div style="margin-top:12px;font-size:12px;color:#aaa;">${data.length} registro(s) da sua equipe</div>`;
+  ct.innerHTML = html;
+}
+
+function renderLiderColabDetail(ct){
+  if(!liderDetailColab){ liderPage='lider-dashboard'; render(); return; }
+  const colab = DB.colaboradores.find(c=> (c.nome||c.Nome||'')===liderDetailColab);
+  if(!colab){ ct.innerHTML='<div class="card" style="padding:40px;text-align:center;color:#aaa;">Colaborador não encontrado</div>'; return; }
+
+  const nome = colab.nome||colab.Nome||'';
+  const cargo = colab.cargo||colab.Cargo||'';
+  const area = colab.area||colab.departamento||'';
+  const lider = colab.lider||colab['Líder']||colab.Lider||'';
+  const admissao = colab.admissao||colab['Data Admissão']||colab.dataAdmissao||'';
+  const status = colab.status||'Ativo';
+  const email = colab.email||colab.Email||'';
+  const initials = nome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+
+  // Related data
+  const nk = normalizeStr(nome);
+  const pdis = DB.pdis.filter(r=>normalizeStr(r.nome||r.Nome||'')===nk);
+  const oneones = DB.oneOnOnes.filter(r=>normalizeStr(r.nome||r.Nome||'')===nk);
+  const banco = (DB.bancoHorasImport||[]).filter(r=>normalizeStr(r.nome||r.Nome||'')===nk);
+  const promos = DB.promocoes.filter(r=>normalizeStr(r.nome||r.Nome||'')===nk);
+  const acomp = DB.acompanhamentos.filter(r=>normalizeStr(r.colaborador||r.Colaborador||'')===nk);
+
+  let html = `
+    <button class="btn" id="btnLiderBack" style="margin-bottom:16px;">← Voltar</button>
+    <div class="card" style="padding:24px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <div class="avatar" style="width:56px;height:56px;font-size:20px;">${initials}</div>
+        <div>
+          <h2 style="margin:0;">${esc(nome)}</h2>
+          <div style="color:#888;font-size:14px;">${esc(cargo)} · ${esc(area)}</div>
+          <div style="color:#aaa;font-size:12px;margin-top:4px;">Líder: ${esc(lider)} · Admissão: ${esc(admissao)} · Status: ${esc(status)}</div>
+          ${email?'<div style="color:#aaa;font-size:12px;">'+esc(email)+'</div>':''}
+        </div>
+      </div>
+    </div>`;
+
+  // PDIs
+  html += `<div class="card" style="margin-top:16px;padding:20px;">
+    <h3 style="margin:0 0 12px;">PDIs (${pdis.length})</h3>`;
+  if(pdis.length){
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th style="text-align:left;padding:8px;">Título</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Prazo</th><th style="text-align:left;padding:8px;">Progresso</th></tr></thead><tbody>';
+    pdis.forEach(p=>{
+      html += `<tr><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(p.titulo||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(p.status||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(p.prazo||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(p.progresso||'')}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhum PDI registrado</div>';
+  html += '</div>';
+
+  // 1:1s
+  html += `<div class="card" style="margin-top:16px;padding:20px;">
+    <h3 style="margin:0 0 12px;">1:1s (${oneones.length})</h3>`;
+  if(oneones.length){
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th style="text-align:left;padding:8px;">Data</th><th style="text-align:left;padding:8px;">Tipo</th><th style="text-align:left;padding:8px;">Resumo</th></tr></thead><tbody>';
+    oneones.forEach(o=>{
+      html += `<tr><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(o.data||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(o.tipo||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(o.resumo||'')}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhuma 1:1 registrada</div>';
+  html += '</div>';
+
+  // Banco de Horas
+  html += `<div class="card" style="margin-top:16px;padding:20px;">
+    <h3 style="margin:0 0 12px;">Banco de Horas (${banco.length})</h3>`;
+  if(banco.length){
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th style="text-align:left;padding:8px;">Mês</th><th style="text-align:left;padding:8px;">Saldo</th><th style="text-align:left;padding:8px;">Observação</th></tr></thead><tbody>';
+    banco.forEach(b=>{
+      html += `<tr><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(b.mes||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(b.saldo||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(b.observacao||'')}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhum registro</div>';
+  html += '</div>';
+
+  // Acompanhamentos
+  html += `<div class="card" style="margin-top:16px;padding:20px;">
+    <h3 style="margin:0 0 12px;">Acompanhamentos (${acomp.length})</h3>`;
+  if(acomp.length){
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th style="text-align:left;padding:8px;">Tipo</th><th style="text-align:left;padding:8px;">Data</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Observações</th></tr></thead><tbody>';
+    acomp.forEach(a=>{
+      html += `<tr><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(a.tipo||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(a.data||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(a.status||'')}</td><td style="padding:8px;border-top:1px solid #f3f4f6;">${esc(a.observacoes||'')}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhum acompanhamento</div>';
+  html += '</div>';
+
+  ct.innerHTML = html;
+
+  document.getElementById('btnLiderBack').addEventListener('click', ()=>{
+    liderPage='lider-dashboard'; liderDetailColab=null; render();
+  });
 }
 
 /* ---------------- SHELL ---------------- */
