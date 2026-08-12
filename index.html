@@ -3584,6 +3584,24 @@ function renderColaboradoresPage(){
   filterCols.forEach(col=>{
     if(cf[col]) filtered = filtered.filter(c=> colVal(c,col)===cf[col]);
   });
+  // Tempo da última promoção filter
+  if(cf.tempo){
+    filtered = filtered.filter(c=>{
+      const nome = c.nome||c.Nome||'';
+      const promo = getUltimaPromocao(nome);
+      if(!promo){
+        return cf.tempo==='sem';
+      }
+      const diffDays = Math.floor((new Date() - promo.data) / 86400000);
+      const meses = diffDays / 30;
+      if(cf.tempo==='<3') return meses < 3;
+      if(cf.tempo==='3-6') return meses >= 3 && meses < 6;
+      if(cf.tempo==='6-12') return meses >= 6 && meses < 12;
+      if(cf.tempo==='12-24') return meses >= 12 && meses < 24;
+      if(cf.tempo==='>24') return meses >= 24;
+      return true;
+    });
+  }
   filtered.sort((a,b)=>(a.nome||a.Nome||'').localeCompare(b.nome||b.Nome||''));
 
   // Build unique values for dropdowns (from ALL colabs, not filtered)
@@ -3673,9 +3691,14 @@ function renderColaboradoresPage(){
               {col:'cargo',label:'Todos'},
               {col:null},{col:null},
               {col:'regime',label:'Todos'},
-              {col:null},{col:null},{col:null}
+              {col:null},{col:'tempo',label:'Todos'},{col:null}
             ].map(f=>{
               if(!f.col) return '<th style="padding:2px 14px 8px;"></th>';
+              if(f.col==='tempo'){
+                const cur = cf.tempo||'';
+                const opts = [{v:'<3',l:'< 3 meses'},{v:'3-6',l:'3–6 meses'},{v:'6-12',l:'6–12 meses'},{v:'12-24',l:'1–2 anos'},{v:'>24',l:'> 2 anos'},{v:'sem',l:'Sem promoção'}];
+                return '<th style="padding:2px 14px 8px;"><select class="colabColFilter" data-ccf="tempo" style="width:100%;padding:3px 4px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;background:#fff;color:#555;cursor:pointer;"><option value="">Todos</option>'+opts.map(o=>'<option value="'+o.v+'"'+(o.v===cur?' selected':'')+'>'+o.l+'</option>').join('')+'</select></th>';
+              }
               const vals = uniqueVals(f.col);
               const cur = cf[f.col]||'';
               return '<th style="padding:2px 14px 8px;"><select class="colabColFilter" data-ccf="'+f.col+'" style="width:100%;padding:3px 4px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;background:#fff;color:#555;cursor:pointer;"><option value="">'+f.label+'</option>'+vals.map(v=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join('')+'</select></th>';
