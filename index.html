@@ -3550,6 +3550,7 @@ function getMyColaboradores(){
   });
 }
 
+if(!UI.colabColFilters) UI.colabColFilters = {};
 function renderColaboradoresPage(){
   const colabs = getMyColaboradores();
   const bp = currentBP();
@@ -3557,6 +3558,18 @@ function renderColaboradoresPage(){
   const areas = [...new Set([...(bp?bp.areas:[]), ...colabAreas])].sort();
   const fArea = UI.colabFilterArea || '';
   const fSearch = (UI.colabSearch || '').toLowerCase();
+  const cf = UI.colabColFilters;
+
+  // Helper to extract column value
+  function colVal(c, col){
+    if(col==='nome') return c.nome||c.Nome||'';
+    if(col==='lider') return c.lider||c['Líder']||c.Lider||'';
+    if(col==='departamento') return c.departamento||c.Departamento||'';
+    if(col==='area') return c.area||c.departamento||'';
+    if(col==='cargo') return c.cargo||c.Cargo||'';
+    if(col==='regime') return c.regime||c.Regime||'';
+    return '';
+  }
 
   let filtered = colabs;
   if(fArea) filtered = filtered.filter(c=>(c.area||c.departamento||'')===fArea);
@@ -3566,7 +3579,17 @@ function renderColaboradoresPage(){
     const lider = (c.lider||c['Líder']||c.Lider||'').toLowerCase();
     return nome.includes(fSearch) || cargo.includes(fSearch) || lider.includes(fSearch);
   });
+  // Apply per-column filters
+  const filterCols = ['nome','lider','departamento','area','cargo','regime'];
+  filterCols.forEach(col=>{
+    if(cf[col]) filtered = filtered.filter(c=> colVal(c,col)===cf[col]);
+  });
   filtered.sort((a,b)=>(a.nome||a.Nome||'').localeCompare(b.nome||b.Nome||''));
+
+  // Build unique values for dropdowns (from ALL colabs, not filtered)
+  function uniqueVals(col){
+    return [...new Set(colabs.map(c=>colVal(c,col)).filter(Boolean))].sort();
+  }
 
   const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
 
@@ -3628,18 +3651,35 @@ function renderColaboradoresPage(){
     <div class="card" style="overflow-x:auto;padding:0;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
+          <tr style="background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:0.5px;">Nome</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Líder</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Departamento</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Área</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Cargo</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Dt Admissão</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Faixa Salarial</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Regime</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Última Promoção</th>
+            <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Tempo</th>
+            <th style="padding:8px 14px 4px;text-align:center;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">1:1s</th>
+          </tr>
           <tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:0.5px;">Nome</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Líder</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Departamento</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Área</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Cargo</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Dt Admissão</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Faixa Salarial</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Regime</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Última Promoção</th>
-            <th style="padding:12px 14px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Tempo</th>
-            <th style="padding:12px 14px;text-align:center;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">1:1s</th>
+            ${[
+              {col:'nome',label:'Todos'},
+              {col:'lider',label:'Todos'},
+              {col:'departamento',label:'Todos'},
+              {col:'area',label:'Todas'},
+              {col:'cargo',label:'Todos'},
+              {col:null},{col:null},
+              {col:'regime',label:'Todos'},
+              {col:null},{col:null},{col:null}
+            ].map(f=>{
+              if(!f.col) return '<th style="padding:2px 14px 8px;"></th>';
+              const vals = uniqueVals(f.col);
+              const cur = cf[f.col]||'';
+              return '<th style="padding:2px 14px 8px;"><select class="colabColFilter" data-ccf="'+f.col+'" style="width:100%;padding:3px 4px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;background:#fff;color:#555;cursor:pointer;"><option value="">'+f.label+'</option>'+vals.map(v=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join('')+'</select></th>';
+            }).join('')}
           </tr>
         </thead>
         <tbody>
@@ -3690,6 +3730,13 @@ function bindColaboradoresPage(){
     searchInp.focus(); searchInp.setSelectionRange(searchInp.value.length, searchInp.value.length);
   }
   if(areaFilter) areaFilter.addEventListener('change', ()=>{ UI.colabFilterArea=areaFilter.value; rerender(); });
+  // Per-column filters
+  document.querySelectorAll('.colabColFilter').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      UI.colabColFilters[sel.getAttribute('data-ccf')] = sel.value;
+      rerender();
+    });
+  });
   const btnPdf = document.getElementById('btnPdfColabs');
   if(btnPdf) btnPdf.addEventListener('click', ()=>{ exportColaboradoresPDF(UI.colabFilterArea||''); });
 
