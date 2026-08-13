@@ -1749,6 +1749,7 @@ const NAV_ITEMS = [
   {key:'bancoHorasImport', label:'Banco de Horas', icon:'banco'},
   {key:'oneOnOnes', label:'1:1s', icon:'oneone'},
   {key:'acoes', label:'Planos de Ação', icon:'kanban'},
+  {key:'lideres', label:'Líderes', icon:'users'},
   {key:'import', label:'Importar Dados', icon:'import'},
   {key:'history', label:'Histórico', icon:'history'},
   {key:'executive', label:'Painel Executivo', icon:'exec'},
@@ -1774,7 +1775,8 @@ const PAGE_TITLES = {
   pdis:['PDIs','Planos de Desenvolvimento Individual'],
   bancoHorasImport:['Banco de Horas','Gestão de banco de horas'],
   oneOnOnes:['1:1s','Registros de reuniões individuais'],
-  acoes:['Planos de Ação','Gerencie ações em formato kanban — a fazer, em andamento, concluído']
+  acoes:['Planos de Ação','Gerencie ações em formato kanban — a fazer, em andamento, concluído'],
+  lideres:['Líderes','Visão completa por líder — equipe, indicadores, PDIs, 1:1s']
 };
 function hasImportedData(){
   return DB.colaboradores.length>0 || DB.desligamentos.length>0 || DB.promocoes.length>0;
@@ -1839,6 +1841,7 @@ function renderPageContent(){
   else if(UI.page==='colaboradores'){ c.innerHTML = renderColaboradoresPage(); bindColaboradoresPage(); }
   else if(UI.page==='colaboradorDetail'){ c.innerHTML = renderColaboradorDetail(); bindColaboradorDetail(); }
   else if(UI.page==='acoes'){ c.innerHTML = renderKanban(); bindKanban(); }
+  else if(UI.page==='lideres'){ c.innerHTML = renderLideresPage(); bindLideresPage(); }
   else if(CRUD_PAGES[UI.page]){ c.innerHTML = renderCrudPage(UI.page); bindCrudPage(UI.page); }
 }
 
@@ -1924,9 +1927,9 @@ function renderDashboard(){
         </div>`;
       }).join('')}
     </div>
-    <div class="grid" style="gap:18px;">
-      <div class="card"><div class="section-title">Distribuição de status</div><canvas id="chartStatusPie" height="180"></canvas></div>
-      <div class="card"><div class="section-title">Tendência — Turnover (%)</div><canvas id="chartTrend" height="180"></canvas></div>
+    <div class="card">
+      <div class="section-title">Tendência — Turnover (%)</div>
+      <canvas id="chartTrend" height="180"></canvas>
     </div>
   </div>
 
@@ -1959,16 +1962,6 @@ function bindDashboard(){
   const bp = currentBP();
   const period = UI.filters.dashPeriod || currentPeriodGuess();
   const rows = latestMeetingsByArea(bp, period);
-  const statusCounts = {'Não iniciada':0,'Em andamento':0,'Concluída':0};
-  rows.forEach(r=> statusCounts[r.meeting?meetingStatus(r.meeting):'Não iniciada']++ );
-
-  destroyChart('chartStatusPie');
-  CHARTS.chartStatusPie = new Chart(document.getElementById('chartStatusPie'), {
-    type:'doughnut',
-    data:{ labels:Object.keys(statusCounts), datasets:[{ data:Object.values(statusCounts), backgroundColor:['#9aa1ac','#f5a623','#00BFA5'] }] },
-    options:{ plugins:{legend:{position:'bottom', labels:{boxWidth:10,font:{size:11}}}} }
-  });
-
   const trendPeriods = CONFIG.periods.slice(6,12);
   const trendData = trendPeriods.map(p=>{
     const ms = DB.meetings.filter(m=>m.bpId===bp.id && m.period===p);
@@ -3793,6 +3786,208 @@ function bindKanban(){
       const id = btn.getAttribute('data-del-id');
       DB.acoes = DB.acoes.filter(a=>a.id!==id);
       persist('acoes');
+      rerender();
+    });
+  });
+}
+
+/* =========================================================
+   LÍDERES PAGE
+========================================================= */
+function renderLideresPage(){
+  const colabs = getMyColaboradores();
+  const fArea = UI.lideresArea||'';
+  const fSearch = (UI.lideresSearch||'').toLowerCase();
+  const bp = currentBP();
+  const areas = bp ? bp.areas.slice().sort() : [];
+
+  // Get unique leaders from my collaborators
+  const liderSet = new Set();
+  colabs.forEach(c=>{
+    const l = (c.lider||c['Líder']||c.Lider||'').trim();
+    if(l) liderSet.add(l);
+  });
+  let liderList = [...liderSet].sort();
+
+  // Apply filters
+  if(fArea){
+    const areaColabs = colabs.filter(c=>(c.area||c.departamento||'')===fArea);
+    const areaLiders = new Set();
+    areaColabs.forEach(c=>{ const l=(c.lider||c['Líder']||c.Lider||'').trim(); if(l) areaLiders.add(l); });
+    liderList = liderList.filter(l=>areaLiders.has(l));
+  }
+  if(fSearch){
+    liderList = liderList.filter(l=>l.toLowerCase().includes(fSearch));
+  }
+
+  function liderCard(liderNome){
+    const isH = isHead(liderNome);
+    const isC = isCoordinator(liderNome);
+    const role = isH ? 'Head' : isC ? 'Coordenador(a)' : 'Líder';
+    const roleColor = isH ? '#1B1B2F' : isC ? '#8b5cf6' : '#00BFA5';
+    const team = getTeamTree(liderNome);
+    const directs = getDirectReports(liderNome);
+    const initials = liderNome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    const nk = normalizeStr(liderNome);
+
+    // Find leader's own info
+    const liderColab = colabs.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
+    const liderArea = liderColab ? (liderColab.area||liderColab.departamento||'') : '';
+    const liderCargo = liderColab ? (liderColab.cargo||'') : '';
+
+    // Stats from team
+    const teamNames = team.map(c=>normalizeStr(c.nome||c.Nome||''));
+    const regimes = {clt:0,pj:0,estagio:0,outros:0};
+    let totalSalario = 0;
+    team.forEach(c=>{
+      const r = normalizeStr(c.regime||c.Regime||'');
+      if(r==='clt') regimes.clt++;
+      else if(r==='pj') regimes.pj++;
+      else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') regimes.estagio++;
+      else regimes.outros++;
+      const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\\d.,]/g,'').replace(',','.'));
+      if(!isNaN(sal)) totalSalario += sal;
+    });
+    const pdisCount = DB.pdis.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+    const oneOnOnesCount = DB.oneOnOnes.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+    const deslCount = DB.desligamentos.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+    const promoCount = DB.promocoes.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+
+    const expanded = UI.liderExpanded===liderNome;
+
+    let html = `<div class="card" style="margin-bottom:16px;overflow:hidden;">
+      <div class="lider-card-header" data-lider-toggle="${esc(liderNome)}" style="display:flex;align-items:center;gap:14px;padding:18px 20px;cursor:pointer;${expanded?'border-bottom:1px solid #e5e7eb;':''}">
+        <div class="avatar" style="width:44px;height:44px;font-size:15px;flex-shrink:0;">${initials}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-weight:700;font-size:15px;">${esc(liderNome)}</span>
+            <span style="background:${roleColor};color:#fff;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;">${role}</span>
+            ${liderArea?'<span style="font-size:11px;color:#888;">'+esc(liderArea)+'</span>':''}
+          </div>
+          <div style="font-size:12px;color:#888;margin-top:2px;">${esc(liderCargo)} · ${team.length} pessoas · ${directs.length} diretos</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;flex-shrink:0;">
+          <div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:var(--primary);">${team.length}</div><div style="font-size:10px;color:#888;">Equipe</div></div>
+          <div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:#8b5cf6;">${pdisCount}</div><div style="font-size:10px;color:#888;">PDIs</div></div>
+          <div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:#0ea5e9;">${oneOnOnesCount}</div><div style="font-size:10px;color:#888;">1:1s</div></div>
+          <span style="font-size:18px;transition:transform .2s;${expanded?'transform:rotate(180deg);':''}">&#9660;</span>
+        </div>
+      </div>`;
+
+    if(expanded){
+      html += `<div style="padding:20px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px;">
+          <div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center;"><div style="font-weight:800;font-size:18px;">${regimes.clt}</div><div style="font-size:11px;color:#888;">CLT</div></div>
+          <div style="background:#f5f3ff;border-radius:10px;padding:12px;text-align:center;"><div style="font-weight:800;font-size:18px;">${regimes.pj}</div><div style="font-size:11px;color:#888;">PJ</div></div>
+          <div style="background:#fef3c7;border-radius:10px;padding:12px;text-align:center;"><div style="font-weight:800;font-size:18px;">${regimes.estagio}</div><div style="font-size:11px;color:#888;">Estágio</div></div>
+          <div style="background:#fef2f2;border-radius:10px;padding:12px;text-align:center;"><div style="font-weight:800;font-size:18px;">${deslCount}</div><div style="font-size:11px;color:#888;">Deslig.</div></div>
+          <div style="background:#eff6ff;border-radius:10px;padding:12px;text-align:center;"><div style="font-weight:800;font-size:18px;">${promoCount}</div><div style="font-size:11px;color:#888;">Promoções</div></div>
+          <div style="background:#f9fafb;border-radius:10px;padding:12px;text-align:center;"><div style="font-weight:800;font-size:14px;">R$ ${(totalSalario/1000).toFixed(1)}k</div><div style="font-size:11px;color:#888;">Salários</div></div>
+        </div>`;
+
+      // Team table
+      html += `<div style="font-weight:700;font-size:13px;margin-bottom:8px;">Equipe (${team.length})</div>
+        <div style="overflow-x:auto;margin-bottom:16px;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+            <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Cargo</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Área</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Regime</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Salário</th>
+            <th style="padding:8px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Relação</th>
+          </tr></thead><tbody>`;
+
+      team.forEach((c,i)=>{
+        const nome = c.nome||c.Nome||'';
+        const cargo = c.cargo||c.Cargo||'';
+        const area = c.area||c.departamento||'';
+        const regime = c.regime||c.Regime||'';
+        const sal = c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'';
+        const salStr = typeof sal==='number' ? sal.toLocaleString('pt-BR',{minimumFractionDigits:2}) : sal;
+        const cLider = c.lider||c['Líder']||c.Lider||'';
+        const isDirect = normalizeStr(cLider)===normalizeStr(liderNome);
+        const hasSubs = getDirectReports(nome).length > 0;
+        html += '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'">'
+          + '<td style="padding:8px 10px;font-weight:600;">' + esc(nome) + (hasSubs?' <span style="font-size:10px;background:#e0f2f1;color:#00695c;padding:1px 6px;border-radius:8px;">Líder</span>':'') + '</td>'
+          + '<td style="padding:8px 10px;">' + esc(cargo) + '</td>'
+          + '<td style="padding:8px 10px;">' + esc(area) + '</td>'
+          + '<td style="padding:8px 10px;text-transform:uppercase;font-size:11px;">' + esc(regime) + '</td>'
+          + '<td style="padding:8px 10px;">' + esc(salStr) + '</td>'
+          + '<td style="padding:8px 10px;text-align:center;"><span style="font-size:10px;padding:2px 8px;border-radius:8px;'+(isDirect?'background:#dcfce7;color:#16a34a;':'background:#f3f4f6;color:#888;')+'">'+(isDirect?'Direto':'Indireto')+'</span></td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+
+      // PDIs summary
+      const teamPdis = DB.pdis.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+      if(teamPdis.length){
+        html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">PDIs ('+teamPdis.length+')</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:16px;">';
+        teamPdis.forEach(p=>{
+          html += '<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;border-left:3px solid #8b5cf6;">'
+            + '<div style="font-weight:600;font-size:12px;">'+esc(p.nome||'')+'</div>'
+            + '<div style="font-size:11px;color:#888;">'+esc(p.status||'')+' · Aprovado: '+esc(p.aprovado||'')+'</div>'
+            + '</div>';
+        });
+        html += '</div>';
+      }
+
+      // 1:1s summary
+      const teamOneOnes = DB.oneOnOnes.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+      if(teamOneOnes.length){
+        const recent = teamOneOnes.slice(-5);
+        html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">Últimas 1:1s ('+teamOneOnes.length+' total)</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:16px;">';
+        recent.forEach(o=>{
+          html += '<div style="background:#f0f9ff;border-radius:8px;padding:10px 14px;border-left:3px solid #0ea5e9;">'
+            + '<div style="font-weight:600;font-size:12px;">'+esc(o.nome||'')+'</div>'
+            + '<div style="font-size:11px;color:#888;">'+esc(o.data||'')+' · '+esc(o.tipo||'')+'</div>'
+            + '</div>';
+        });
+        html += '</div>';
+      }
+
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  return `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">${ICONS.users} Líderes (${liderList.length})</h2>
+        <p style="margin:4px 0 0;color:#888;font-size:13px;">Clique em um líder para expandir e ver equipe, indicadores, PDIs e 1:1s.</p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="lideresSearch" placeholder="Buscar líder..." value="${esc(UI.lideresSearch||'')}" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;min-width:200px;">
+        <select id="lideresAreaFilter" class="select" style="min-width:150px;">
+          <option value="">Todas as áreas</option>
+          ${areas.map(a=>'<option value="'+esc(a)+'"'+(a===fArea?' selected':'')+'>'+esc(a)+'</option>').join('')}
+        </select>
+      </div>
+    </div>
+    ${liderList.map(l=>liderCard(l)).join('')}
+    ${liderList.length===0?'<div class="card" style="padding:40px;text-align:center;color:#aaa;">Nenhum líder encontrado.</div>':''}`;
+}
+
+function bindLideresPage(){
+  const rerender = ()=>{ const c=document.getElementById('content'); c.innerHTML=renderLideresPage(); bindLideresPage(); };
+  const searchInp = document.getElementById('lideresSearch');
+  if(searchInp){
+    let t; searchInp.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(()=>{ UI.lideresSearch=searchInp.value; rerender(); },300); });
+    searchInp.focus(); searchInp.setSelectionRange(searchInp.value.length, searchInp.value.length);
+  }
+  const areaFilter = document.getElementById('lideresAreaFilter');
+  if(areaFilter) areaFilter.addEventListener('change', ()=>{ UI.lideresArea=areaFilter.value; rerender(); });
+
+  // Toggle expand
+  document.querySelectorAll('[data-lider-toggle]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const nome = el.getAttribute('data-lider-toggle');
+      UI.liderExpanded = UI.liderExpanded===nome ? null : nome;
       rerender();
     });
   });
