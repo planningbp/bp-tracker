@@ -247,11 +247,6 @@ tr:last-child td{border-bottom:none;}
             
           </div>
         
-          <div class="nav-item " data-nav="executive">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20V10M10 20V4M17 20v-7"></path></svg><span>Painel Executivo</span>
-            
-          </div>
-        
           <div class="nav-item " data-nav="settings">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21a2 2 0 01-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.6-1H3a2 2 0 010-4h.1a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.6V3a2 2 0 014 0v.1a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.6 1H21a2 2 0 010 4h-.1a1.7 1.7 0 00-1.6 1z"></path></svg><span>Configurações</span>
             
@@ -1293,7 +1288,11 @@ let UI = {
   colabFilterArea: '',
   colabSearch: '',
   colabDetailNome: null,
-  indFilterArea: ''
+  indFilterArea: '',
+  dashDateFrom: '',
+  dashDateTo: '',
+  dashArea: '',
+  dashLider: ''
 };
 let CHARTS = {};
 function destroyChart(id){ if(CHARTS[id]){ CHARTS[id].destroy(); delete CHARTS[id]; } }
@@ -1752,22 +1751,18 @@ const NAV_ITEMS = [
   {key:'lideres', label:'Líderes', icon:'users'},
   {key:'import', label:'Importar Dados', icon:'import'},
   {key:'history', label:'Histórico', icon:'history'},
-  {key:'executive', label:'Painel Executivo', icon:'exec'},
   {key:'acompanhamentos', label:'Acompanhamentos', icon:'acomp'},
-  {key:'indicadores', label:'Indicadores', icon:'chart'},
   {key:'settings', label:'Configurações', icon:'settings'}
 ];
 const PAGE_TITLES = {
-  dashboard:['Dashboard','Visão geral da sua carteira de áreas'],
+  dashboard:['Dashboard','Visão consolidada — KPIs, gráficos, composição e indicadores'],
   meetings:['Reuniões','Gerencie as reuniões de BP por período'],
   import:['Importar Dados','Carregue planilhas de colaboradores, desligamentos e promoções'],
   history:['Histórico','Compare indicadores entre períodos'],
-  executive:['Painel Executivo','Visão consolidada de todos os BPs'],
   settings:['Configurações','Perfil e áreas do Business Partner'],
   form:['Reunião','Registro de reunião de BP'],
   detail:['Detalhe da Reunião','Resumo executivo e indicadores'],
   acompanhamentos:['Acompanhamentos','Acompanhamento de novos colaboradores (7/15/45/90 dias)'],
-  indicadores:['Indicadores','Comparativos e evolução mensal dos dados'],
   colaboradores:['Colaboradores','Cadastro e histórico de interações'],
   colaboradorDetail:['Colaborador','Detalhes e registros do colaborador'],
   desligamentos:['Desligamentos','Gestão de desligamentos — importar, adicionar, editar e remover'],
@@ -1832,12 +1827,10 @@ function renderPageContent(){
   else if(UI.page==='meetings'){ c.innerHTML = renderMeetingsList(); bindMeetingsList(); }
   else if(UI.page==='import'){ c.innerHTML = renderImport(); bindImport(); }
   else if(UI.page==='history'){ c.innerHTML = renderHistory(); bindHistory(); }
-  else if(UI.page==='executive'){ c.innerHTML = renderExecutive(); bindExecutive(); }
   else if(UI.page==='settings'){ c.innerHTML = renderSettings(); bindSettings(); }
   else if(UI.page==='form'){ c.innerHTML = renderMeetingForm(); bindMeetingForm(); }
   else if(UI.page==='detail'){ c.innerHTML = renderMeetingDetail(); bindMeetingDetail(); }
   else if(UI.page==='acompanhamentos'){ c.innerHTML = renderAcompanhamentos(); bindAcompanhamentos(); }
-  else if(UI.page==='indicadores'){ c.innerHTML = renderIndicadores(); bindIndicadores(); }
   else if(UI.page==='colaboradores'){ c.innerHTML = renderColaboradoresPage(); bindColaboradoresPage(); }
   else if(UI.page==='colaboradorDetail'){ c.innerHTML = renderColaboradorDetail(); bindColaboradorDetail(); }
   else if(UI.page==='acoes'){ c.innerHTML = renderKanban(); bindKanban(); }
@@ -1859,84 +1852,374 @@ function latestMeetingsByArea(bp, period){
 }
 function renderDashboard(){
   const bp = currentBP();
+  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+  // Date range defaults: last 12 months
+  const now = new Date();
+  if(!UI.dashDateFrom){
+    const from = new Date(now.getFullYear(), now.getMonth()-11, 1);
+    UI.dashDateFrom = from.getFullYear()+'-'+String(from.getMonth()+1).padStart(2,'0')+'-'+String(from.getDate()).padStart(2,'0');
+  }
+  if(!UI.dashDateTo){
+    UI.dashDateTo = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  }
+  const dateFrom = new Date(UI.dashDateFrom+'T00:00:00');
+  const dateTo = new Date(UI.dashDateTo+'T23:59:59');
+  const fArea = UI.dashArea || '';
+  const fLider = UI.dashLider || '';
+
+  // Get base data
+  let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
+  let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
+  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
+  let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+
+  // Apply area filter
+  if(fArea){
+    myColabs = myColabs.filter(c=>(c.area||c.departamento||'')===fArea);
+    myDeslig = myDeslig.filter(d=>(d.area||'')===fArea);
+    myPromos = myPromos.filter(p=>(p.area||'')===fArea);
+    myMeetings = myMeetings.filter(m=> normalizeStr(m.area||'')===normalizeStr(fArea));
+  }
+  // Apply leader filter
+  if(fLider){
+    myColabs = myColabs.filter(c=>(c.lider||c['Líder']||c.Lider||'')===fLider);
+    myDeslig = myDeslig.filter(d=>(d.lider||d['Líder']||d.Lider||'')===fLider);
+    myPromos = myPromos.filter(p=>(p.lider||p['Líder']||p.Lider||'')===fLider);
+  }
+
+  // Date filtered subsets
+  function inRange(raw){ if(!raw) return false; const d = raw instanceof Date ? raw : new Date(raw); return !isNaN(d) && d>=dateFrom && d<=dateTo; }
+  const admNoPeriod = myColabs;
+  const admissoes = myColabs.filter(c=> inRange(c.admissao||c['Data de admissão']||c['data de admissao']));
+  const desligPeriod = myDeslig.filter(d=> inRange(d.ultimoDia||d.mesDate));
+  const promosPeriod = myPromos.filter(p=> inRange(p.mesDate));
+
+  const totalHC = myColabs.length;
+  const totalAdm = admissoes.length;
+  const totalDesl = desligPeriod.length;
+  const turnover = totalHC > 0 ? Math.round(totalDesl/totalHC*10000)/100 : 0;
+  const totalPromos = promosPeriod.length;
+  const totalPDIs = DB.pdis.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && (p.status||'')!=='Concluído').length;
+
+  // eNPS/lNPS from scores
+  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
+  const avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0);
+  const avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0);
+
+  // Dropdown options
+  const allAreasList = bp.areas.slice().sort();
+  const allLideres = [...new Set(DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||''))).map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))].sort();
+
+  // Meeting status for status section
   const period = UI.filters.dashPeriod || currentPeriodGuess();
   const rows = latestMeetingsByArea(bp, period);
   const completed = rows.filter(r=>r.meeting && meetingStatus(r.meeting)==='Concluída').length;
-  const inProgress = rows.filter(r=>r.meeting && meetingStatus(r.meeting)==='Em andamento').length;
-  const pending = rows.length - completed - inProgress;
   const pct = rows.length? Math.round(completed/rows.length*100):0;
 
-  // Headcount: prefer imported data, fallback to meeting data
-  let headcountSum = 0;
-  let admissoesSum = 0;
-  let desligSum = 0;
-  const hasImported = DB.colaboradores.length > 0;
-  if(hasImported){
-    rows.forEach(r=>{
-      const auto = computeAutoData(r.area, period);
-      if(auto){
-        headcountSum += auto.headcount;
-        admissoesSum += auto.admissoes.length;
-        desligSum += auto.desligamentos.length;
-      }
-    });
-  } else {
-    headcountSum = rows.reduce((s,r)=> s + (r.meeting? (r.meeting.headcount||0):0), 0);
-    admissoesSum = rows.reduce((s,r)=> s + (r.meeting? (r.meeting.admissoesCount||0):0), 0);
-    desligSum = rows.reduce((s,r)=> s + (r.meeting? (r.meeting.desligamentosCount||0):0), 0);
-  }
-  const avgTurnover = headcountSum > 0 ? Math.round(desligSum/headcountSum*10000)/100 : 0;
-
   return `
-  <div class="toolbar">
-    <select id="dashPeriod">${CONFIG.periods.map(p=>`<option value="${p}" ${p===period?'selected':''}>${p}</option>`).join('')}</select>
+  <div class="toolbar" style="flex-wrap:wrap;gap:10px;">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <label style="font-size:12px;font-weight:600;color:#888;">De:</label>
+      <input type="date" id="dashDateFrom" value="${UI.dashDateFrom}" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;">
+      <label style="font-size:12px;font-weight:600;color:#888;">Até:</label>
+      <input type="date" id="dashDateTo" value="${UI.dashDateTo}" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;">
+    </div>
+    <select id="dashAreaFilter" class="select" style="min-width:150px;">
+      <option value="">Todas as áreas</option>
+      ${allAreasList.map(a=>`<option value="${esc(a)}" ${a===fArea?'selected':''}>${esc(a)}</option>`).join('')}
+    </select>
+    <select id="dashLiderFilter" class="select" style="min-width:180px;">
+      <option value="">Todos os líderes</option>
+      ${allLideres.map(l=>`<option value="${esc(l)}" ${l===fLider?'selected':''}>${esc(l)}</option>`).join('')}
+    </select>
     <div class="spacer"></div>
   </div>
 
+  <!-- KPI Cards -->
   <div class="grid grid-4" style="margin-bottom:20px;">
-    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.users}</div></div><div class="kpi-value">${fmtNum(headcountSum)}</div><div class="kpi-label">Headcount total${hasImported?' (planilha)':''}</div></div>
-    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#e6faf3;">${ICONS.check}</div></div><div class="kpi-value">${admissoesSum}</div><div class="kpi-label">Admissões no período</div></div>
-    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#fdecec;">${ICONS.alert}</div></div><div class="kpi-value">${desligSum}</div><div class="kpi-label">Desligamentos</div></div>
-    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.dashboard}</div></div><div class="kpi-value">${avgTurnover.toFixed(1)}%</div><div class="kpi-label">Turnover do período</div></div>
+    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.users}</div></div><div class="kpi-value">${fmtNum(totalHC)}</div><div class="kpi-label">Headcount</div></div>
+    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#e6faf3;">${ICONS.check}</div></div><div class="kpi-value">${totalAdm}</div><div class="kpi-label">Admissões no período</div></div>
+    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#fdecec;">${ICONS.alert}</div></div><div class="kpi-value">${totalDesl}</div><div class="kpi-label">Desligamentos no período</div></div>
+    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.dashboard}</div></div><div class="kpi-value">${turnover.toFixed(1)}%</div><div class="kpi-label">Turnover %</div></div>
   </div>
   <div class="grid grid-4" style="margin-bottom:20px;">
-    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.file}</div></div><div class="kpi-value">${rows.length}</div><div class="kpi-label">Áreas sob gestão</div></div>
-    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#e6faf3;">${ICONS.check}</div></div><div class="kpi-value">${completed}</div><div class="kpi-label">Reuniões concluídas</div></div>
-    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#fff6e6;">${ICONS.clock}</div></div><div class="kpi-value">${pending}</div><div class="kpi-label">Reuniões pendentes</div></div>
-    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.dashboard}</div></div><div class="kpi-value">${pct}%</div><div class="kpi-label">Progresso</div></div>
+    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#e6faf3;">${ICONS.dashboard}</div></div><div class="kpi-value">${avgEnps}</div><div class="kpi-label">eNPS médio</div></div>
+    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#f3e8ff;">${ICONS.dashboard}</div></div><div class="kpi-value">${avgLnps}</div><div class="kpi-label">lNPS médio</div></div>
+    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#f3e8ff;">${ICONS.promo}</div></div><div class="kpi-value">${totalPromos}</div><div class="kpi-label">Promoções</div></div>
+    <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#fff6e6;">${ICONS.pdi}</div></div><div class="kpi-value">${totalPDIs}</div><div class="kpi-label">PDIs ativos</div></div>
   </div>
 
+  <!-- Charts row 1: Adm vs Desl, Promoções -->
+  <div class="grid grid-2" style="margin-bottom:20px;">
+    <div class="card"><div class="section-title">Admissões vs Desligamentos (por mês)</div><canvas id="chartDashAdmDesl" height="220"></canvas></div>
+    <div class="card"><div class="section-title">Promoções (por mês)</div><canvas id="chartDashPromos" height="220"></canvas></div>
+  </div>
+
+  <!-- Charts row 2: eNPS, lNPS -->
+  <div class="grid grid-2" style="margin-bottom:20px;">
+    <div class="card"><div class="section-title">eNPS — Evolução por período</div><canvas id="chartDashEnps" height="220"></canvas></div>
+    <div class="card"><div class="section-title">lNPS — Evolução por período</div><canvas id="chartDashLnps" height="220"></canvas></div>
+  </div>
+
+  <!-- Charts row 3: Headcount evo, Turnover evo -->
+  <div class="grid grid-2" style="margin-bottom:20px;">
+    <div class="card"><div class="section-title">Headcount — Evolução mensal</div><canvas id="chartDashHCevo" height="220"></canvas></div>
+    <div class="card"><div class="section-title">Turnover (%) — Evolução mensal</div><canvas id="chartDashTOevo" height="220"></canvas></div>
+  </div>
+
+  <!-- Charts row 4: Desligamentos tipo & motivo -->
+  <div class="grid grid-2" style="margin-bottom:20px;">
+    <div class="card"><div class="section-title">Desligamentos por Tipo</div><canvas id="chartDashDeslTipo" height="220"></canvas></div>
+    <div class="card"><div class="section-title">Desligamentos por Motivo</div><canvas id="chartDashDeslMotivo" height="220"></canvas></div>
+  </div>
+
+  <!-- Composição por Área -->
   <div class="card" style="margin-bottom:20px;">
-    <div class="card-header"><div class="section-title">Progresso do período — ${period}</div><div style="font-weight:800;color:var(--primary);">${pct}%</div></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;"></div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div>
+        <div class="section-title" style="margin:0;">Composição por Área — Regime e Salários</div>
+        <p style="margin:4px 0 0;color:#888;font-size:12px;">Quantidade de CLT, PJ, Estagiário por área e valor total de salários.</p>
+      </div>
+    </div>
+    ${(()=>{
+      let cList = myColabs;
+      const areaMap = {};
+      cList.forEach(c=>{
+        const a = c.area||c.departamento||'(Sem área)';
+        if(!areaMap[a]) areaMap[a] = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+        const r = normalizeStr(c.regime||c.Regime||'');
+        if(r==='clt') areaMap[a].clt++;
+        else if(r==='pj') areaMap[a].pj++;
+        else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') areaMap[a].estagio++;
+        else if(r==='temporario'||r==='temporário') areaMap[a].temp++;
+        else areaMap[a].outros++;
+        areaMap[a].total++;
+        const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
+        if(!isNaN(sal)) areaMap[a].totalSalario += sal;
+      });
+      const areaKeys = Object.keys(areaMap).sort();
+      if(!areaKeys.length) return '<div style="text-align:center;padding:30px;color:#aaa;">Nenhum colaborador encontrado.</div>';
+      const totals = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+      areaKeys.forEach(a=>{ Object.keys(totals).forEach(k=>totals[k]+=areaMap[a][k]); });
+      return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">'+
+        '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">CLT</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">PJ</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Estágio</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Temporário</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Outros</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;font-weight:800;">Total</th>'+
+        '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:#888;">Valor Total Salários</th>'+
+        '</tr></thead><tbody>'+
+        areaKeys.map((a,i)=>{
+          const d = areaMap[a];
+          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
+            '<td style="padding:10px 14px;font-weight:600;">'+esc(a)+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.clt+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.pj+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.estagio+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.temp+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.outros+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;font-weight:800;">'+d.total+'</td>'+
+            '<td style="padding:10px 14px;text-align:right;font-weight:600;">R$ '+d.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
+            '</tr>';
+        }).join('')+
+        '<tr style="background:#f0fdf4;border-top:2px solid var(--primary);font-weight:800;">'+
+          '<td style="padding:10px 14px;">TOTAL</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.clt+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.pj+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.estagio+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.temp+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.outros+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.total+'</td>'+
+          '<td style="padding:10px 14px;text-align:right;font-size:15px;">R$ '+totals.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
+        '</tr></tbody></table></div>';
+    })()}
   </div>
 
-  <div class="grid grid-2">
-    <div class="card">
-      <div class="section-title">Status por área</div>
-      ${rows.map(r=>{
-        const auto = hasImported ? computeAutoData(r.area, period) : null;
-        const hcLabel = auto ? auto.headcount+' colaboradores' : '';
-        const admLabel = auto && auto.admissoes.length ? ' · '+auto.admissoes.length+' adm.' : '';
-        const desLabel = auto && auto.desligamentos.length ? ' · '+auto.desligamentos.length+' desl.' : '';
-        const metaBase = r.meeting ? (r.meeting.gerente||'—')+' · '+fmtDate(r.meeting.date) : (hcLabel||'Sem registro no período');
-        const metaExtra = r.meeting ? (hcLabel?' · HC: '+auto.headcount:'') : (admLabel+desLabel);
-        return `<div class="area-row">
-          <div><div class="area-name">${r.area}</div><div class="area-meta">${metaBase}${metaExtra}</div></div>
-          ${statusBadge(r.meeting?meetingStatus(r.meeting):'Não iniciada')}
-        </div>`;
-      }).join('')}
+  <!-- Composição por Líder -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Composição por Líder — Regime e Salários</div>
+    ${(()=>{
+      let cList = myColabs;
+      const liderMap = {};
+      cList.forEach(c=>{
+        const l = c.lider||c['Líder']||c.Lider||'(Sem líder)';
+        if(!liderMap[l]) liderMap[l] = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+        const r = normalizeStr(c.regime||c.Regime||'');
+        if(r==='clt') liderMap[l].clt++;
+        else if(r==='pj') liderMap[l].pj++;
+        else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') liderMap[l].estagio++;
+        else if(r==='temporario'||r==='temporário') liderMap[l].temp++;
+        else liderMap[l].outros++;
+        liderMap[l].total++;
+        const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
+        if(!isNaN(sal)) liderMap[l].totalSalario += sal;
+      });
+      const liderKeys = Object.keys(liderMap).sort();
+      if(!liderKeys.length) return '<div style="text-align:center;padding:30px;color:#aaa;">Nenhum colaborador encontrado.</div>';
+      const totals = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+      liderKeys.forEach(l=>{ Object.keys(totals).forEach(k=>totals[k]+=liderMap[l][k]); });
+      return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">'+
+        '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Líder</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">CLT</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">PJ</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Estágio</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Temporário</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Outros</th>'+
+        '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;font-weight:800;">Total</th>'+
+        '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:#888;">Valor Total Salários</th>'+
+        '</tr></thead><tbody>'+
+        liderKeys.map((l,i)=>{
+          const d = liderMap[l];
+          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
+            '<td style="padding:10px 14px;font-weight:600;">'+esc(l)+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.clt+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.pj+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.estagio+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.temp+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+d.outros+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;font-weight:800;">'+d.total+'</td>'+
+            '<td style="padding:10px 14px;text-align:right;font-weight:600;">R$ '+d.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
+            '</tr>';
+        }).join('')+
+        '<tr style="background:#f0fdf4;border-top:2px solid var(--primary);font-weight:800;">'+
+          '<td style="padding:10px 14px;">TOTAL</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.clt+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.pj+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.estagio+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.temp+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.outros+'</td>'+
+          '<td style="padding:10px 14px;text-align:center;">'+totals.total+'</td>'+
+          '<td style="padding:10px 14px;text-align:right;font-size:15px;">R$ '+totals.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
+        '</tr></tbody></table></div>';
+    })()}
+  </div>
+
+  <!-- Composition charts -->
+  <div class="grid grid-2" style="margin-bottom:20px;">
+    <div class="card"><div class="section-title">Regime por Área</div><canvas id="chartDashRegimeArea" height="280"></canvas></div>
+    <div class="card"><div class="section-title">Salários por Área</div><canvas id="chartDashSalarioArea" height="280"></canvas></div>
+  </div>
+
+  <!-- eNPS / lNPS Registration -->
+  <div class="card" style="margin-bottom:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div>
+        <div class="section-title" style="margin:0;">Registros de eNPS e lNPS</div>
+        <p style="margin:4px 0 0;color:#888;font-size:12px;">Registre as notas por empresa, área ou líder. Ao criar uma reunião, os valores da área serão puxados automaticamente.</p>
+      </div>
+      <button class="btn btn-primary" id="btnNewScore" style="width:auto;">${ICONS.plus} Novo Registro</button>
     </div>
-    <div class="card">
-      <div class="section-title">Tendência — Turnover (%)</div>
-      <canvas id="chartTrend" height="180"></canvas>
+
+    <div id="formScore" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:20px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+        <div class="field"><label>Nível</label>
+          <select id="sc_tipo" class="select">
+            <option value="area">Área</option>
+            <option value="empresa">Empresa Geral</option>
+            <option value="lider">Líder</option>
+          </select>
+        </div>
+        <div class="field" id="sc_area_wrap"><label>Área</label>
+          <select id="sc_area" class="select">
+            ${bp.areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}
+          </select>
+        </div>
+        <div class="field" id="sc_lider_wrap" style="display:none;"><label>Líder</label>
+          <input type="text" id="sc_lider" list="sc_lider_list" placeholder="Nome do líder" class="select">
+          <datalist id="sc_lider_list">
+            ${[...new Set(DB.colaboradores.filter(c=>c.lider).map(c=>c.lider))].sort().map(l=>'<option value="'+esc(l)+'">').join('')}
+          </datalist>
+        </div>
+        <div class="field"><label>Período</label>
+          <select id="sc_period" class="select">
+            ${CONFIG.periods.map(p=>'<option value="'+p+'">'+p+'</option>').join('')}
+          </select>
+        </div>
+        <div class="field"><label>eNPS</label><input type="number" id="sc_enps" placeholder="-100 a 100"></div>
+        <div class="field"><label>lNPS</label><input type="number" id="sc_lnps" placeholder="-100 a 100"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+        <div class="field"><label>Principais Forças</label><textarea id="sc_forcas" rows="3" placeholder="Pontos fortes identificados..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
+        <div class="field"><label>Pontos de Atenção</label><textarea id="sc_atencao" rows="3" placeholder="Pontos que precisam de atenção..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
+        <div class="field"><label>Recomendações</label><textarea id="sc_recomendacoes" rows="3" placeholder="Ações recomendadas..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-outline" id="btnCancelScore">Cancelar</button>
+        <button class="btn btn-primary" id="btnSaveScore" style="width:auto;">Salvar</button>
+      </div>
+    </div>
+
+    ${(()=>{
+      const scBpAreas = bp.areas.map(a=>normalizeStr(a));
+      const bpScores = DB.scores.filter(s=> s.tipo==='empresa' || scBpAreas.includes(normalizeStr(s.area||'')) || scBpAreas.includes(normalizeStr(s.liderArea||'')));
+      const filtered = fArea ? bpScores.filter(s=> s.tipo==='empresa' || (s.area||'')===fArea || (s.liderArea||'')===fArea) : bpScores;
+      filtered.sort((a,b)=> (b.period||'').localeCompare(a.period||'') || (a.tipo||'area').localeCompare(b.tipo||'area') || (a.area||'').localeCompare(b.area||''));
+      if(filtered.length===0) return '<div style="text-align:center;padding:30px;color:#aaa;font-size:13px;border:1px dashed #ddd;border-radius:10px;">Nenhum registro de eNPS/lNPS ainda.</div>';
+      const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
+      const tipoLabels = {empresa:'Empresa',area:'Área',lider:'Líder'};
+      const tipoBg = {empresa:'#1B1B2F',area:'#00BFA5',lider:'#8b5cf6'};
+      return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nível</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área / Líder</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Data</th><th style="padding:10px 14px;"></th></tr></thead><tbody>'+
+      filtered.map((s,i)=>{
+        const tipo = s.tipo||'area';
+        const enpsColor = s.enps>=50?'#16a34a':s.enps>=0?'#f59e0b':'#ef4444';
+        const lnpsColor = s.lnps>=50?'#16a34a':s.lnps>=0?'#f59e0b':'#ef4444';
+        const dtStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '';
+        let refLabel = '';
+        if(tipo==='empresa') refLabel = '<span style="color:#888;font-style:italic;">Geral</span>';
+        else if(tipo==='lider') refLabel = '<span style="font-weight:600;">'+esc(s.lider||'')+'</span>'+(s.area?' <span style="font-size:11px;color:#888;">('+esc(s.area)+')</span>':'');
+        else { const ac = areaColors[s.area]||'#64748b'; refLabel = '<span style="background:'+ac+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+esc(s.area)+'</span>'; }
+        const hasNotes = s.forcas||s.atencao||s.recomendacoes;
+        let row = '<tr style="border-bottom:'+(hasNotes?'none':'1px solid #f0f0f0')+';'+(i%2===1?'background:#fafbfc;':'')+'" class="score-row" data-score-idx="'+i+'"><td style="padding:10px 14px;"><span style="background:'+(tipoBg[tipo]||'#64748b')+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+(tipoLabels[tipo]||tipo)+'</span></td><td style="padding:10px 14px;">'+refLabel+'</td><td style="padding:10px 14px;font-weight:600;">'+esc(s.period)+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td><td style="padding:10px 14px;text-align:center;font-size:12px;color:#888;">'+dtStr+'</td><td style="padding:10px 14px;text-align:center;"><button class="btn btn-danger btn-sm score-delete" data-score-id="'+esc(s.id)+'">'+ICONS.trash+'</button></td></tr>';
+        if(hasNotes){
+          row += '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td colspan="7" style="padding:4px 14px 12px;">' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">' +
+            (s.forcas?'<div><span style="font-size:10px;text-transform:uppercase;color:#16a34a;font-weight:700;">Forças</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.forcas)+'</p></div>':'<div></div>') +
+            (s.atencao?'<div><span style="font-size:10px;text-transform:uppercase;color:#f59e0b;font-weight:700;">Pontos de Atenção</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.atencao)+'</p></div>':'<div></div>') +
+            (s.recomendacoes?'<div><span style="font-size:10px;text-transform:uppercase;color:#3b82f6;font-weight:700;">Recomendações</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.recomendacoes)+'</p></div>':'<div></div>') +
+            '</div></td></tr>';
+        }
+        return row;
+      }).join('')+'</tbody></table></div>';
+    })()}
+  </div>
+
+  <!-- Resumo Mensal -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Resumo Mensal Detalhado</div>
+    <div style="overflow-x:auto;">
+      <table id="tblDashResumoMensal" style="width:100%;border-collapse:collapse;font-size:13px;"></table>
     </div>
   </div>
 
+  <!-- Status por área (meeting progress) -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+      <div class="section-title">Status por área — ${period}</div>
+      <div style="font-weight:800;color:var(--primary);">${pct}% concluído</div>
+    </div>
+    <div class="progress-bar" style="margin-bottom:16px;"><div class="progress-fill" style="width:${pct}%;"></div></div>
+    ${rows.map(r=>{
+      const hasImported = DB.colaboradores.length > 0;
+      const auto = hasImported ? computeAutoData(r.area, period) : null;
+      const hcLabel = auto ? auto.headcount+' colaboradores' : '';
+      const admLabel = auto && auto.admissoes.length ? ' . '+auto.admissoes.length+' adm.' : '';
+      const desLabel = auto && auto.desligamentos.length ? ' . '+auto.desligamentos.length+' desl.' : '';
+      const metaBase = r.meeting ? (r.meeting.gerente||'---')+' . '+fmtDate(r.meeting.date) : (hcLabel||'Sem registro no período');
+      const metaExtra = r.meeting ? (hcLabel?' . HC: '+auto.headcount:'') : (admLabel+desLabel);
+      return '<div class="area-row">'+
+        '<div><div class="area-name">'+esc(r.area)+'</div><div class="area-meta">'+metaBase+metaExtra+'</div></div>'+
+        statusBadge(r.meeting?meetingStatus(r.meeting):'Não iniciada')+
+      '</div>';
+    }).join('')}
+  </div>
+
+  <!-- Aniversários -->
   ${(()=>{
     const aniv = getAniversarios(30);
     if(!aniv.length) return '';
-    return '<div class="card" style="margin-top:20px;"><div class="section-title" style="display:flex;align-items:center;gap:8px;">'+ICONS.cake+' Aniversários nos próximos 30 dias ('+aniv.length+')</div>'
+    return '<div class="card" style="margin-bottom:20px;"><div class="section-title" style="display:flex;align-items:center;gap:8px;">'+ICONS.cake+' Aniversários nos próximos 30 dias ('+aniv.length+')</div>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px;">'
       + aniv.map(function(a){
         var isToday = a.diff===0;
@@ -1955,24 +2238,277 @@ function renderDashboard(){
       + '</div></div>';
   })()}`;
 }
+
 function bindDashboard(){
-  document.getElementById('dashPeriod').addEventListener('change', function(){
-    UI.filters.dashPeriod = this.value; renderPageContent();
-  });
+  const rerender = ()=>{ const c=document.getElementById('content'); c.innerHTML=renderDashboard(); bindDashboard(); };
+
+  // Filter bindings
+  const elFrom = document.getElementById('dashDateFrom');
+  const elTo = document.getElementById('dashDateTo');
+  const elArea = document.getElementById('dashAreaFilter');
+  const elLider = document.getElementById('dashLiderFilter');
+  if(elFrom) elFrom.addEventListener('change', ()=>{ UI.dashDateFrom=elFrom.value; rerender(); });
+  if(elTo) elTo.addEventListener('change', ()=>{ UI.dashDateTo=elTo.value; rerender(); });
+  if(elArea) elArea.addEventListener('change', ()=>{ UI.dashArea=elArea.value; rerender(); });
+  if(elLider) elLider.addEventListener('change', ()=>{ UI.dashLider=elLider.value; rerender(); });
+
+  // Gather data for charts (same logic as render)
   const bp = currentBP();
-  const period = UI.filters.dashPeriod || currentPeriodGuess();
-  const rows = latestMeetingsByArea(bp, period);
-  const trendPeriods = CONFIG.periods.slice(6,12);
-  const trendData = trendPeriods.map(p=>{
-    const ms = DB.meetings.filter(m=>m.bpId===bp.id && m.period===p);
-    if(!ms.length) return null;
-    return Math.round((ms.reduce((s,m)=>s+(m.turnover||0),0)/ms.length)*100)/100;
+  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+  const fArea = UI.dashArea || '';
+  const fLider = UI.dashLider || '';
+  let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
+  let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
+  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
+  let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+  if(fArea){
+    myColabs = myColabs.filter(c=>(c.area||c.departamento||'')===fArea);
+    myDeslig = myDeslig.filter(d=>(d.area||'')===fArea);
+    myPromos = myPromos.filter(p=>(p.area||'')===fArea);
+    myMeetings = myMeetings.filter(m=> normalizeStr(m.area||'')===normalizeStr(fArea));
+  }
+  if(fLider){
+    myColabs = myColabs.filter(c=>(c.lider||c['Líder']||c.Lider||'')===fLider);
+    myDeslig = myDeslig.filter(d=>(d.lider||d['Líder']||d.Lider||'')===fLider);
+    myPromos = myPromos.filter(p=>(p.lider||p['Líder']||p.Lider||'')===fLider);
+  }
+
+  const months = buildMonthLabels(12);
+  const labels = months.map(m=>m.label);
+  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
+  const periods = CONFIG.periods;
+
+  // Admissões vs Desligamentos
+  const admData = countByMonth(myColabs, 'admissao', months);
+  const deslData = countByMonth(myDeslig, 'ultimoDia', months);
+  destroyChart('chartDashAdmDesl');
+  const elAdmDesl = document.getElementById('chartDashAdmDesl');
+  if(elAdmDesl) CHARTS.chartDashAdmDesl = new Chart(elAdmDesl, {
+    type:'bar',
+    data:{labels, datasets:[
+      {label:'Admissões', data:admData, backgroundColor:'#00BFA5'},
+      {label:'Desligamentos', data:deslData, backgroundColor:'#ef4444'}
+    ]},
+    options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
   });
-  destroyChart('chartTrend');
-  CHARTS.chartTrend = new Chart(document.getElementById('chartTrend'), {
+
+  // Promoções
+  const promoData = countByMonth(myPromos, 'mesDate', months);
+  destroyChart('chartDashPromos');
+  const elPromos = document.getElementById('chartDashPromos');
+  if(elPromos) CHARTS.chartDashPromos = new Chart(elPromos, {
+    type:'bar',
+    data:{labels, datasets:[{label:'Promoções', data:promoData, backgroundColor:'#8b5cf6'}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
+  });
+
+  // eNPS / lNPS evolution
+  const periodEnps = periods.map(p=>{
+    const sc = myScores.filter(s=>s.period===p);
+    if(sc.length) return Math.round(sc.reduce((s,r)=>s+(r.enps||0),0)/sc.length);
+    const ms = myMeetings.filter(m=>m.period===p);
+    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.enps||0),0)/ms.length) : null;
+  });
+  const periodLnps = periods.map(p=>{
+    const sc = myScores.filter(s=>s.period===p);
+    if(sc.length) return Math.round(sc.reduce((s,r)=>s+(r.lnps||0),0)/sc.length);
+    const ms = myMeetings.filter(m=>m.period===p);
+    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.lnps||0),0)/ms.length) : null;
+  });
+
+  destroyChart('chartDashEnps');
+  const elEnps = document.getElementById('chartDashEnps');
+  if(elEnps) CHARTS.chartDashEnps = new Chart(elEnps, {
     type:'line',
-    data:{ labels:trendPeriods, datasets:[{ label:'Turnover médio (%)', data:trendData, borderColor:'#00BFA5', backgroundColor:'rgba(0,191,165,0.12)', fill:true, tension:.3 }] },
-    options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#00BFA5', backgroundColor:'rgba(0,191,165,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+  });
+
+  destroyChart('chartDashLnps');
+  const elLnps = document.getElementById('chartDashLnps');
+  if(elLnps) CHARTS.chartDashLnps = new Chart(elLnps, {
+    type:'line',
+    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#1B1B2F', backgroundColor:'rgba(27,27,47,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+  });
+
+  // Headcount & Turnover evolution
+  function toMonthKey(d){
+    if(!d) return null;
+    const dt = d instanceof Date ? d : new Date(d);
+    if(isNaN(dt)) return null;
+    return dt.getFullYear()*100+(dt.getMonth()+1);
+  }
+  const monthlyHC = months.map(m=>{
+    const [y,mo] = m.key.split('-').map(Number);
+    const endOfMonth = y*100+mo;
+    const active = myColabs.filter(c=>{
+      const admKey = toMonthKey(c.admissao||c['Data de admissão']||c['data de admissao']);
+      if(!admKey || admKey > endOfMonth) return false;
+      return true;
+    });
+    const desligados = myDeslig.filter(d=>{
+      const dKey = toMonthKey(d.ultimoDia||d.mesDate);
+      return dKey && dKey <= endOfMonth;
+    });
+    const deslNames = new Set(desligados.map(d=>normalizeStr(d.nome||'')));
+    return active.filter(c=>!deslNames.has(normalizeStr(c.nome||c.Nome||''))).length;
+  });
+  const monthlyTO = months.map((m,i)=>{
+    const hc = monthlyHC[i];
+    if(!hc) return 0;
+    return Math.round(deslData[i]/hc*10000)/100;
+  });
+
+  destroyChart('chartDashHCevo');
+  const elHC = document.getElementById('chartDashHCevo');
+  if(elHC) CHARTS.chartDashHCevo = new Chart(elHC, {
+    type:'line',
+    data:{labels, datasets:[{label:'Headcount', data:monthlyHC, borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,0.1)', fill:true, tension:.3}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+  });
+
+  destroyChart('chartDashTOevo');
+  const elTO = document.getElementById('chartDashTOevo');
+  if(elTO) CHARTS.chartDashTOevo = new Chart(elTO, {
+    type:'line',
+    data:{labels, datasets:[{label:'Turnover %', data:monthlyTO, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.1)', fill:true, tension:.3}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{callback:function(v){return v+'%'}}}}}
+  });
+
+  // Desligamentos by tipo (doughnut)
+  const tipoCount = {};
+  myDeslig.forEach(d=>{ const t=(d.tipo||'Não informado').trim(); tipoCount[t]=(tipoCount[t]||0)+1; });
+  const tipoLabels = Object.keys(tipoCount);
+  const tipoColors = ['#ef4444','#f59e0b','#8b5cf6','#0ea5e9','#10b981','#ec4899','#64748b'];
+  destroyChart('chartDashDeslTipo');
+  const elTipo = document.getElementById('chartDashDeslTipo');
+  if(elTipo) CHARTS.chartDashDeslTipo = new Chart(elTipo, {
+    type:'doughnut',
+    data:{labels:tipoLabels, datasets:[{data:tipoLabels.map(t=>tipoCount[t]), backgroundColor:tipoColors}]},
+    options:{responsive:true, plugins:{legend:{position:'bottom'}}}
+  });
+
+  // Desligamentos by motivo
+  const motivoCount = {};
+  myDeslig.forEach(d=>{ const m=(d.motivo||'Não informado').trim(); motivoCount[m]=(motivoCount[m]||0)+1; });
+  const motivoLabels = Object.keys(motivoCount).sort((a,b)=>motivoCount[b]-motivoCount[a]);
+  destroyChart('chartDashDeslMotivo');
+  const elMotivo = document.getElementById('chartDashDeslMotivo');
+  if(elMotivo) CHARTS.chartDashDeslMotivo = new Chart(elMotivo, {
+    type:'bar',
+    data:{labels:motivoLabels, datasets:[{label:'Qtd', data:motivoLabels.map(m=>motivoCount[m]), backgroundColor:'#ef4444'}]},
+    options:{indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true, ticks:{stepSize:1}}}}
+  });
+
+  // Summary table
+  const tbl = document.getElementById('tblDashResumoMensal');
+  if(tbl){
+    let html = '<thead><tr style="background:#f9fafb;"><th style="padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Mês</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Admissões</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Desligamentos</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Promoções</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Saldo</th></tr></thead><tbody>';
+    months.forEach((m,i)=>{
+      const saldo = admData[i]-deslData[i];
+      const saldoColor = saldo>0?'#10b981':saldo<0?'#ef4444':'#888';
+      const saldoSign = saldo>0?'+':'';
+      html += '<tr style="border-bottom:1px solid #f0f0f0;">';
+      html += '<td style="padding:10px 12px;font-weight:600;">'+m.label+'</td>';
+      html += '<td style="padding:10px 12px;text-align:center;color:#00BFA5;font-weight:700;">'+admData[i]+'</td>';
+      html += '<td style="padding:10px 12px;text-align:center;color:#ef4444;font-weight:700;">'+deslData[i]+'</td>';
+      html += '<td style="padding:10px 12px;text-align:center;color:#8b5cf6;font-weight:700;">'+promoData[i]+'</td>';
+      html += '<td style="padding:10px 12px;text-align:center;color:'+saldoColor+';font-weight:700;">'+saldoSign+saldo+'</td>';
+      html += '</tr>';
+    });
+    html += '</tbody>';
+    tbl.innerHTML = html;
+  }
+
+  // Regime por Área & Salário por Área charts
+  (()=>{
+    let cList = myColabs;
+    const areaMap = {};
+    cList.forEach(c=>{
+      const a = c.area||c.departamento||'(Sem área)';
+      if(!areaMap[a]) areaMap[a] = {clt:0,pj:0,estagio:0,totalSalario:0};
+      const r = normalizeStr(c.regime||c.Regime||'');
+      if(r==='clt') areaMap[a].clt++;
+      else if(r==='pj') areaMap[a].pj++;
+      else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') areaMap[a].estagio++;
+      const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
+      if(!isNaN(sal)) areaMap[a].totalSalario += sal;
+    });
+    const aKeys = Object.keys(areaMap).sort();
+    destroyChart('chartDashRegimeArea');
+    const elRegime = document.getElementById('chartDashRegimeArea');
+    if(elRegime){
+      CHARTS.chartDashRegimeArea = new Chart(elRegime, {
+        type:'bar',
+        data:{labels:aKeys, datasets:[
+          {label:'CLT', data:aKeys.map(a=>areaMap[a].clt), backgroundColor:'#00BFA5'},
+          {label:'PJ', data:aKeys.map(a=>areaMap[a].pj), backgroundColor:'#8b5cf6'},
+          {label:'Estágio', data:aKeys.map(a=>areaMap[a].estagio), backgroundColor:'#f59e0b'}
+        ]},
+        options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{x:{ticks:{maxRotation:45,minRotation:30,font:{size:10}}},y:{beginAtZero:true,ticks:{stepSize:1}}}}
+      });
+    }
+    destroyChart('chartDashSalarioArea');
+    const elSal = document.getElementById('chartDashSalarioArea');
+    if(elSal){
+      CHARTS.chartDashSalarioArea = new Chart(elSal, {
+        type:'bar',
+        data:{labels:aKeys, datasets:[{label:'Total Salários (R$)', data:aKeys.map(a=>areaMap[a].totalSalario), backgroundColor:'#3b82f6'}]},
+        options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{maxRotation:45,minRotation:30,font:{size:10}}},y:{beginAtZero:true,ticks:{callback:v=>'R$ '+(v/1000).toFixed(0)+'k'}}}}
+      });
+    }
+  })();
+
+  // Score bindings
+  const btnNewScore = document.getElementById('btnNewScore');
+  const formScore = document.getElementById('formScore');
+  if(btnNewScore && formScore) btnNewScore.addEventListener('click', ()=>{ formScore.style.display = formScore.style.display==='none'?'block':'none'; });
+  const btnCancelScore = document.getElementById('btnCancelScore');
+  if(btnCancelScore) btnCancelScore.addEventListener('click', ()=>{ formScore.style.display='none'; });
+
+  const scTipo = document.getElementById('sc_tipo');
+  const scAreaWrap = document.getElementById('sc_area_wrap');
+  const scLiderWrap = document.getElementById('sc_lider_wrap');
+  if(scTipo) scTipo.addEventListener('change', ()=>{
+    const v = scTipo.value;
+    if(scAreaWrap) scAreaWrap.style.display = v==='empresa'?'none':'block';
+    if(scLiderWrap) scLiderWrap.style.display = v==='lider'?'block':'none';
+  });
+
+  const btnSaveScore = document.getElementById('btnSaveScore');
+  if(btnSaveScore) btnSaveScore.addEventListener('click', ()=>{
+    const tipo = document.getElementById('sc_tipo').value;
+    const area = document.getElementById('sc_area').value;
+    const lider = (document.getElementById('sc_lider')||{}).value||'';
+    const period = document.getElementById('sc_period').value;
+    const enps = Number(document.getElementById('sc_enps').value);
+    const lnps = Number(document.getElementById('sc_lnps').value);
+    if(tipo==='area' && !area){ alert('Selecione a área.'); return; }
+    if(tipo==='lider' && !lider.trim()){ alert('Informe o nome do líder.'); return; }
+    if(isNaN(enps)){ alert('Informe o eNPS.'); return; }
+    if(isNaN(lnps)){ alert('Informe o lNPS.'); return; }
+    let existing = -1;
+    if(tipo==='empresa') existing = DB.scores.findIndex(s=> s.tipo==='empresa' && s.period===period);
+    else if(tipo==='area') existing = DB.scores.findIndex(s=> (s.tipo||'area')==='area' && normalizeStr(s.area)===normalizeStr(area) && s.period===period);
+    else existing = DB.scores.findIndex(s=> s.tipo==='lider' && normalizeStr(s.lider||'')===normalizeStr(lider) && s.period===period);
+    const forcas = (document.getElementById('sc_forcas')||{}).value||'';
+    const atencao = (document.getElementById('sc_atencao')||{}).value||'';
+    const recomendacoes = (document.getElementById('sc_recomendacoes')||{}).value||'';
+    const record = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), tipo, area: tipo==='empresa'?'':area, lider: tipo==='lider'?lider.trim():'', period, enps, lnps, forcas, atencao, recomendacoes, createdAt: new Date().toISOString() };
+    if(existing>=0) DB.scores[existing] = record;
+    else DB.scores.push(record);
+    persist('scores');
+    rerender();
+  });
+
+  document.querySelectorAll('.score-delete').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(!confirm('Excluir este registro?')) return;
+      DB.scores = DB.scores.filter(s=>s.id!==btn.getAttribute('data-score-id'));
+      persist('scores');
+      rerender();
+    });
   });
 }
 
@@ -3175,64 +3711,6 @@ function bindHistory(){
   CHARTS.chartHistTO = new Chart(document.getElementById('chartHistTO'), { type:'line', data:{labels, datasets:[{label:'Turnover', data:toData, borderColor:'#f5a623', tension:.3}]}, options:{plugins:{legend:{display:false}}} });
   destroyChart('chartHistENPS');
   CHARTS.chartHistENPS = new Chart(document.getElementById('chartHistENPS'), { type:'line', data:{labels, datasets:[{label:'eNPS', data:enpsData, borderColor:'#1B1B2F', tension:.3}]}, options:{plugins:{legend:{display:false}}} });
-}
-
-/* =========================================================
-   EXECUTIVE DASHBOARD
-========================================================= */
-function renderExecutive(){
-  const period = UI.execFilterPeriod || currentPeriodGuess();
-  const all = DB.meetings.filter(m=>m.period===period);
-  const totalHC = all.reduce((s,m)=>s+(m.headcount||0),0);
-  const totalAreas = allAreas().length;
-  const completed = all.filter(m=>meetingStatus(m)==='Concluída').length;
-  const avgTurnover = all.length? all.reduce((s,m)=>s+(m.turnover||0),0)/all.length : 0;
-  const avgEnps = all.length? all.reduce((s,m)=>s+(m.enps||0),0)/all.length : 0;
-  const totalAdm = all.reduce((s,m)=>s+(m.admissoesCount||0),0);
-  const totalDesl = all.reduce((s,m)=>s+(m.desligamentosCount||0),0);
-  const totalRisks = all.reduce((s,m)=>s+((m.riscos||[]).length),0);
-
-  return `
-  <div class="toolbar">
-    <select id="execPeriod">${CONFIG.periods.map(p=>`<option value="${p}" ${p===period?'selected':''}>${p}</option>`).join('')}</select>
-  </div>
-  <div class="grid grid-4" style="margin-bottom:20px;">
-    <div class="card kpi-card"><div class="kpi-value">${totalAreas}</div><div class="kpi-label">Áreas totais</div></div>
-    <div class="card kpi-card"><div class="kpi-value">${fmtNum(totalHC)}</div><div class="kpi-label">Headcount consolidado</div></div>
-    <div class="card kpi-card"><div class="kpi-value">${completed}/${all.length}</div><div class="kpi-label">Reuniões concluídas</div></div>
-    <div class="card kpi-card"><div class="kpi-value">${fmtPct(avgTurnover)}</div><div class="kpi-label">Turnover médio</div></div>
-    <div class="card kpi-card"><div class="kpi-value">${Math.round(avgEnps)}</div><div class="kpi-label">eNPS médio</div></div>
-    <div class="card kpi-card"><div class="kpi-value">${totalAdm}</div><div class="kpi-label">Admissões no período</div></div>
-    <div class="card kpi-card"><div class="kpi-value">${totalDesl}</div><div class="kpi-label">Desligamentos no período</div></div>
-    <div class="card kpi-card"><div class="kpi-value">${totalRisks}</div><div class="kpi-label">Riscos mapeados</div></div>
-  </div>
-  <div class="grid grid-2" style="margin-bottom:20px;">
-    <div class="card"><div class="section-title">Headcount por BP</div><canvas id="chartExecHC" height="200"></canvas></div>
-    <div class="card"><div class="section-title">Turnover por BP</div><canvas id="chartExecTO" height="200"></canvas></div>
-  </div>
-  <div class="card"><div class="section-title">Evolução consolidada — Headcount total</div><canvas id="chartExecEvo" height="120"></canvas></div>`;
-}
-function bindExecutive(){
-  document.getElementById('execPeriod').addEventListener('change', function(){ UI.execFilterPeriod=this.value; renderPageContent(); });
-  const period = UI.execFilterPeriod || currentPeriodGuess();
-  const bpLabels = CONFIG.bps.map(b=>b.name);
-  const bpHC = CONFIG.bps.map(bp=>{
-    const ms = DB.meetings.filter(m=>m.bpId===bp.id && m.period===period);
-    return ms.reduce((s,m)=>s+(m.headcount||0),0);
-  });
-  const bpTO = CONFIG.bps.map(bp=>{
-    const ms = DB.meetings.filter(m=>m.bpId===bp.id && m.period===period);
-    return ms.length? Math.round((ms.reduce((s,m)=>s+(m.turnover||0),0)/ms.length)*100)/100 : 0;
-  });
-  destroyChart('chartExecHC');
-  CHARTS.chartExecHC = new Chart(document.getElementById('chartExecHC'), { type:'bar', data:{labels:bpLabels, datasets:[{label:'Headcount', data:bpHC, backgroundColor:'#00BFA5'}]}, options:{plugins:{legend:{display:false}}} });
-  destroyChart('chartExecTO');
-  CHARTS.chartExecTO = new Chart(document.getElementById('chartExecTO'), { type:'bar', indexAxis:'y', data:{labels:bpLabels, datasets:[{label:'Turnover %', data:bpTO, backgroundColor:'#f5a623'}]}, options:{plugins:{legend:{display:false}}} });
-
-  const labels = CONFIG.periods;
-  const evo = labels.map(p=> DB.meetings.filter(m=>m.period===p).reduce((s,m)=>s+(m.headcount||0),0) );
-  destroyChart('chartExecEvo');
-  CHARTS.chartExecEvo = new Chart(document.getElementById('chartExecEvo'), { type:'line', data:{labels, datasets:[{label:'Headcount total', data:evo, borderColor:'#1B1B2F', backgroundColor:'rgba(27,27,47,0.08)', fill:true, tension:.3}]}, options:{plugins:{legend:{display:false}}} });
 }
 
 /* =========================================================
@@ -4727,539 +5205,9 @@ function getIndicadoresData(filterArea){
   return {bp, bpAreas, myColabs, myDeslig, myPromos, myMeetings};
 }
 
-function renderIndicadores(){
-  const fArea = UI.indFilterArea || '';
-  const {bp, bpAreas, myColabs, myDeslig, myPromos, myMeetings} = getIndicadoresData(fArea);
-  const allAreasList = bp.areas.slice().sort();
-
-  const totalAtivos = myColabs.length;
-  const totalDeslig = myDeslig.length;
-  const totalPromos = myPromos.length;
-  // Use area-level scores for eNPS/lNPS (fallback to meetings)
-  const kpiScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
-  const avgEnps = kpiScores.length ? Math.round(kpiScores.reduce((s,r)=>s+(r.enps||0),0)/kpiScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0);
-  const avgLnps = kpiScores.length ? Math.round(kpiScores.reduce((s,r)=>s+(r.lnps||0),0)/kpiScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0);
-
-  return `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:16px;">
-      <div>
-        <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">${ICONS.chart} Indicadores e Comparativos</h2>
-        <p style="margin:4px 0 0;color:#888;font-size:13px;">Evolução mensal dos dados importados e registrados. Últimos 12 meses.${fArea?' · Filtrado: '+esc(fArea):''}</p>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <select id="indAreaFilter" class="select" style="min-width:150px;">
-          <option value="">Todas as áreas</option>
-          ${allAreasList.map(a=>`<option value="${esc(a)}" ${a===fArea?'selected':''}>${esc(a)}</option>`).join('')}
-        </select>
-        <button class="btn btn-outline" id="btnPdfInd" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.file} Baixar PDF</button>
-      </div>
-    </div>
-
-    <div class="grid grid-4" style="margin-bottom:20px;">
-      <div class="card kpi-card"><div class="kpi-value" style="color:var(--primary);">${totalAtivos}</div><div class="kpi-label">Colaboradores ativos</div></div>
-      <div class="card kpi-card"><div class="kpi-value" style="color:#ef4444;">${totalDeslig}</div><div class="kpi-label">Desligamentos total</div></div>
-      <div class="card kpi-card"><div class="kpi-value" style="color:#8b5cf6;">${totalPromos}</div><div class="kpi-label">Promoções total</div></div>
-      <div class="card kpi-card"><div class="kpi-value">${avgEnps} <span style="font-size:14px;color:#888;">/ ${avgLnps}</span></div><div class="kpi-label">eNPS / lNPS médio</div></div>
-    </div>
-
-    <div class="grid grid-2" style="margin-bottom:20px;">
-      <div class="card"><div class="section-title">Admissões vs Desligamentos (por mês)</div><canvas id="chartAdmDesl" height="220"></canvas></div>
-      <div class="card"><div class="section-title">Promoções (por mês)</div><canvas id="chartPromos" height="220"></canvas></div>
-    </div>
-
-    <div class="grid grid-2" style="margin-bottom:20px;">
-      <div class="card"><div class="section-title">eNPS — Evolução por período</div><canvas id="chartEnps" height="220"></canvas></div>
-      <div class="card"><div class="section-title">lNPS — Evolução por período</div><canvas id="chartLnps" height="220"></canvas></div>
-    </div>
-
-    <div class="grid grid-2" style="margin-bottom:20px;">
-      <div class="card"><div class="section-title">Headcount — Evolução mensal</div><canvas id="chartHCevo" height="220"></canvas></div>
-      <div class="card"><div class="section-title">Turnover (%) — Evolução mensal</div><canvas id="chartTOevo" height="220"></canvas></div>
-    </div>
-
-    <div class="grid grid-2" style="margin-bottom:20px;">
-      <div class="card"><div class="section-title">Desligamentos por Tipo</div><canvas id="chartDeslTipo" height="220"></canvas></div>
-      <div class="card"><div class="section-title">Desligamentos por Motivo</div><canvas id="chartDeslMotivo" height="220"></canvas></div>
-    </div>
-
-    <div class="card" style="margin-bottom:20px;">
-      <div class="section-title">Resumo Mensal Detalhado</div>
-      <div style="overflow-x:auto;">
-        <table id="tblResumoMensal" style="width:100%;border-collapse:collapse;font-size:13px;"></table>
-      </div>
-    </div>
-
-    <!-- eNPS / lNPS Registration -->
-    <div class="card" style="margin-bottom:20px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <div>
-          <div class="section-title" style="margin:0;">Registros de eNPS e lNPS</div>
-          <p style="margin:4px 0 0;color:#888;font-size:12px;">Registre as notas por empresa, área ou líder. Ao criar uma reunião, os valores da área serão puxados automaticamente.</p>
-        </div>
-        <button class="btn btn-primary" id="btnNewScore" style="width:auto;">${ICONS.plus} Novo Registro</button>
-      </div>
-
-      <div id="formScore" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:20px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
-          <div class="field"><label>Nível</label>
-            <select id="sc_tipo" class="select">
-              <option value="area">Área</option>
-              <option value="empresa">Empresa Geral</option>
-              <option value="lider">Líder</option>
-            </select>
-          </div>
-          <div class="field" id="sc_area_wrap"><label>Área</label>
-            <select id="sc_area" class="select">
-              ${bp.areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}
-            </select>
-          </div>
-          <div class="field" id="sc_lider_wrap" style="display:none;"><label>Líder</label>
-            <input type="text" id="sc_lider" list="sc_lider_list" placeholder="Nome do líder" class="select">
-            <datalist id="sc_lider_list">
-              ${[...new Set(DB.colaboradores.filter(c=>c.lider).map(c=>c.lider))].sort().map(l=>'<option value="'+esc(l)+'">').join('')}
-            </datalist>
-          </div>
-          <div class="field"><label>Período</label>
-            <select id="sc_period" class="select">
-              ${CONFIG.periods.map(p=>'<option value="'+p+'">'+p+'</option>').join('')}
-            </select>
-          </div>
-          <div class="field"><label>eNPS</label><input type="number" id="sc_enps" placeholder="-100 a 100"></div>
-          <div class="field"><label>lNPS</label><input type="number" id="sc_lnps" placeholder="-100 a 100"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
-          <div class="field"><label>Principais Forças</label><textarea id="sc_forcas" rows="3" placeholder="Pontos fortes identificados..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
-          <div class="field"><label>Pontos de Atenção</label><textarea id="sc_atencao" rows="3" placeholder="Pontos que precisam de atenção..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
-          <div class="field"><label>Recomendações</label><textarea id="sc_recomendacoes" rows="3" placeholder="Ações recomendadas..." style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;"></textarea></div>
-        </div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button class="btn btn-outline" id="btnCancelScore">Cancelar</button>
-          <button class="btn btn-primary" id="btnSaveScore" style="width:auto;">Salvar</button>
-        </div>
-      </div>
-
-    <!-- Composição por Área -->
-    <div class="card" style="margin-bottom:20px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <div>
-          <div class="section-title" style="margin:0;">Composição por Área — Regime e Salários</div>
-          <p style="margin:4px 0 0;color:#888;font-size:12px;">Quantidade de CLT, PJ, Estagiário por área e valor total de salários.</p>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <select id="compLiderFilter" class="select" style="min-width:180px;">
-            <option value="">Todos os líderes</option>
-            ${[...new Set(myColabs.map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))].sort().map(l=>'<option value="'+esc(l)+'"'+(UI.compLiderFilter===l?' selected':'')+'>'+esc(l)+'</option>').join('')}
-          </select>
-        </div>
-      </div>
-      ${(()=>{
-        let cList = myColabs;
-        if(UI.compLiderFilter) cList = cList.filter(c=>(c.lider||c['Líder']||c.Lider||'')===UI.compLiderFilter);
-        // Group by area
-        const areaMap = {};
-        cList.forEach(c=>{
-          const a = c.area||c.departamento||'(Sem área)';
-          if(!areaMap[a]) areaMap[a] = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
-          const r = normalizeStr(c.regime||c.Regime||'');
-          if(r==='clt') areaMap[a].clt++;
-          else if(r==='pj') areaMap[a].pj++;
-          else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') areaMap[a].estagio++;
-          else if(r==='temporario'||r==='temporário') areaMap[a].temp++;
-          else areaMap[a].outros++;
-          areaMap[a].total++;
-          const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
-          if(!isNaN(sal)) areaMap[a].totalSalario += sal;
-        });
-        const areaKeys = Object.keys(areaMap).sort();
-        if(!areaKeys.length) return '<div style="text-align:center;padding:30px;color:#aaa;">Nenhum colaborador encontrado.</div>';
-        // Totals row
-        const totals = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
-        areaKeys.forEach(a=>{ Object.keys(totals).forEach(k=>totals[k]+=areaMap[a][k]); });
-        return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">'+
-          '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">CLT</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">PJ</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Estágio</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Temporário</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Outros</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;font-weight:800;">Total</th>'+
-          '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:#888;">Valor Total Salários</th>'+
-          '</tr></thead><tbody>'+
-          areaKeys.map((a,i)=>{
-            const d = areaMap[a];
-            return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
-              '<td style="padding:10px 14px;font-weight:600;">'+esc(a)+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.clt+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.pj+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.estagio+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.temp+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.outros+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;font-weight:800;">'+d.total+'</td>'+
-              '<td style="padding:10px 14px;text-align:right;font-weight:600;">R$ '+d.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
-              '</tr>';
-          }).join('')+
-          '<tr style="background:#f0fdf4;border-top:2px solid var(--primary);font-weight:800;">'+
-            '<td style="padding:10px 14px;">TOTAL</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.clt+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.pj+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.estagio+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.temp+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.outros+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.total+'</td>'+
-            '<td style="padding:10px 14px;text-align:right;font-size:15px;">R$ '+totals.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
-          '</tr></tbody></table></div>';
-      })()}
-    </div>
-
-    <!-- Composição por Líder -->
-    <div class="card" style="margin-bottom:20px;">
-      <div class="section-title">Composição por Líder — Regime e Salários</div>
-      ${(()=>{
-        let cList = myColabs;
-        if(UI.compLiderFilter) cList = cList.filter(c=>(c.lider||c['Líder']||c.Lider||'')===UI.compLiderFilter);
-        const liderMap = {};
-        cList.forEach(c=>{
-          const l = c.lider||c['Líder']||c.Lider||'(Sem líder)';
-          if(!liderMap[l]) liderMap[l] = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
-          const r = normalizeStr(c.regime||c.Regime||'');
-          if(r==='clt') liderMap[l].clt++;
-          else if(r==='pj') liderMap[l].pj++;
-          else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') liderMap[l].estagio++;
-          else if(r==='temporario'||r==='temporário') liderMap[l].temp++;
-          else liderMap[l].outros++;
-          liderMap[l].total++;
-          const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
-          if(!isNaN(sal)) liderMap[l].totalSalario += sal;
-        });
-        const liderKeys = Object.keys(liderMap).sort();
-        if(!liderKeys.length) return '<div style="text-align:center;padding:30px;color:#aaa;">Nenhum colaborador encontrado.</div>';
-        const totals = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
-        liderKeys.forEach(l=>{ Object.keys(totals).forEach(k=>totals[k]+=liderMap[l][k]); });
-        return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">'+
-          '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Líder</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">CLT</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">PJ</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Estágio</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Temporário</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Outros</th>'+
-          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;font-weight:800;">Total</th>'+
-          '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:#888;">Valor Total Salários</th>'+
-          '</tr></thead><tbody>'+
-          liderKeys.map((l,i)=>{
-            const d = liderMap[l];
-            return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
-              '<td style="padding:10px 14px;font-weight:600;">'+esc(l)+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.clt+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.pj+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.estagio+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.temp+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;">'+d.outros+'</td>'+
-              '<td style="padding:10px 14px;text-align:center;font-weight:800;">'+d.total+'</td>'+
-              '<td style="padding:10px 14px;text-align:right;font-weight:600;">R$ '+d.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
-              '</tr>';
-          }).join('')+
-          '<tr style="background:#f0fdf4;border-top:2px solid var(--primary);font-weight:800;">'+
-            '<td style="padding:10px 14px;">TOTAL</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.clt+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.pj+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.estagio+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.temp+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.outros+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;">'+totals.total+'</td>'+
-            '<td style="padding:10px 14px;text-align:right;font-size:15px;">R$ '+totals.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
-          '</tr></tbody></table></div>';
-      })()}
-    </div>
-
-    <div class="grid grid-2" style="margin-bottom:20px;">
-      <div class="card"><div class="section-title">Regime por Área</div><canvas id="chartRegimeArea" height="280"></canvas></div>
-      <div class="card"><div class="section-title">Salários por Área</div><canvas id="chartSalarioArea" height="280"></canvas></div>
-    </div>
-
-    <!-- eNPS / lNPS Registration -->
-    <div class="card" style="margin-bottom:20px;">
-      ${(()=>{
-        const bpAreas = bp.areas.map(a=>normalizeStr(a));
-        const bpScores = DB.scores.filter(s=> s.tipo==='empresa' || bpAreas.includes(normalizeStr(s.area||'')) || bpAreas.includes(normalizeStr(s.liderArea||'')));
-        const filtered = fArea ? bpScores.filter(s=> s.tipo==='empresa' || (s.area||'')===fArea || (s.liderArea||'')===fArea) : bpScores;
-        filtered.sort((a,b)=> (b.period||'').localeCompare(a.period||'') || (a.tipo||'area').localeCompare(b.tipo||'area') || (a.area||'').localeCompare(b.area||''));
-        if(filtered.length===0) return '<div style="text-align:center;padding:30px;color:#aaa;font-size:13px;border:1px dashed #ddd;border-radius:10px;">Nenhum registro de eNPS/lNPS ainda.</div>';
-        const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
-        const tipoLabels = {empresa:'Empresa',area:'Área',lider:'Líder'};
-        const tipoBg = {empresa:'#1B1B2F',area:'#00BFA5',lider:'#8b5cf6'};
-        return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nível</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área / Líder</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Data</th><th style="padding:10px 14px;"></th></tr></thead><tbody>'+
-        filtered.map((s,i)=>{
-          const tipo = s.tipo||'area';
-          const enpsColor = s.enps>=50?'#16a34a':s.enps>=0?'#f59e0b':'#ef4444';
-          const lnpsColor = s.lnps>=50?'#16a34a':s.lnps>=0?'#f59e0b':'#ef4444';
-          const dtStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '';
-          let refLabel = '';
-          if(tipo==='empresa') refLabel = '<span style="color:#888;font-style:italic;">Geral</span>';
-          else if(tipo==='lider') refLabel = '<span style="font-weight:600;">'+esc(s.lider||'')+'</span>'+(s.area?' <span style="font-size:11px;color:#888;">('+esc(s.area)+')</span>':'');
-          else { const ac = areaColors[s.area]||'#64748b'; refLabel = '<span style="background:'+ac+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+esc(s.area)+'</span>'; }
-          const hasNotes = s.forcas||s.atencao||s.recomendacoes;
-          let row = '<tr style="border-bottom:'+(hasNotes?'none':'1px solid #f0f0f0')+';'+(i%2===1?'background:#fafbfc;':'')+'" class="score-row" data-score-idx="'+i+'"><td style="padding:10px 14px;"><span style="background:'+(tipoBg[tipo]||'#64748b')+';color:#fff;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:600;">'+(tipoLabels[tipo]||tipo)+'</span></td><td style="padding:10px 14px;">'+refLabel+'</td><td style="padding:10px 14px;font-weight:600;">'+esc(s.period)+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td><td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td><td style="padding:10px 14px;text-align:center;font-size:12px;color:#888;">'+dtStr+'</td><td style="padding:10px 14px;text-align:center;"><button class="btn btn-danger btn-sm score-delete" data-score-id="'+esc(s.id)+'">'+ICONS.trash+'</button></td></tr>';
-          if(hasNotes){
-            row += '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td colspan="7" style="padding:4px 14px 12px;">' +
-              '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">' +
-              (s.forcas?'<div><span style="font-size:10px;text-transform:uppercase;color:#16a34a;font-weight:700;">Forças</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.forcas)+'</p></div>':'<div></div>') +
-              (s.atencao?'<div><span style="font-size:10px;text-transform:uppercase;color:#f59e0b;font-weight:700;">Pontos de Atenção</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.atencao)+'</p></div>':'<div></div>') +
-              (s.recomendacoes?'<div><span style="font-size:10px;text-transform:uppercase;color:#3b82f6;font-weight:700;">Recomendações</span><p style="margin:2px 0 0;font-size:12px;color:#444;">'+esc(s.recomendacoes)+'</p></div>':'<div></div>') +
-              '</div></td></tr>';
-          }
-          return row;
-        }).join('')+'</tbody></table></div>';
-      })()}
-    </div>`;
-}
-
-function bindIndicadores(){
-  const rerender = ()=>{ const c=document.getElementById('content'); c.innerHTML=renderIndicadores(); bindIndicadores(); };
-  const areaFilter = document.getElementById('indAreaFilter');
-  if(areaFilter) areaFilter.addEventListener('change', ()=>{ UI.indFilterArea=areaFilter.value; rerender(); });
-  const btnPdf = document.getElementById('btnPdfInd');
-  if(btnPdf) btnPdf.addEventListener('click', ()=>{ exportIndicadoresPDF(); });
-
-  const fArea = UI.indFilterArea || '';
-  const {bp, bpAreas, myColabs, myDeslig, myPromos, myMeetings} = getIndicadoresData(fArea);
-  const months = buildMonthLabels(12);
-  const labels = months.map(m=>m.label);
-
-  // Admissões vs Desligamentos
-  const admData = countByMonth(myColabs, 'admissao', months);
-  const deslData = countByMonth(myDeslig, 'ultimoDia', months);
-  destroyChart('chartAdmDesl');
-  CHARTS.chartAdmDesl = new Chart(document.getElementById('chartAdmDesl'), {
-    type:'bar',
-    data:{labels, datasets:[
-      {label:'Admissões', data:admData, backgroundColor:'#00BFA5'},
-      {label:'Desligamentos', data:deslData, backgroundColor:'#ef4444'}
-    ]},
-    options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
-  });
-
-  // Promoções
-  const promoData = countByMonth(myPromos, 'mesDate', months);
-  destroyChart('chartPromos');
-  CHARTS.chartPromos = new Chart(document.getElementById('chartPromos'), {
-    type:'bar',
-    data:{labels, datasets:[{label:'Promoções', data:promoData, backgroundColor:'#8b5cf6'}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
-  });
-
-  // eNPS / lNPS by period (from area-level scores, fallback to meetings)
-  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
-  const periods = CONFIG.periods;
-  const periodEnps = periods.map(p=>{
-    const sc = myScores.filter(s=>s.period===p);
-    if(sc.length) return Math.round(sc.reduce((s,r)=>s+(r.enps||0),0)/sc.length);
-    const ms = myMeetings.filter(m=>m.period===p);
-    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.enps||0),0)/ms.length) : null;
-  });
-  const periodLnps = periods.map(p=>{
-    const sc = myScores.filter(s=>s.period===p);
-    if(sc.length) return Math.round(sc.reduce((s,r)=>s+(r.lnps||0),0)/sc.length);
-    const ms = myMeetings.filter(m=>m.period===p);
-    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.lnps||0),0)/ms.length) : null;
-  });
-
-  // Headcount & Turnover by month (from imported data)
-  // Headcount at end of each month = collaborators admitted on or before that month who haven't been terminated
-  function toMonthKey(d){
-    if(!d) return null;
-    const dt = d instanceof Date ? d : new Date(d);
-    if(isNaN(dt)) return null;
-    return dt.getFullYear()*100+(dt.getMonth()+1);
-  }
-  const monthlyHC = months.map(m=>{
-    const [y,mo] = m.key.split('-').map(Number);
-    const endOfMonth = y*100+mo;
-    const active = myColabs.filter(c=>{
-      const admKey = toMonthKey(c.admissao||c['Data de admissão']||c['data de admissao']);
-      if(!admKey || admKey > endOfMonth) return false;
-      return true;
-    });
-    // Subtract desligamentos that happened on or before this month
-    const desligados = myDeslig.filter(d=>{
-      const dKey = toMonthKey(d.ultimoDia||d.mesDate);
-      return dKey && dKey <= endOfMonth;
-    });
-    // Match by name to avoid double-counting
-    const deslNames = new Set(desligados.map(d=>normalizeStr(d.nome||'')));
-    return active.filter(c=>!deslNames.has(normalizeStr(c.nome||c.Nome||''))).length;
-  });
-  const monthlyTO = months.map((m,i)=>{
-    const hc = monthlyHC[i];
-    if(!hc) return 0;
-    return Math.round(deslData[i]/hc*10000)/100;
-  });
-
-  destroyChart('chartEnps');
-  CHARTS.chartEnps = new Chart(document.getElementById('chartEnps'), {
-    type:'line',
-    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#00BFA5', backgroundColor:'rgba(0,191,165,0.1)', fill:true, tension:.3, spanGaps:true}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
-  });
-
-  destroyChart('chartLnps');
-  CHARTS.chartLnps = new Chart(document.getElementById('chartLnps'), {
-    type:'line',
-    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#1B1B2F', backgroundColor:'rgba(27,27,47,0.1)', fill:true, tension:.3, spanGaps:true}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
-  });
-
-  destroyChart('chartHCevo');
-  CHARTS.chartHCevo = new Chart(document.getElementById('chartHCevo'), {
-    type:'line',
-    data:{labels, datasets:[{label:'Headcount', data:monthlyHC, borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,0.1)', fill:true, tension:.3}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
-  });
-
-  destroyChart('chartTOevo');
-  CHARTS.chartTOevo = new Chart(document.getElementById('chartTOevo'), {
-    type:'line',
-    data:{labels, datasets:[{label:'Turnover %', data:monthlyTO, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.1)', fill:true, tension:.3}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{callback:function(v){return v+'%'}}}}}
-  });
-
-  // Desligamentos by tipo (doughnut)
-  const tipoCount = {};
-  myDeslig.forEach(d=>{ const t=(d.tipo||'Não informado').trim(); tipoCount[t]=(tipoCount[t]||0)+1; });
-  const tipoLabels = Object.keys(tipoCount);
-  const tipoColors = ['#ef4444','#f59e0b','#8b5cf6','#0ea5e9','#10b981','#ec4899','#64748b'];
-  destroyChart('chartDeslTipo');
-  CHARTS.chartDeslTipo = new Chart(document.getElementById('chartDeslTipo'), {
-    type:'doughnut',
-    data:{labels:tipoLabels, datasets:[{data:tipoLabels.map(t=>tipoCount[t]), backgroundColor:tipoColors}]},
-    options:{responsive:true, plugins:{legend:{position:'bottom'}}}
-  });
-
-  // Desligamentos by motivo (horizontal bar)
-  const motivoCount = {};
-  myDeslig.forEach(d=>{ const m=(d.motivo||'Não informado').trim(); motivoCount[m]=(motivoCount[m]||0)+1; });
-  const motivoLabels = Object.keys(motivoCount).sort((a,b)=>motivoCount[b]-motivoCount[a]);
-  destroyChart('chartDeslMotivo');
-  CHARTS.chartDeslMotivo = new Chart(document.getElementById('chartDeslMotivo'), {
-    type:'bar',
-    data:{labels:motivoLabels, datasets:[{label:'Qtd', data:motivoLabels.map(m=>motivoCount[m]), backgroundColor:'#ef4444'}]},
-    options:{indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true, ticks:{stepSize:1}}}}
-  });
-
-  // Summary table
-  const tbl = document.getElementById('tblResumoMensal');
-  let html = '<thead><tr style="background:#f9fafb;"><th style="padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Mês</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Admissões</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Desligamentos</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Promoções</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Saldo</th></tr></thead><tbody>';
-  months.forEach((m,i)=>{
-    const saldo = admData[i]-deslData[i];
-    const saldoColor = saldo>0?'#10b981':saldo<0?'#ef4444':'#888';
-    const saldoSign = saldo>0?'+':'';
-    html += '<tr style="border-bottom:1px solid #f0f0f0;">';
-    html += '<td style="padding:10px 12px;font-weight:600;">'+m.label+'</td>';
-    html += '<td style="padding:10px 12px;text-align:center;color:#00BFA5;font-weight:700;">'+admData[i]+'</td>';
-    html += '<td style="padding:10px 12px;text-align:center;color:#ef4444;font-weight:700;">'+deslData[i]+'</td>';
-    html += '<td style="padding:10px 12px;text-align:center;color:#8b5cf6;font-weight:700;">'+promoData[i]+'</td>';
-    html += '<td style="padding:10px 12px;text-align:center;color:'+saldoColor+';font-weight:700;">'+saldoSign+saldo+'</td>';
-    html += '</tr>';
-  });
-  html += '</tbody>';
-  tbl.innerHTML = html;
-
-  // Composição - líder filter
-  const compLiderFilter = document.getElementById('compLiderFilter');
-  if(compLiderFilter) compLiderFilter.addEventListener('change', ()=>{ UI.compLiderFilter = compLiderFilter.value; rerender(); });
-
-  // Charts: Regime por Área & Salário por Área
-  (()=>{
-    let cList = myColabs;
-    if(UI.compLiderFilter) cList = cList.filter(c=>(c.lider||c['Líder']||c.Lider||'')===UI.compLiderFilter);
-    const areaMap = {};
-    cList.forEach(c=>{
-      const a = c.area||c.departamento||'(Sem área)';
-      if(!areaMap[a]) areaMap[a] = {clt:0,pj:0,estagio:0,totalSalario:0};
-      const r = normalizeStr(c.regime||c.Regime||'');
-      if(r==='clt') areaMap[a].clt++;
-      else if(r==='pj') areaMap[a].pj++;
-      else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') areaMap[a].estagio++;
-      const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
-      if(!isNaN(sal)) areaMap[a].totalSalario += sal;
-    });
-    const aKeys = Object.keys(areaMap).sort();
-    destroyChart('chartRegimeArea');
-    const elRegime = document.getElementById('chartRegimeArea');
-    if(elRegime){
-      CHARTS.chartRegimeArea = new Chart(elRegime, {
-        type:'bar',
-        data:{labels:aKeys, datasets:[
-          {label:'CLT', data:aKeys.map(a=>areaMap[a].clt), backgroundColor:'#00BFA5'},
-          {label:'PJ', data:aKeys.map(a=>areaMap[a].pj), backgroundColor:'#8b5cf6'},
-          {label:'Estágio', data:aKeys.map(a=>areaMap[a].estagio), backgroundColor:'#f59e0b'}
-        ]},
-        options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{x:{ticks:{maxRotation:45,minRotation:30,font:{size:10}}},y:{beginAtZero:true,ticks:{stepSize:1}}}}
-      });
-    }
-    destroyChart('chartSalarioArea');
-    const elSal = document.getElementById('chartSalarioArea');
-    if(elSal){
-      CHARTS.chartSalarioArea = new Chart(elSal, {
-        type:'bar',
-        data:{labels:aKeys, datasets:[{label:'Total Salários (R$)', data:aKeys.map(a=>areaMap[a].totalSalario), backgroundColor:'#3b82f6'}]},
-        options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{maxRotation:45,minRotation:30,font:{size:10}}},y:{beginAtZero:true,ticks:{callback:v=>'R$ '+(v/1000).toFixed(0)+'k'}}}}
-      });
-    }
-  })();
-
-  // Score bindings
-  const btnNewScore = document.getElementById('btnNewScore');
-  const formScore = document.getElementById('formScore');
-  if(btnNewScore && formScore) btnNewScore.addEventListener('click', ()=>{ formScore.style.display = formScore.style.display==='none'?'block':'none'; });
-  const btnCancelScore = document.getElementById('btnCancelScore');
-  if(btnCancelScore) btnCancelScore.addEventListener('click', ()=>{ formScore.style.display='none'; });
-
-  // Tipo toggle
-  const scTipo = document.getElementById('sc_tipo');
-  const scAreaWrap = document.getElementById('sc_area_wrap');
-  const scLiderWrap = document.getElementById('sc_lider_wrap');
-  if(scTipo) scTipo.addEventListener('change', ()=>{
-    const v = scTipo.value;
-    if(scAreaWrap) scAreaWrap.style.display = v==='empresa'?'none':'block';
-    if(scLiderWrap) scLiderWrap.style.display = v==='lider'?'block':'none';
-  });
-
-  const btnSaveScore = document.getElementById('btnSaveScore');
-  if(btnSaveScore) btnSaveScore.addEventListener('click', ()=>{
-    const tipo = document.getElementById('sc_tipo').value;
-    const area = document.getElementById('sc_area').value;
-    const lider = (document.getElementById('sc_lider')||{}).value||'';
-    const period = document.getElementById('sc_period').value;
-    const enps = Number(document.getElementById('sc_enps').value);
-    const lnps = Number(document.getElementById('sc_lnps').value);
-    if(tipo==='area' && !area){ alert('Selecione a área.'); return; }
-    if(tipo==='lider' && !lider.trim()){ alert('Informe o nome do líder.'); return; }
-    if(isNaN(enps)){ alert('Informe o eNPS.'); return; }
-    if(isNaN(lnps)){ alert('Informe o lNPS.'); return; }
-    // Duplicate check based on tipo
-    let existing = -1;
-    if(tipo==='empresa') existing = DB.scores.findIndex(s=> s.tipo==='empresa' && s.period===period);
-    else if(tipo==='area') existing = DB.scores.findIndex(s=> (s.tipo||'area')==='area' && normalizeStr(s.area)===normalizeStr(area) && s.period===period);
-    else existing = DB.scores.findIndex(s=> s.tipo==='lider' && normalizeStr(s.lider||'')===normalizeStr(lider) && s.period===period);
-    const forcas = (document.getElementById('sc_forcas')||{}).value||'';
-    const atencao = (document.getElementById('sc_atencao')||{}).value||'';
-    const recomendacoes = (document.getElementById('sc_recomendacoes')||{}).value||'';
-    const record = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), tipo, area: tipo==='empresa'?'':area, lider: tipo==='lider'?lider.trim():'', period, enps, lnps, forcas, atencao, recomendacoes, createdAt: new Date().toISOString() };
-    if(existing>=0) DB.scores[existing] = record;
-    else DB.scores.push(record);
-    persist('scores');
-    rerender();
-  });
-
-  document.querySelectorAll('.score-delete').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      if(!confirm('Excluir este registro?')) return;
-      DB.scores = DB.scores.filter(s=>s.id!==btn.getAttribute('data-score-id'));
-      persist('scores');
-      rerender();
-    });
-  });
-}
+/* renderIndicadores and bindIndicadores removed — merged into unified Dashboard */
+function renderIndicadores(){ return '<div class="empty-state">Esta página foi integrada ao Dashboard.</div>'; }
+function bindIndicadores(){}
 
 /* =========================================================
    PDF EXPORT
