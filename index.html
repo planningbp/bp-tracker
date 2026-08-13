@@ -787,7 +787,9 @@ const CRUD_PAGES = {
     title:'Desligamentos', icon:'desl', dbKey:'desligamentos', lsKey:'desligamentos',
     parser:'parseDesligamentos', pageTitle:['Desligamentos','Gestão de desligamentos — importar, adicionar, editar e remover'],
     cols:[
-      {key:'mesRaw',label:'Mês',type:'text'},{key:'nome',label:'Nome',type:'text'},{key:'cargo',label:'Cargo',type:'text'},
+      {key:'mesFmt',label:'Mês',type:'text',computed:true},
+      {key:'nome',label:'Nome',type:'text'},{key:'cargo',label:'Cargo',type:'text'},
+      {key:'ultimoDiaFmt',label:'Último Dia',type:'text',computed:true},
       {key:'regime',label:'Regime',type:'text'},{key:'area',label:'Área',type:'text'},{key:'lider',label:'Líder',type:'text'},
       {key:'tipo',label:'Tipo',type:'select',options:['Voluntário','Involuntário','Acordo mútuo','Término de contrato']},
       {key:'motivo',label:'Motivo',type:'text'},{key:'submotivo',label:'Submotivo',type:'text'},
@@ -798,7 +800,7 @@ const CRUD_PAGES = {
     title:'Promoções', icon:'promo', dbKey:'promocoes', lsKey:'promocoes',
     parser:'parsePromocoes', pageTitle:['Promoções','Gestão de promoções e movimentações — importar, adicionar, editar e remover'],
     cols:[
-      {key:'mesRaw',label:'Mês',type:'text'},{key:'nome',label:'Nome',type:'text'},{key:'area',label:'Área',type:'text'},
+      {key:'mesFmt',label:'Mês',type:'text',computed:true},{key:'nome',label:'Nome',type:'text'},{key:'area',label:'Área',type:'text'},
       {key:'gestor',label:'Gestor',type:'text'},{key:'aprovador',label:'Aprovador',type:'text'},
       {key:'cargoAtual',label:'Cargo anterior',type:'text'},{key:'salarioAtual',label:'Salário anterior',type:'text'},
       {key:'cargoAprovado',label:'Cargo novo',type:'text'},{key:'valorAprovado',label:'Salário novo',type:'text'},
@@ -837,10 +839,41 @@ const CRUD_PAGES = {
   }
 };
 
+function fmtDateBR(d){
+  if(!d) return '';
+  const dt = d instanceof Date ? d : new Date(d);
+  if(isNaN(dt)) return String(d);
+  return dt.toLocaleDateString('pt-BR');
+}
+function fmtMonthBR(d){
+  if(!d) return '';
+  const dt = d instanceof Date ? d : new Date(d);
+  if(isNaN(dt)){
+    const s = String(d);
+    if(/^\d{4}-\d{2}/.test(s)) return s.slice(0,7);
+    return s;
+  }
+  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return meses[dt.getMonth()]+'/'+dt.getFullYear();
+}
+function computeCrudFields(pageKey, data){
+  if(pageKey==='desligamentos'){
+    data.forEach(r=>{
+      r.mesFmt = fmtMonthBR(r.mesDate||r.mesRaw);
+      r.ultimoDiaFmt = fmtDateBR(r.ultimoDia);
+    });
+  }
+  if(pageKey==='promocoes'){
+    data.forEach(r=>{
+      r.mesFmt = fmtMonthBR(r.mesDate||r.mesRaw);
+    });
+  }
+}
 function renderCrudPage(pageKey){
   const cfg = CRUD_PAGES[pageKey];
   if(!cfg) return '<div class="card">Página não encontrada.</div>';
   const data = DB[cfg.dbKey] || [];
+  computeCrudFields(pageKey, data);
   const searchKey = 'crudSearch_'+pageKey;
   const fSearch = (UI[searchKey]||'').toLowerCase();
   if(!UI.crudFilters) UI.crudFilters = {};
@@ -892,7 +925,7 @@ function renderCrudPage(pageKey){
     <div id="crudAddForm_${pageKey}" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin-bottom:20px;">
       <div style="font-weight:700;font-size:15px;color:var(--primary);margin-bottom:14px;">Novo registro</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:14px;">
-        ${allCols.map(c=>`
+        ${allCols.filter(c=>!c.computed).map(c=>`
           <div class="field"><label>${c.label}</label>
             ${c.type==='select' ? '<select id="crudNew_'+pageKey+'_'+c.key+'" class="select"><option value="">Selecione...</option>'+c.options.map(o=>'<option value="'+esc(o)+'">'+esc(o)+'</option>').join('')+'</select>'
             : '<input type="'+(c.type||'text')+'" id="crudNew_'+pageKey+'_'+c.key+'" placeholder="'+c.label+'" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;">'}
@@ -975,7 +1008,7 @@ function bindCrudPage(pageKey){
   const btnSaveAdd = document.getElementById('crudSaveAdd_'+pageKey);
   if(btnSaveAdd) btnSaveAdd.addEventListener('click',()=>{
     const rec = { id: uid() };
-    cfg.cols.forEach(c=>{ const el = document.getElementById('crudNew_'+pageKey+'_'+c.key); rec[c.key] = el ? el.value : ''; });
+    cfg.cols.filter(c=>!c.computed).forEach(c=>{ const el = document.getElementById('crudNew_'+pageKey+'_'+c.key); rec[c.key] = el ? el.value : ''; });
     DB[cfg.dbKey].push(rec);
     persist(cfg.dbKey);
     rerender();
@@ -1040,7 +1073,7 @@ function bindCrudPage(pageKey){
       editingIdx = DB[cfg.dbKey].indexOf(rec);
       const modal = document.getElementById('crudEditModal_'+pageKey);
       const fields = document.getElementById('crudEditFields_'+pageKey);
-      fields.innerHTML = cfg.cols.map(c=>{
+      fields.innerHTML = cfg.cols.filter(c=>!c.computed).map(c=>{
         let val = rec[c.key]||'';
         if(val instanceof Date && !isNaN(val)) val = val.toISOString().slice(0,10);
         return '<div class="field"><label>'+c.label+'</label>'
@@ -1058,7 +1091,7 @@ function bindCrudPage(pageKey){
   if(btnSaveEdit) btnSaveEdit.addEventListener('click',()=>{
     if(editingIdx<0) return;
     const rec = DB[cfg.dbKey][editingIdx];
-    cfg.cols.forEach(c=>{ const el = document.getElementById('crudEdit_'+pageKey+'_'+c.key); if(el) rec[c.key] = el.value; });
+    cfg.cols.filter(c=>!c.computed).forEach(c=>{ const el = document.getElementById('crudEdit_'+pageKey+'_'+c.key); if(el) rec[c.key] = el.value; });
     persist(cfg.dbKey);
     document.getElementById('crudEditModal_'+pageKey).style.display='none';
     rerender();
