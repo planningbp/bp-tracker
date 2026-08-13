@@ -4175,6 +4175,14 @@ function renderKanban(){
         </div>
       </div>
       <div class="field" style="margin-bottom:14px;"><label>Observações</label><textarea id="acaoObs" rows="2" placeholder="Detalhes..." style="width:100%;border:1px solid #ddd;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea></div>
+      <div style="margin-bottom:14px;">
+        <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">Checklist (To-Do)</label>
+        <div id="acaoChecklistItems" style="margin-bottom:8px;"></div>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="acaoChecklistInput" placeholder="Adicionar item..." style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box;">
+          <button class="btn btn-outline" id="btnAddChecklistItem" type="button" style="width:auto;padding:6px 14px;">+ Adicionar</button>
+        </div>
+      </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button class="btn btn-outline" id="btnCancelAcao" style="width:auto;">Cancelar</button>
         <button class="btn" id="btnSaveAcao" style="width:auto;">Salvar</button>
@@ -4245,9 +4253,38 @@ function bindKanban(){
   // Add form
   const btnAdd = document.getElementById('btnAddAcao');
   const form = document.getElementById('kanbanAddForm');
-  if(btnAdd && form) btnAdd.addEventListener('click', ()=>{ form.style.display=form.style.display==='none'?'block':'none'; });
+  if(btnAdd && form) btnAdd.addEventListener('click', ()=>{ form.style.display=form.style.display==='none'?'block':'none'; UI._formChecklist=[]; renderFormChecklist(); });
   const btnCancel = document.getElementById('btnCancelAcao');
-  if(btnCancel) btnCancel.addEventListener('click', ()=>{ form.style.display='none'; });
+  if(btnCancel) btnCancel.addEventListener('click', ()=>{ form.style.display='none'; UI._formChecklist=[]; });
+
+  // Form checklist management
+  if(!UI._formChecklist) UI._formChecklist = [];
+  function renderFormChecklist(){
+    const container = document.getElementById('acaoChecklistItems');
+    if(!container) return;
+    container.innerHTML = UI._formChecklist.map((t,i)=>
+      '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eee;">'+
+        '<span style="color:#00BFA5;font-size:14px;">&#9745;</span>'+
+        '<span style="flex:1;font-size:13px;">'+esc(t)+'</span>'+
+        '<button class="form-cl-del" data-idx="'+i+'" style="border:none;background:none;color:#ef4444;cursor:pointer;font-size:14px;padding:2px 4px;" title="Remover">✕</button>'+
+      '</div>'
+    ).join('');
+    container.querySelectorAll('.form-cl-del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ UI._formChecklist.splice(Number(btn.getAttribute('data-idx')),1); renderFormChecklist(); });
+    });
+  }
+  renderFormChecklist();
+  const btnAddCL = document.getElementById('btnAddChecklistItem');
+  const inputCL = document.getElementById('acaoChecklistInput');
+  function addFormChecklistItem(){
+    if(!inputCL || !inputCL.value.trim()) return;
+    UI._formChecklist.push(inputCL.value.trim());
+    inputCL.value='';
+    renderFormChecklist();
+  }
+  if(btnAddCL) btnAddCL.addEventListener('click', addFormChecklistItem);
+  if(inputCL) inputCL.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addFormChecklistItem(); }});
+
   const btnSave = document.getElementById('btnSaveAcao');
   if(btnSave) btnSave.addEventListener('click', ()=>{
     const titulo = (document.getElementById('acaoTitulo')||{}).value;
@@ -4260,8 +4297,10 @@ function bindKanban(){
       prioridade: (document.getElementById('acaoPri')||{}).value||'Média',
       origem: (document.getElementById('acaoOrigem')||{}).value||'',
       observacoes: (document.getElementById('acaoObs')||{}).value||'',
+      checklist: (UI._formChecklist||[]).map(t=>({text:t, done:false})),
       criadoEm: new Date().toISOString()
     });
+    UI._formChecklist = [];
     persist('acoes');
     rerender();
   });
