@@ -4383,6 +4383,146 @@ function renderIndicadores(){
         </div>
       </div>
 
+    <!-- Composição por Área -->
+    <div class="card" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div>
+          <div class="section-title" style="margin:0;">Composição por Área — Regime e Salários</div>
+          <p style="margin:4px 0 0;color:#888;font-size:12px;">Quantidade de CLT, PJ, Estagiário por área e valor total de salários.</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <select id="compLiderFilter" class="select" style="min-width:180px;">
+            <option value="">Todos os líderes</option>
+            ${[...new Set(myColabs.map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))].sort().map(l=>'<option value="'+esc(l)+'"'+(UI.compLiderFilter===l?' selected':'')+'>'+esc(l)+'</option>').join('')}
+          </select>
+        </div>
+      </div>
+      ${(()=>{
+        let cList = myColabs;
+        if(UI.compLiderFilter) cList = cList.filter(c=>(c.lider||c['Líder']||c.Lider||'')===UI.compLiderFilter);
+        // Group by area
+        const areaMap = {};
+        cList.forEach(c=>{
+          const a = c.area||c.departamento||'(Sem área)';
+          if(!areaMap[a]) areaMap[a] = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+          const r = normalizeStr(c.regime||c.Regime||'');
+          if(r==='clt') areaMap[a].clt++;
+          else if(r==='pj') areaMap[a].pj++;
+          else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') areaMap[a].estagio++;
+          else if(r==='temporario'||r==='temporário') areaMap[a].temp++;
+          else areaMap[a].outros++;
+          areaMap[a].total++;
+          const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
+          if(!isNaN(sal)) areaMap[a].totalSalario += sal;
+        });
+        const areaKeys = Object.keys(areaMap).sort();
+        if(!areaKeys.length) return '<div style="text-align:center;padding:30px;color:#aaa;">Nenhum colaborador encontrado.</div>';
+        // Totals row
+        const totals = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+        areaKeys.forEach(a=>{ Object.keys(totals).forEach(k=>totals[k]+=areaMap[a][k]); });
+        return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">'+
+          '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">CLT</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">PJ</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Estágio</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Temporário</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Outros</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;font-weight:800;">Total</th>'+
+          '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:#888;">Valor Total Salários</th>'+
+          '</tr></thead><tbody>'+
+          areaKeys.map((a,i)=>{
+            const d = areaMap[a];
+            return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
+              '<td style="padding:10px 14px;font-weight:600;">'+esc(a)+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.clt+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.pj+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.estagio+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.temp+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.outros+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;font-weight:800;">'+d.total+'</td>'+
+              '<td style="padding:10px 14px;text-align:right;font-weight:600;">R$ '+d.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
+              '</tr>';
+          }).join('')+
+          '<tr style="background:#f0fdf4;border-top:2px solid var(--primary);font-weight:800;">'+
+            '<td style="padding:10px 14px;">TOTAL</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.clt+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.pj+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.estagio+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.temp+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.outros+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.total+'</td>'+
+            '<td style="padding:10px 14px;text-align:right;font-size:15px;">R$ '+totals.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
+          '</tr></tbody></table></div>';
+      })()}
+    </div>
+
+    <!-- Composição por Líder -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title">Composição por Líder — Regime e Salários</div>
+      ${(()=>{
+        let cList = myColabs;
+        if(UI.compLiderFilter) cList = cList.filter(c=>(c.lider||c['Líder']||c.Lider||'')===UI.compLiderFilter);
+        const liderMap = {};
+        cList.forEach(c=>{
+          const l = c.lider||c['Líder']||c.Lider||'(Sem líder)';
+          if(!liderMap[l]) liderMap[l] = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+          const r = normalizeStr(c.regime||c.Regime||'');
+          if(r==='clt') liderMap[l].clt++;
+          else if(r==='pj') liderMap[l].pj++;
+          else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') liderMap[l].estagio++;
+          else if(r==='temporario'||r==='temporário') liderMap[l].temp++;
+          else liderMap[l].outros++;
+          liderMap[l].total++;
+          const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
+          if(!isNaN(sal)) liderMap[l].totalSalario += sal;
+        });
+        const liderKeys = Object.keys(liderMap).sort();
+        if(!liderKeys.length) return '<div style="text-align:center;padding:30px;color:#aaa;">Nenhum colaborador encontrado.</div>';
+        const totals = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+        liderKeys.forEach(l=>{ Object.keys(totals).forEach(k=>totals[k]+=liderMap[l][k]); });
+        return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">'+
+          '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Líder</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">CLT</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">PJ</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Estágio</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Temporário</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Outros</th>'+
+          '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;font-weight:800;">Total</th>'+
+          '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:#888;">Valor Total Salários</th>'+
+          '</tr></thead><tbody>'+
+          liderKeys.map((l,i)=>{
+            const d = liderMap[l];
+            return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
+              '<td style="padding:10px 14px;font-weight:600;">'+esc(l)+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.clt+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.pj+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.estagio+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.temp+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;">'+d.outros+'</td>'+
+              '<td style="padding:10px 14px;text-align:center;font-weight:800;">'+d.total+'</td>'+
+              '<td style="padding:10px 14px;text-align:right;font-weight:600;">R$ '+d.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
+              '</tr>';
+          }).join('')+
+          '<tr style="background:#f0fdf4;border-top:2px solid var(--primary);font-weight:800;">'+
+            '<td style="padding:10px 14px;">TOTAL</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.clt+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.pj+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.estagio+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.temp+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.outros+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+totals.total+'</td>'+
+            '<td style="padding:10px 14px;text-align:right;font-size:15px;">R$ '+totals.totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
+          '</tr></tbody></table></div>';
+      })()}
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:20px;">
+      <div class="card"><div class="section-title">Regime por Área</div><canvas id="chartRegimeArea" height="280"></canvas></div>
+      <div class="card"><div class="section-title">Salários por Área</div><canvas id="chartSalarioArea" height="280"></canvas></div>
+    </div>
+
+    <!-- eNPS / lNPS Registration -->
+    <div class="card" style="margin-bottom:20px;">
       ${(()=>{
         const bpAreas = bp.areas.map(a=>normalizeStr(a));
         const bpScores = DB.scores.filter(s=> s.tipo==='empresa' || bpAreas.includes(normalizeStr(s.area||'')) || bpAreas.includes(normalizeStr(s.liderArea||'')));
@@ -4567,6 +4707,50 @@ function bindIndicadores(){
   });
   html += '</tbody>';
   tbl.innerHTML = html;
+
+  // Composição - líder filter
+  const compLiderFilter = document.getElementById('compLiderFilter');
+  if(compLiderFilter) compLiderFilter.addEventListener('change', ()=>{ UI.compLiderFilter = compLiderFilter.value; rerender(); });
+
+  // Charts: Regime por Área & Salário por Área
+  (()=>{
+    let cList = myColabs;
+    if(UI.compLiderFilter) cList = cList.filter(c=>(c.lider||c['Líder']||c.Lider||'')===UI.compLiderFilter);
+    const areaMap = {};
+    cList.forEach(c=>{
+      const a = c.area||c.departamento||'(Sem área)';
+      if(!areaMap[a]) areaMap[a] = {clt:0,pj:0,estagio:0,totalSalario:0};
+      const r = normalizeStr(c.regime||c.Regime||'');
+      if(r==='clt') areaMap[a].clt++;
+      else if(r==='pj') areaMap[a].pj++;
+      else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') areaMap[a].estagio++;
+      const sal = parseFloat(String(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0').replace(/[^\d.,]/g,'').replace(',','.'));
+      if(!isNaN(sal)) areaMap[a].totalSalario += sal;
+    });
+    const aKeys = Object.keys(areaMap).sort();
+    destroyChart('chartRegimeArea');
+    const elRegime = document.getElementById('chartRegimeArea');
+    if(elRegime){
+      CHARTS.chartRegimeArea = new Chart(elRegime, {
+        type:'bar',
+        data:{labels:aKeys, datasets:[
+          {label:'CLT', data:aKeys.map(a=>areaMap[a].clt), backgroundColor:'#00BFA5'},
+          {label:'PJ', data:aKeys.map(a=>areaMap[a].pj), backgroundColor:'#8b5cf6'},
+          {label:'Estágio', data:aKeys.map(a=>areaMap[a].estagio), backgroundColor:'#f59e0b'}
+        ]},
+        options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{x:{ticks:{maxRotation:45,minRotation:30,font:{size:10}}},y:{beginAtZero:true,ticks:{stepSize:1}}}}
+      });
+    }
+    destroyChart('chartSalarioArea');
+    const elSal = document.getElementById('chartSalarioArea');
+    if(elSal){
+      CHARTS.chartSalarioArea = new Chart(elSal, {
+        type:'bar',
+        data:{labels:aKeys, datasets:[{label:'Total Salários (R$)', data:aKeys.map(a=>areaMap[a].totalSalario), backgroundColor:'#3b82f6'}]},
+        options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{maxRotation:45,minRotation:30,font:{size:10}}},y:{beginAtZero:true,ticks:{callback:v=>'R$ '+(v/1000).toFixed(0)+'k'}}}}
+      });
+    }
+  })();
 
   // Score bindings
   const btnNewScore = document.getElementById('btnNewScore');
