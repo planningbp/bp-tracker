@@ -4201,13 +4201,25 @@ function renderKanban(){
             const prazoStr = prazo && !isNaN(prazo) ? prazo.toLocaleDateString('pt-BR') : '';
             const isLate = prazo && prazo < new Date() && col.key!=='done';
             const priCol = priColors[a.prioridade]||'#888';
-            return `<div class="card kanban-card" data-acao-id="${a.id}" style="padding:14px;margin-bottom:10px;cursor:pointer;border-left:3px solid ${priCol};${isLate?'background:#fef2f2;':''}">
+            const cl = a.checklist||[];
+            const clDone = cl.filter(t=>t.done).length;
+            const clTotal = cl.length;
+            const clPct = clTotal ? Math.round(clDone/clTotal*100) : 0;
+            return `<div class="card kanban-card" data-acao-id="${a.id}" style="padding:14px;margin-bottom:10px;border-left:3px solid ${priCol};${isLate?'background:#fef2f2;':''}">
               <div style="font-weight:600;font-size:13px;margin-bottom:6px;">${esc(a.titulo||'')}</div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:#888;">
                 ${a.responsavel?'<span>'+esc(a.responsavel)+'</span>':''}
                 ${a.area?'<span style="background:#e5e7eb;padding:1px 6px;border-radius:4px;">'+esc(a.area)+'</span>':''}
                 ${prazoStr?'<span style="'+(isLate?'color:#ef4444;font-weight:700;':'')+'">'+(isLate?'⚠ ':'')+prazoStr+'</span>':''}
                 ${a.origem?'<span style="color:#8b5cf6;">'+esc(a.origem)+'</span>':''}
+              </div>
+              ${clTotal?'<div style="margin-top:8px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div style="flex:1;height:4px;background:#e5e7eb;border-radius:2px;"><div style="width:'+clPct+'%;height:100%;background:'+(clPct===100?'#16a34a':'#00BFA5')+';border-radius:2px;"></div></div><span style="font-size:10px;font-weight:700;color:'+(clPct===100?'#16a34a':'#888')+';">'+clDone+'/'+clTotal+'</span></div></div>':''}
+              <div style="margin-top:6px;">
+                ${cl.map((t,ti)=>'<div style="display:flex;align-items:center;gap:6px;padding:3px 0;"><input type="checkbox" class="cl-check" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" '+(t.done?'checked':'')+' style="accent-color:#00BFA5;cursor:pointer;"><span style="font-size:12px;'+(t.done?'text-decoration:line-through;color:#aaa;':'color:#444;')+'">'+esc(t.text)+'</span><button class="cl-del" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" style="border:none;background:none;color:#ccc;cursor:pointer;font-size:12px;margin-left:auto;padding:0 2px;" title="Remover">✕</button></div>').join('')}
+                <div style="display:flex;gap:4px;margin-top:4px;">
+                  <input type="text" class="cl-input" data-acao-id="${a.id}" placeholder="Nova tarefa..." style="flex:1;padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;">
+                  <button class="btn btn-outline cl-add" data-acao-id="${a.id}" style="font-size:10px;padding:3px 8px;width:auto;">+</button>
+                </div>
               </div>
               <div style="display:flex;gap:4px;margin-top:8px;">
                 ${col.key!=='todo'?'<button class="btn btn-outline kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='doing'?'todo':'doing')+'" style="font-size:10px;padding:3px 8px;width:auto;">← </button>':''}
@@ -4262,6 +4274,51 @@ function bindKanban(){
       const to = btn.getAttribute('data-move-to');
       const acao = DB.acoes.find(a=>a.id===id);
       if(acao){ acao.status=to; if(to==='done') acao.concluidoEm=new Date().toISOString(); persist('acoes'); rerender(); }
+    });
+  });
+
+  // Checklist: toggle check
+  document.querySelectorAll('.cl-check').forEach(cb=>{
+    cb.addEventListener('change', e=>{
+      e.stopPropagation();
+      const id = cb.getAttribute('data-acao-id');
+      const idx = Number(cb.getAttribute('data-cl-idx'));
+      const acao = DB.acoes.find(a=>a.id===id);
+      if(acao && acao.checklist && acao.checklist[idx]!=null){ acao.checklist[idx].done = cb.checked; persist('acoes'); rerender(); }
+    });
+  });
+  // Checklist: add item
+  document.querySelectorAll('.cl-add').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-acao-id');
+      const input = document.querySelector('.cl-input[data-acao-id="'+id+'"]');
+      if(!input || !input.value.trim()) return;
+      const acao = DB.acoes.find(a=>a.id===id);
+      if(acao){ if(!acao.checklist) acao.checklist=[]; acao.checklist.push({text:input.value.trim(), done:false}); persist('acoes'); rerender(); }
+    });
+  });
+  // Checklist: add on Enter key
+  document.querySelectorAll('.cl-input').forEach(input=>{
+    input.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){
+        e.preventDefault(); e.stopPropagation();
+        const id = input.getAttribute('data-acao-id');
+        if(!input.value.trim()) return;
+        const acao = DB.acoes.find(a=>a.id===id);
+        if(acao){ if(!acao.checklist) acao.checklist=[]; acao.checklist.push({text:input.value.trim(), done:false}); persist('acoes'); rerender(); }
+      }
+    });
+    input.addEventListener('click', e=>e.stopPropagation());
+  });
+  // Checklist: delete item
+  document.querySelectorAll('.cl-del').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-acao-id');
+      const idx = Number(btn.getAttribute('data-cl-idx'));
+      const acao = DB.acoes.find(a=>a.id===id);
+      if(acao && acao.checklist){ acao.checklist.splice(idx,1); persist('acoes'); rerender(); }
     });
   });
 
