@@ -797,13 +797,13 @@ const CRUD_PAGES = {
   },
   promocoes: {
     title:'Promoções', icon:'promo', dbKey:'promocoes', lsKey:'promocoes',
-    parser:'parsePromocoes', pageTitle:['Promoções','Gestão de promoções e movimentações — importar, adicionar, editar e remover'],
+    parser:'parsePromocoes', maxCols:11, pageTitle:['Promoções','Gestão de promoções e movimentações — importar, adicionar, editar e remover'],
     cols:[
       {key:'mesFmt',label:'Mês',type:'text',computed:true},{key:'nome',label:'Nome',type:'text'},{key:'area',label:'Área',type:'text'},
-      {key:'gestor',label:'Gestor',type:'text'},{key:'aprovador',label:'Aprovador',type:'text'},
-      {key:'cargoAtual',label:'Cargo anterior',type:'text'},{key:'salarioAtual',label:'Salário anterior',type:'text'},
-      {key:'cargoAprovado',label:'Cargo novo',type:'text'},{key:'valorAprovado',label:'Salário novo',type:'text'},
-      {key:'reajuste',label:'Reajuste',type:'text'},{key:'pct',label:'%',type:'text'}
+      {key:'cargoAtual',label:'Cargo anterior',type:'text'},{key:'cargoAprovado',label:'Cargo novo',type:'text'},
+      {key:'salarioFmt',label:'Salário anterior',type:'text',computed:true},{key:'valorFmt',label:'Salário novo',type:'text',computed:true},
+      {key:'aumentoFmt',label:'Aumento R$',type:'text',computed:true},{key:'pctFmt',label:'%',type:'text',computed:true},
+      {key:'gestor',label:'Gestor',type:'text'},{key:'aprovador',label:'Aprovador',type:'text'}
     ]
   },
   pdis: {
@@ -865,6 +865,14 @@ function computeCrudFields(pageKey, data){
   if(pageKey==='promocoes'){
     data.forEach(r=>{
       r.mesFmt = fmtMonthBR(r.mesDate||r.mesRaw);
+      const salAnt = parseFloat(String(r.salarioAtual||'0').replace(/[^\d.,]/g,'').replace(',','.'));
+      const salNovo = parseFloat(String(r.valorAprovado||'0').replace(/[^\d.,]/g,'').replace(',','.'));
+      r.salarioFmt = isNaN(salAnt)?String(r.salarioAtual||''):'R$ '+salAnt.toLocaleString('pt-BR',{minimumFractionDigits:2});
+      r.valorFmt = isNaN(salNovo)?String(r.valorAprovado||''):'R$ '+salNovo.toLocaleString('pt-BR',{minimumFractionDigits:2});
+      const aumento = (!isNaN(salAnt)&&!isNaN(salNovo))?(salNovo-salAnt):NaN;
+      r.aumentoFmt = isNaN(aumento)?'—':'R$ '+aumento.toLocaleString('pt-BR',{minimumFractionDigits:2});
+      const pctVal = (!isNaN(salAnt)&&salAnt>0&&!isNaN(salNovo))?((salNovo-salAnt)/salAnt*100):NaN;
+      r.pctFmt = isNaN(pctVal)?String(r.pct||''):(pctVal>=0?'+':'')+pctVal.toFixed(1)+'%';
     });
   }
 }
@@ -887,7 +895,8 @@ function renderCrudPage(pageKey){
     if(fv) filtered = filtered.filter(r=> normalizeStr((r[ck]||'').toString()).includes(normalizeStr(fv)));
   });
 
-  const visibleCols = cfg.cols.slice(0, 8);
+  const maxVisible = cfg.maxCols || 8;
+  const visibleCols = cfg.cols.slice(0, maxVisible);
   const allCols = cfg.cols;
 
   // Collect unique values for filter dropdowns (from full data, not filtered)
