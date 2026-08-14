@@ -4111,9 +4111,9 @@ function getAniversarios(days){
    KANBAN — PLANOS DE AÇÃO
 ========================================================= */
 const KANBAN_COLS = [
-  {key:'todo', label:'A Fazer', color:'#9aa1ac', bg:'#f3f4f6'},
-  {key:'doing', label:'Em Andamento', color:'#f59e0b', bg:'#fef3c7'},
-  {key:'done', label:'Concluído', color:'#16a34a', bg:'#dcfce7'}
+  {key:'todo', label:'A Fazer', color:'#94a3b8', bg:'#f8fafc', dot:'#cbd5e1'},
+  {key:'doing', label:'Em Andamento', color:'#64748b', bg:'#f8fafc', dot:'#a78bfa'},
+  {key:'done', label:'Concluído', color:'#64748b', bg:'#f8fafc', dot:'#6ee7b7'}
 ];
 
 function renderKanban(){
@@ -4194,14 +4194,15 @@ function renderKanban(){
         let items = acoes.filter(a=>(a.status||'todo')===col.key);
         if(UI.kanbanArea) items = items.filter(a=>(a.area||'')===UI.kanbanArea);
         if(UI.kanbanPri) items = items.filter(a=>(a.prioridade||'')===UI.kanbanPri);
-        const priColors = {Alta:'#ef4444',Média:'#f59e0b',Baixa:'#3b82f6'};
-        return `<div style="background:${col.bg};border-radius:12px;padding:14px;min-height:300px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-            <div style="font-weight:700;font-size:14px;color:${col.color};display:flex;align-items:center;gap:8px;">
-              <span style="width:10px;height:10px;border-radius:50%;background:${col.color};display:inline-block;"></span>
+        const priColors = {Alta:'#f87171',Média:'#c4b5fd',Baixa:'#93c5fd'};
+        const priBg = {Alta:'#fef2f2',Média:'#f5f3ff',Baixa:'#eff6ff'};
+        return `<div style="background:${col.bg};border:1px solid #f0f0f0;border-radius:14px;padding:16px;min-height:300px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #eee;">
+            <div style="font-weight:600;font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.5px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:${col.dot||col.color};display:inline-block;"></span>
               ${col.label}
             </div>
-            <span style="background:${col.color};color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">${items.length}</span>
+            <span style="background:#f1f5f9;color:#94a3b8;font-size:11px;font-weight:600;padding:3px 10px;border-radius:8px;">${items.length}</span>
           </div>
           ${items.length===0?'<div style="text-align:center;padding:30px 10px;color:#bbb;font-size:12px;">Nenhuma ação</div>':''}
           ${items.map(a=>{
@@ -4215,26 +4216,26 @@ function renderKanban(){
             const clTotal = cl.length;
             const clPct = clTotal ? Math.round(clDone/clTotal*100) : 0;
             const initials = (a.responsavel||'?').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-            return `<div class="card kanban-card" data-acao-id="${a.id}" style="padding:16px 18px;margin-bottom:12px;border-radius:12px;border:1px solid ${isLate?'#fca5a5':'#e5e7eb'};border-left:4px solid ${priCol};background:${isLate?'#fef2f2':'#fff'};box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .2s;">
+            return `<div class="card kanban-card" data-acao-id="${a.id}" style="padding:16px 18px;margin-bottom:10px;border-radius:12px;border:1px solid #eee;border-left:3px solid ${priCol};background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.03);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 3px 8px rgba(0,0,0,.06)'" onmouseout="this.style.transform='none';this.style.boxShadow='0 1px 2px rgba(0,0,0,.03)'">
               <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">
-                <div style="font-weight:700;font-size:14px;color:#1B1B2F;line-height:1.3;flex:1;">${esc(a.titulo||'')}</div>
-                <span style="background:${priCol}18;color:${priCol};font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;">${priLabel}</span>
+                <div style="font-weight:600;font-size:13px;color:#334155;line-height:1.4;flex:1;">${esc(a.titulo||'')}</div>
+                <span style="background:${priBg[priLabel]||'#f8fafc'};color:${priCol};font-size:10px;font-weight:600;padding:3px 8px;border-radius:6px;white-space:nowrap;">${priLabel}</span>
               </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px;color:#888;margin-bottom:${clTotal||cl.length===0?'10':'6'}px;">
-                ${a.responsavel?'<div style="display:flex;align-items:center;gap:5px;"><div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#00BFA5,#0ea5e9);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">'+initials+'</div><span style="font-weight:500;color:#555;">'+esc(a.responsavel)+'</span></div>':''}
-                ${a.area?'<span style="background:#f0f4f8;color:#555;padding:2px 8px;border-radius:6px;font-weight:500;">'+esc(a.area)+'</span>':''}
-                ${prazoStr?'<span style="display:flex;align-items:center;gap:3px;'+(isLate?'color:#ef4444;font-weight:700;':'color:#888;')+'"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>'+prazoStr+'</span>':''}
-                ${a.origem?'<span style="color:#8b5cf6;font-weight:500;">'+esc(a.origem)+'</span>':''}
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px;color:#94a3b8;margin-bottom:10px;">
+                ${a.responsavel?'<div style="display:flex;align-items:center;gap:5px;"><div style="width:20px;height:20px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center;">'+initials+'</div><span style="color:#64748b;">'+esc(a.responsavel)+'</span></div>':''}
+                ${a.area?'<span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:6px;">'+esc(a.area)+'</span>':''}
+                ${prazoStr?'<span style="display:flex;align-items:center;gap:3px;'+(isLate?'color:#f87171;font-weight:600;':'')+'"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>'+prazoStr+'</span>':''}
+                ${a.origem?'<span style="color:#a78bfa;">'+esc(a.origem)+'</span>':''}
               </div>
-              ${clTotal?'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="flex:1;height:5px;background:#f0f0f0;border-radius:3px;overflow:hidden;"><div style="width:'+clPct+'%;height:100%;background:'+(clPct===100?'#16a34a':'linear-gradient(90deg,#00BFA5,#0ea5e9)')+';border-radius:3px;transition:width .3s;"></div></div><span style="font-size:10px;font-weight:700;color:'+(clPct===100?'#16a34a':'#64748b')+';">'+clDone+'/'+clTotal+'</span></div>':''}
-              ${cl.length||true?'<div style="margin-bottom:8px;">'+
-                cl.map((t,ti)=>'<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin:2px 0;border-radius:6px;cursor:pointer;transition:background .15s;'+(t.done?'background:#f8fafc;':'background:#fff;')+'" onmouseover="this.style.background=\'#f0fdf4\'" onmouseout="this.style.background=\''+(t.done?'#f8fafc':'#fff')+'\'"><input type="checkbox" class="cl-check" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" '+(t.done?'checked':'')+' style="accent-color:#00BFA5;cursor:pointer;width:16px;height:16px;"><span style="flex:1;font-size:12px;line-height:1.4;'+(t.done?'text-decoration:line-through;color:#b0b0b0;':'color:#333;')+'">'+esc(t.text)+'</span><button class="cl-del" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" style="border:none;background:none;color:#ddd;cursor:pointer;font-size:13px;padding:0 3px;opacity:0;transition:opacity .15s;" onmouseover="this.style.opacity=1;this.style.color=\'#ef4444\'" onmouseout="this.style.opacity=0;this.style.color=\'#ddd\'" title="Remover">✕</button></label>').join('')+
-                '<div style="display:flex;gap:6px;margin-top:6px;padding:0 4px;"><input type="text" class="cl-input" data-acao-id="'+a.id+'" placeholder="+ Adicionar tarefa..." style="flex:1;padding:6px 10px;border:1px dashed #d0d5dd;border-radius:8px;font-size:12px;color:#666;background:transparent;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor=\'#00BFA5\';this.style.borderStyle=\'solid\'" onblur="this.style.borderColor=\'#d0d5dd\';this.style.borderStyle=\'dashed\'"><button class="btn cl-add" data-acao-id="'+a.id+'" style="font-size:12px;padding:4px 10px;width:auto;background:#00BFA5;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">+</button></div>'+
-              '</div>':''}
-              <div style="display:flex;gap:6px;margin-top:4px;padding-top:8px;border-top:1px solid #f0f0f0;">
-                ${col.key!=='todo'?'<button class="btn btn-outline kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='doing'?'todo':'doing')+'" style="font-size:11px;padding:4px 10px;width:auto;border-radius:8px;border-color:#e0e0e0;color:#888;" onmouseover="this.style.borderColor=\'#00BFA5\';this.style.color=\'#00BFA5\'" onmouseout="this.style.borderColor=\'#e0e0e0\';this.style.color=\'#888\'">&#8592; Voltar</button>':''}
-                ${col.key!=='done'?'<button class="btn btn-outline kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='todo'?'doing':'done')+'" style="font-size:11px;padding:4px 10px;width:auto;border-radius:8px;border-color:#e0e0e0;color:#888;" onmouseover="this.style.borderColor=\'#00BFA5\';this.style.color=\'#00BFA5\'" onmouseout="this.style.borderColor=\'#e0e0e0\';this.style.color=\'#888\'">Avançar &#8594;</button>':''}
-                <button class="btn btn-outline kanban-del" data-del-id="${a.id}" style="font-size:11px;padding:4px 10px;width:auto;border-radius:8px;border-color:#fecaca;color:#fca5a5;margin-left:auto;" onmouseover="this.style.background='#fef2f2';this.style.color='#ef4444';this.style.borderColor='#ef4444'" onmouseout="this.style.background='transparent';this.style.color='#fca5a5';this.style.borderColor='#fecaca'">Excluir</button>
+              ${clTotal?'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><div style="flex:1;height:4px;background:#f1f5f9;border-radius:2px;overflow:hidden;"><div style="width:'+clPct+'%;height:100%;background:'+(clPct===100?'#86efac':'#c4b5fd')+';border-radius:2px;transition:width .3s;"></div></div><span style="font-size:10px;font-weight:600;color:#94a3b8;">'+clDone+'/'+clTotal+'</span></div>':''}
+              <div style="margin-bottom:6px;">
+                ${cl.map((t,ti)=>'<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;margin:1px 0;border-radius:6px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'transparent\'"><input type="checkbox" class="cl-check" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" '+(t.done?'checked':'')+' style="accent-color:#a78bfa;cursor:pointer;width:15px;height:15px;"><span style="flex:1;font-size:12px;line-height:1.4;'+(t.done?'text-decoration:line-through;color:#cbd5e1;':'color:#475569;')+'">'+esc(t.text)+'</span><button class="cl-del" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" style="border:none;background:none;color:#e2e8f0;cursor:pointer;font-size:12px;padding:0 3px;transition:color .15s;" onmouseover="this.style.color=\'#f87171\'" onmouseout="this.style.color=\'#e2e8f0\'" title="Remover">✕</button></label>').join('')}
+                <div style="display:flex;gap:6px;margin-top:6px;"><input type="text" class="cl-input" data-acao-id="${a.id}" placeholder="+ Adicionar tarefa..." style="flex:1;padding:5px 10px;border:1px dashed #e2e8f0;border-radius:8px;font-size:11px;color:#94a3b8;background:transparent;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='#a78bfa';this.style.borderStyle='solid'" onblur="this.style.borderColor='#e2e8f0';this.style.borderStyle='dashed'"><button class="btn cl-add" data-acao-id="${a.id}" style="font-size:11px;padding:4px 10px;width:auto;background:#f1f5f9;color:#64748b;border:none;border-radius:8px;font-weight:600;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">+</button></div>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:6px;padding-top:8px;border-top:1px solid #f1f5f9;">
+                ${col.key!=='todo'?'<button class="btn btn-outline kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='doing'?'todo':'doing')+'" style="font-size:10px;padding:4px 10px;width:auto;border-radius:8px;border-color:#e2e8f0;color:#94a3b8;background:transparent;" onmouseover="this.style.borderColor=\'#c4b5fd\';this.style.color=\'#8b5cf6\'" onmouseout="this.style.borderColor=\'#e2e8f0\';this.style.color=\'#94a3b8\'">&#8592;</button>':''}
+                ${col.key!=='done'?'<button class="btn btn-outline kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='todo'?'doing':'done')+'" style="font-size:10px;padding:4px 10px;width:auto;border-radius:8px;border-color:#e2e8f0;color:#94a3b8;background:transparent;" onmouseover="this.style.borderColor=\'#c4b5fd\';this.style.color=\'#8b5cf6\'" onmouseout="this.style.borderColor=\'#e2e8f0\';this.style.color=\'#94a3b8\'">&#8594;</button>':''}
+                <button class="btn btn-outline kanban-del" data-del-id="${a.id}" style="font-size:10px;padding:4px 10px;width:auto;border-radius:8px;border-color:#fce7f3;color:#f9a8d4;background:transparent;margin-left:auto;" onmouseover="this.style.background='#fdf2f8';this.style.color='#ec4899';this.style.borderColor='#f9a8d4'" onmouseout="this.style.background='transparent';this.style.color='#f9a8d4';this.style.borderColor='#fce7f3'">✕</button>
               </div>
             </div>`;
           }).join('')}
