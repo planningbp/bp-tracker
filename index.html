@@ -4122,98 +4122,96 @@ function renderKanban(){
   const areas = bp ? bp.areas : [];
   const liders = [...new Set(getMyColaboradores().map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))].sort();
 
-  const totalAcoes = acoes.length;
-  const totalDone = acoes.filter(a=>a.status==='done').length;
-  const globalPct = totalAcoes ? Math.round(totalDone/totalAcoes*100) : 0;
-
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <select id="kanbanFilterArea" class="select" style="min-width:140px;">
-          <option value="">Todas as áreas</option>
-          ${areas.map(a=>'<option value="'+esc(a)+'"'+(UI.kanbanArea===a?' selected':'')+'>'+esc(a)+'</option>').join('')}
-        </select>
-        <select id="kanbanFilterPri" class="select" style="min-width:120px;">
-          <option value="">Prioridade</option>
-          <option value="Alta"${UI.kanbanPri==='Alta'?' selected':''}>Alta</option>
-          <option value="Média"${UI.kanbanPri==='Média'?' selected':''}>Média</option>
-          <option value="Baixa"${UI.kanbanPri==='Baixa'?' selected':''}>Baixa</option>
-        </select>
-        ${totalAcoes?'<span style="font-size:12px;color:#888;margin-left:6px;">'+totalDone+'/'+totalAcoes+' concluídas</span>':''}
-      </div>
+    <div class="toolbar">
+      <select id="kanbanFilterArea">
+        <option value="">Todas as áreas</option>
+        ${areas.map(a=>'<option value="'+esc(a)+'"'+(UI.kanbanArea===a?' selected':'')+'>'+esc(a)+'</option>').join('')}
+      </select>
+      <select id="kanbanFilterPri">
+        <option value="">Prioridade</option>
+        <option value="Alta"${UI.kanbanPri==='Alta'?' selected':''}>Alta</option>
+        <option value="Média"${UI.kanbanPri==='Média'?' selected':''}>Média</option>
+        <option value="Baixa"${UI.kanbanPri==='Baixa'?' selected':''}>Baixa</option>
+      </select>
+      <div class="spacer"></div>
       <button class="btn btn-primary" id="btnAddAcao" style="width:auto;">${ICONS.plus} Nova Ação</button>
     </div>
 
-    <div id="kanbanAddForm" style="display:none;background:#fff;border:1px solid #ddd;border-radius:12px;padding:24px;margin-bottom:24px;">
-      <div style="font-weight:700;font-size:15px;color:#1B1B2F;margin-bottom:18px;">Nova Ação</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:16px;">
-        <div class="field"><label>Título *</label><input type="text" id="acaoTitulo" placeholder="Descrição da ação" class="select" style="width:100%;box-sizing:border-box;"></div>
-        <div class="field"><label>Responsável</label><input type="text" id="acaoResp" placeholder="Quem vai executar" class="select" style="width:100%;box-sizing:border-box;"></div>
+    <div id="kanbanAddForm" class="card" style="display:none;margin-bottom:20px;">
+      <div class="section-title">Nova Ação</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:14px;">
+        <div class="field"><label>Título *</label><input type="text" id="acaoTitulo" placeholder="Descrição da ação"></div>
+        <div class="field"><label>Responsável</label><input type="text" id="acaoResp" placeholder="Quem vai executar"></div>
         <div class="field"><label>Área</label>
-          <select id="acaoArea" class="select"><option value="">Selecione...</option>${areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}</select>
+          <select id="acaoArea"><option value="">Selecione...</option>${areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}</select>
         </div>
-        <div class="field"><label>Prazo</label><input type="date" id="acaoPrazo" class="select" style="width:100%;box-sizing:border-box;"></div>
+        <div class="field"><label>Prazo</label><input type="date" id="acaoPrazo"></div>
         <div class="field"><label>Prioridade</label>
-          <select id="acaoPri" class="select"><option value="Média">Média</option><option value="Alta">Alta</option><option value="Baixa">Baixa</option></select>
+          <select id="acaoPri"><option value="Média">Média</option><option value="Alta">Alta</option><option value="Baixa">Baixa</option></select>
         </div>
         <div class="field"><label>Origem</label>
-          <select id="acaoOrigem" class="select"><option value="">Selecione...</option><option value="Reunião BP">Reunião BP</option><option value="Pesquisa de Clima">Pesquisa de Clima</option><option value="PDI">PDI</option><option value="1:1">1:1</option><option value="Feedback">Feedback</option><option value="Outra">Outra</option></select>
+          <select id="acaoOrigem"><option value="">Selecione...</option><option value="Reunião BP">Reunião BP</option><option value="Pesquisa de Clima">Pesquisa de Clima</option><option value="PDI">PDI</option><option value="1:1">1:1</option><option value="Feedback">Feedback</option><option value="Outra">Outra</option></select>
         </div>
       </div>
-      <div class="field" style="margin-bottom:16px;"><label>Observações</label><textarea id="acaoObs" rows="2" placeholder="Detalhes..." style="width:100%;border:1px solid #ddd;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea></div>
-      <div style="margin-bottom:18px;">
-        <label style="display:block;font-size:12px;font-weight:600;color:#1B1B2F;margin-bottom:8px;">Checklist</label>
-        <div id="acaoChecklistItems" style="margin-bottom:8px;"></div>
+      <div class="field" style="margin-bottom:14px;"><label>Observações</label><textarea id="acaoObs" rows="2" placeholder="Detalhes..."></textarea></div>
+      <div class="field" style="margin-bottom:14px;">
+        <label>Checklist</label>
+        <div id="acaoChecklistItems" style="margin-bottom:6px;"></div>
         <div style="display:flex;gap:8px;">
-          <input type="text" id="acaoChecklistInput" placeholder="Adicionar item..." class="select" style="flex:1;box-sizing:border-box;">
-          <button id="btnAddChecklistItem" type="button" class="btn btn-outline" style="width:auto;">+ Adicionar</button>
+          <input type="text" id="acaoChecklistInput" placeholder="Adicionar item..." style="flex:1;">
+          <button id="btnAddChecklistItem" type="button" class="btn btn-outline btn-sm" style="width:auto;">+ Adicionar</button>
         </div>
       </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:14px;border-top:1px solid #eee;">
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button class="btn btn-outline" id="btnCancelAcao" style="width:auto;">Cancelar</button>
         <button class="btn btn-primary" id="btnSaveAcao" style="width:auto;">Salvar</button>
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;min-height:400px;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
       ${KANBAN_COLS.map(col=>{
         let items = acoes.filter(a=>(a.status||'todo')===col.key);
         if(UI.kanbanArea) items = items.filter(a=>(a.area||'')===UI.kanbanArea);
         if(UI.kanbanPri) items = items.filter(a=>(a.prioridade||'')===UI.kanbanPri);
-        return `<div style="background:#fafafa;border-radius:12px;padding:14px;min-height:300px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid ${col.accent};">
-            <span style="font-weight:700;font-size:13px;color:${col.accent};">${col.label}</span>
-            <span style="background:${col.accent};color:#fff;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;">${items.length}</span>
+        return `<div class="card" style="padding:16px;background:var(--bg);border:none;box-shadow:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <span style="font-weight:700;font-size:14px;color:var(--text);">${col.label}</span>
+            <span style="background:${col.accent};color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;">${items.length}</span>
           </div>
-          ${items.length===0?'<div style="text-align:center;padding:40px 10px;color:#ccc;font-size:12px;">Nenhuma ação</div>':''}
+          ${items.length===0?'<div style="text-align:center;padding:40px 10px;color:var(--text-light);font-size:13px;">Nenhuma ação</div>':''}
           ${items.map(a=>{
             const prazo = a.prazo ? new Date(a.prazo) : null;
             const prazoStr = prazo && !isNaN(prazo) ? prazo.toLocaleDateString('pt-BR') : '';
             const isLate = prazo && prazo < new Date() && col.key!=='done';
-            const priColors = {Alta:'#ef4444',Média:'#f59e0b',Baixa:'#00BFA5'};
-            const priCol = priColors[a.prioridade]||'#888';
+            const priMap = {Alta:{color:'var(--red)',bg:'var(--red-bg)'},Média:{color:'var(--yellow)',bg:'var(--yellow-bg)'},Baixa:{color:'var(--primary)',bg:'var(--green-bg)'}};
+            const pri = priMap[a.prioridade]||priMap.Média;
             const cl = a.checklist||[];
             const clDone = cl.filter(t=>t.done).length;
             const clTotal = cl.length;
             const clPct = clTotal ? Math.round(clDone/clTotal*100) : 0;
-            return `<div class="card kanban-card" data-acao-id="${a.id}" style="padding:14px;margin-bottom:8px;border-radius:10px;border-left:3px solid ${priCol};${isLate?'background:#fff5f5;':''}">
-              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;">
-                <div style="font-weight:600;font-size:13px;color:#1B1B2F;line-height:1.4;flex:1;">${esc(a.titulo||'')}</div>
-                <span style="font-size:10px;font-weight:700;color:${priCol};white-space:nowrap;">${a.prioridade||'Média'}</span>
+            return `<div class="card" data-acao-id="${a.id}" style="padding:14px;margin-bottom:10px;${isLate?'border-color:var(--red);':''}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+                <span style="font-weight:700;font-size:13px;color:var(--text);flex:1;">${esc(a.titulo||'')}</span>
+                <span style="background:${pri.bg};color:${pri.color};font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">${esc(a.prioridade||'Média')}</span>
               </div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:#666;margin-bottom:8px;">
-                ${a.responsavel?'<span style="color:#1B1B2F;font-weight:500;">'+esc(a.responsavel)+'</span>':''}
-                ${a.area?'<span style="background:#e6faf3;color:#00BFA5;padding:1px 7px;border-radius:4px;font-weight:500;">'+esc(a.area)+'</span>':''}
-                ${prazoStr?'<span style="'+(isLate?'color:#ef4444;font-weight:600;':'')+'">'+prazoStr+'</span>':''}
-                ${a.origem?'<span style="color:#1B1B2F;opacity:.5;">'+esc(a.origem)+'</span>':''}
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--text-light);margin-bottom:${clTotal?'8':'4'}px;">
+                ${a.responsavel?'<span style="font-weight:600;color:var(--text);">'+esc(a.responsavel)+'</span>':''}
+                ${a.area?'<span style="background:var(--green-bg);color:var(--primary);padding:2px 8px;border-radius:5px;font-weight:600;">'+esc(a.area)+'</span>':''}
+                ${prazoStr?'<span style="'+(isLate?'color:var(--red);font-weight:700;':'')+'">'+prazoStr+'</span>':''}
+                ${a.origem?'<span>'+esc(a.origem)+'</span>':''}
               </div>
-              ${clTotal?'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><div style="flex:1;height:4px;background:#eee;border-radius:2px;overflow:hidden;"><div style="width:'+clPct+'%;height:100%;background:'+(clPct===100?'#00BFA5':'#f59e0b')+';border-radius:2px;transition:width .3s;"></div></div><span style="font-size:10px;font-weight:600;color:'+(clPct===100?'#00BFA5':'#999')+';">'+clDone+'/'+clTotal+'</span></div>':''}
-              ${cl.map((t,ti)=>'<label style="display:flex;align-items:center;gap:7px;padding:3px 2px;cursor:pointer;"><input type="checkbox" class="cl-check" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" '+(t.done?'checked':'')+' style="accent-color:#00BFA5;cursor:pointer;width:14px;height:14px;flex-shrink:0;"><span style="font-size:12px;'+(t.done?'text-decoration:line-through;color:#bbb;':'color:#333;')+'">'+esc(t.text)+'</span><button class="cl-del" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" style="border:none;background:none;color:transparent;cursor:pointer;font-size:11px;padding:0 2px;margin-left:auto;" onmouseover="this.style.color=\'#ef4444\'" onmouseout="this.style.color=\'transparent\'">✕</button></label>').join('')}
-              <div style="display:flex;gap:4px;margin-top:4px;"><input type="text" class="cl-input" data-acao-id="${a.id}" placeholder="+ tarefa" style="flex:1;padding:4px 8px;border:none;border-bottom:1px solid #eee;background:transparent;font-size:11px;color:#666;outline:none;" onfocus="this.style.borderColor='#00BFA5'" onblur="this.style.borderColor='#eee'"><button class="cl-add" data-acao-id="${a.id}" style="border:none;background:none;color:#ccc;cursor:pointer;font-size:13px;font-weight:700;padding:0 4px;" onmouseover="this.style.color='#00BFA5'" onmouseout="this.style.color='#ccc'">+</button></div>
-              <div style="display:flex;gap:4px;margin-top:10px;padding-top:8px;border-top:1px solid #f0f0f0;">
-                ${col.key!=='todo'?'<button class="kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='doing'?'todo':'doing')+'" style="border:none;background:#eee;color:#555;padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer;" onmouseover="this.style.background=\'#00BFA5\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#eee\';this.style.color=\'#555\'">&#8592;</button>':''}
-                ${col.key!=='done'?'<button class="kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='todo'?'doing':'done')+'" style="border:none;background:#eee;color:#555;padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer;" onmouseover="this.style.background=\'#00BFA5\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#eee\';this.style.color=\'#555\'">&#8594;</button>':''}
-                <button class="kanban-del" data-del-id="${a.id}" style="border:none;background:none;color:#ddd;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;margin-left:auto;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#ddd'">&#10005;</button>
+              ${clTotal?'<div style="margin-bottom:8px;"><div class="progress-bar" style="height:5px;margin-bottom:4px;"><div class="progress-fill" style="width:'+clPct+'%;'+(clPct===100?'':'background:var(--yellow);')+'"></div></div><span style="font-size:10px;font-weight:600;color:'+(clPct===100?'var(--primary)':'var(--text-light)')+';">'+clDone+'/'+clTotal+'</span></div>':''}
+              ${cl.map((t,ti)=>'<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;border-bottom:1px solid var(--border);"><input type="checkbox" class="cl-check" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" '+(t.done?'checked':'')+' style="accent-color:var(--primary);cursor:pointer;width:15px;height:15px;"><span style="flex:1;font-size:12px;'+(t.done?'text-decoration:line-through;color:var(--gray-badge);':'color:var(--text);')+'">'+esc(t.text)+'</span><button class="cl-del btn-sm" data-acao-id="'+a.id+'" data-cl-idx="'+ti+'" style="border:none;background:none;color:var(--border);cursor:pointer;font-size:11px;padding:0 2px;" onmouseover="this.style.color=\'var(--red)\'" onmouseout="this.style.color=\'var(--border)\'">&#10005;</button></label>').join('')}
+              <div style="display:flex;gap:4px;margin-top:6px;align-items:center;">
+                <input type="text" class="cl-input" data-acao-id="${a.id}" placeholder="+ Adicionar tarefa..." style="flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;color:var(--text);outline:none;background:#fff;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+                <button class="btn btn-outline btn-sm cl-add" data-acao-id="${a.id}" style="width:auto;padding:5px 10px;font-size:11px;">+</button>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+                ${col.key!=='todo'?'<button class="btn btn-outline btn-sm kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='doing'?'todo':'doing')+'" style="width:auto;">&#8592;</button>':''}
+                ${col.key!=='done'?'<button class="btn btn-outline btn-sm kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='todo'?'doing':'done')+'" style="width:auto;">&#8594;</button>':''}
+                <div style="flex:1;"></div>
+                <button class="btn btn-sm btn-danger kanban-del" data-del-id="${a.id}" style="width:auto;">&#10005;</button>
               </div>
             </div>`;
           }).join('')}
