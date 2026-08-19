@@ -4517,9 +4517,6 @@ function renderLideresPage(){
         html += '</div>';
       }
 
-      html += '</div>';
-    }
-
       // Relatórios 1:1
       const liderReports = DB.relatorios1on1.filter(r=>normalizeStr(r.lider)===normalizeStr(liderNome));
       liderReports.sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
