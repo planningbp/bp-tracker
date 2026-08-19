@@ -3749,7 +3749,8 @@ function getAcompanhamentoRecords(){
         milestone: days,
         dueDate,
         diffDays,
-        done: saved ? saved.status === 'Realizado' : false,
+        done: saved ? (saved.status === 'Realizado' || saved.status === 'Sem Retorno' || saved.status === 'Não Realizado') : false,
+        status: saved ? saved.status : 'Pendente',
         observacao: saved ? saved.observacao : '',
         realizado: saved ? saved.realizado : ''
       });
@@ -3894,8 +3895,10 @@ function renderAcompanhamentos(){
               const dueStr = r.dueDate instanceof Date ? r.dueDate.toLocaleDateString('pt-BR') : '';
               const areaColors = {'Fiscal':'#6366f1','Folha':'#0ea5e9','Seguros':'#f59e0b','Societário':'#8b5cf6','DOC':'#ec4899','Integração de Novos Clientes':'#14b8a6','Contábil':'#ef4444','Contábil/Fiscal':'#f87171','Consultoria':'#f97316','Construção Civil':'#84cc16','Gestão de Risco':'#06b6d4','TI':'#3b82f6','BPO Financeiro':'#a855f7','Financeiro Interno':'#10b981','Controladoria':'#e11d48','Desenvolvedores':'#7c3aed','Comercial':'#f43f5e','Marketing':'#d946ef','Expansão':'#0d9488'};
               const areaColor = areaColors[r.area] || '#64748b';
-              const cardBg = r.done ? '#f0fdf4' : '#fff';
-              const cardBorder = r.done ? '#bbf7d0' : r.diffDays<0 ? '#fca5a5' : '#e5e7eb';
+              const statusColors = {'Realizado':{bg:'#f0fdf4',border:'#bbf7d0'},'Sem Retorno':{bg:'#fff6e6',border:'#fcd34d'},'Não Realizado':{bg:'#fef2f2',border:'#fca5a5'}};
+              const sc = statusColors[r.status] || {};
+              const cardBg = sc.bg || '#fff';
+              const cardBorder = sc.border || (r.diffDays<0 ? '#fca5a5' : '#e5e7eb');
               return `<div class="acomp-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:10px;padding:14px;${r.done?'opacity:0.7;':''}">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
                   <div>
@@ -3913,11 +3916,13 @@ function renderAcompanhamentos(){
                   <div>Admissão: <strong>${admStr}</strong></div>
                   <div>Prazo: <strong>${dueStr}</strong></div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
-                  <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex:1;">
-                    <input type="checkbox" class="acomp-check" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" ${r.done?'checked':''}>
-                    Registro feito
-                  </label>
+                <div style="margin-top:8px;">
+                  <select class="acomp-status" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;">
+                    <option value="Pendente"${r.status==='Pendente'||!r.status?' selected':''}>Pendente</option>
+                    <option value="Realizado"${r.status==='Realizado'?' selected':''}>✓ Realizado</option>
+                    <option value="Sem Retorno"${r.status==='Sem Retorno'?' selected':''}>⚠ Sem Retorno</option>
+                    <option value="Não Realizado"${r.status==='Não Realizado'?' selected':''}>✕ Não Realizado</option>
+                  </select>
                 </div>
                 <div style="margin-top:8px;">
                   <input type="text" class="acomp-obs" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" value="${esc(r.observacao)}" placeholder="Observação..." style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#f9fafb;">
@@ -4016,16 +4021,15 @@ function bindAcompanhamentos(){
   if(toggleAll) toggleAll.addEventListener('change', ()=>{ UI.acompShowAll=toggleAll.checked; rerender(); });
   if(toggleDone) toggleDone.addEventListener('change', ()=>{ UI.acompShowDone=toggleDone.checked; rerender(); });
 
-  document.querySelectorAll('.acomp-check').forEach(cb=>{
-    cb.addEventListener('change', ()=>{
-      const nome = cb.getAttribute('data-nome');
-      const milestone = parseInt(cb.getAttribute('data-milestone'));
-      const card = cb.closest('.acomp-card');
+  document.querySelectorAll('.acomp-status').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const nome = sel.getAttribute('data-nome');
+      const milestone = parseInt(sel.getAttribute('data-milestone'));
+      const card = sel.closest('.acomp-card');
       const obsInput = card.querySelector('.acomp-obs');
       const observacao = obsInput ? obsInput.value : '';
-      const done = cb.checked;
-      const status = done ? 'Realizado' : 'Pendente';
-      const realizado = done ? new Date().toISOString().slice(0,10) : '';
+      const status = sel.value;
+      const realizado = status !== 'Pendente' ? new Date().toISOString().slice(0,10) : '';
 
       const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
       const record = { nome, milestone, status, realizado, observacao };
@@ -4886,7 +4890,7 @@ function renderColaboradorDetail(){
   const milestoneRecords = adm ? milestones.map(days=>{
     const dueDate = new Date(adm.getTime() + days*86400000);
     const saved = acomps.find(a=>a.milestone===days);
-    return { days, dueDate, done: saved ? saved.status==='Realizado' : false, realizado: saved ? saved.realizado : '', observacao: saved ? saved.observacao : '' };
+    return { days, dueDate, done: saved ? (saved.status==='Realizado'||saved.status==='Sem Retorno'||saved.status==='Não Realizado') : false, status: saved ? saved.status : 'Pendente', realizado: saved ? saved.realizado : '', observacao: saved ? saved.observacao : '' };
   }) : [];
 
   const initial = nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -5022,22 +5026,30 @@ function renderColaboradorDetail(){
           const dueStr = m.dueDate.toLocaleDateString('pt-BR');
           const diffDays = Math.round((m.dueDate - today) / 86400000);
           const isPast = diffDays < 0;
-          return `<div style="background:${m.done?'#f0fdf4':isPast?'#fef2f2':'#f9fafb'};border:1px solid ${m.done?'#bbf7d0':isPast?'#fca5a5':'#e5e7eb'};border-radius:10px;padding:14px;">
+          const detailSC = {'Realizado':{bg:'#f0fdf4',border:'#bbf7d0',label:'✓ Realizado'},'Sem Retorno':{bg:'#fff6e6',border:'#fcd34d',label:'⚠ Sem Retorno'},'Não Realizado':{bg:'#fef2f2',border:'#fca5a5',label:'✕ Não Realizado'}};
+          const dsc = detailSC[m.status] || {};
+          const detBg = dsc.bg || (isPast?'#fef2f2':'#f9fafb');
+          const detBorder = dsc.border || (isPast?'#fca5a5':'#e5e7eb');
+          return `<div style="background:${detBg};border:1px solid ${detBorder};border-radius:10px;padding:14px;">
             <div style="text-align:center;">
               <div style="font-weight:800;font-size:18px;margin-bottom:4px;">${m.days} dias</div>
               <div style="font-size:12px;color:#888;margin-bottom:6px;">${dueStr}</div>
-              ${m.done
-                ? '<div style="color:#16a34a;font-weight:700;font-size:13px;">✓ Realizado'+(m.realizado?' em '+new Date(m.realizado+'T00:00:00').toLocaleDateString('pt-BR'):'')+'</div>'
+              ${m.status!=='Pendente'
+                ? '<div style="color:'+(m.status==='Realizado'?'#16a34a':m.status==='Sem Retorno'?'#d97706':'#ef4444')+';font-weight:700;font-size:13px;">'+dsc.label+(m.realizado?' em '+new Date(m.realizado+'T00:00:00').toLocaleDateString('pt-BR'):'')+'</div>'
                 : '<div style="color:'+(isPast?'#ef4444':'#f59e0b')+';font-weight:600;font-size:13px;">'+(isPast?'Atrasado ('+diffDays+'d)':'Pendente (+'+diffDays+'d)')+'</div>'
               }
             </div>
             <div style="margin-top:10px;">
               <textarea class="detail-obs" data-milestone="${m.days}" rows="4" placeholder="Registre aqui o acompanhamento..." style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#fff;resize:vertical;font-family:inherit;line-height:1.5;">${esc(m.observacao)}</textarea>
             </div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-top:8px;justify-content:center;">
-              <input type="checkbox" class="detail-done" data-milestone="${m.days}" ${m.done?'checked':''}>
-              Registro feito
-            </label>
+            <div style="margin-top:8px;">
+              <select class="detail-status" data-milestone="${m.days}" style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#fff;cursor:pointer;">
+                <option value="Pendente"${m.status==='Pendente'||!m.status?' selected':''}>Pendente</option>
+                <option value="Realizado"${m.status==='Realizado'?' selected':''}>✓ Realizado</option>
+                <option value="Sem Retorno"${m.status==='Sem Retorno'?' selected':''}>⚠ Sem Retorno</option>
+                <option value="Não Realizado"${m.status==='Não Realizado'?' selected':''}>✕ Não Realizado</option>
+              </select>
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -5217,13 +5229,12 @@ function bindColaboradorDetail(){
     });
   });
 
-  // Milestone done checkbox
-  document.querySelectorAll('.detail-done').forEach(cb=>{
-    cb.addEventListener('change', ()=>{
-      const milestone = parseInt(cb.getAttribute('data-milestone'));
-      const done = cb.checked;
-      const status = done ? 'Realizado' : 'Pendente';
-      const realizado = done ? new Date().toISOString().slice(0,10) : '';
+  // Milestone status select
+  document.querySelectorAll('.detail-status').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const milestone = parseInt(sel.getAttribute('data-milestone'));
+      const status = sel.value;
+      const realizado = status !== 'Pendente' ? new Date().toISOString().slice(0,10) : '';
       const ta = document.querySelector('.detail-obs[data-milestone="'+milestone+'"]');
       const observacao = ta ? ta.value : '';
       const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
@@ -5409,7 +5420,7 @@ function exportColaboradorDetailPDF(nome){
     const msRows = [7,15,45,90].map(days=>{
       const due = new Date(adm.getTime()+days*86400000);
       const saved = acomps.find(a=>a.milestone===days);
-      const status = saved && saved.status==='Realizado' ? 'Realizado'+(saved.realizado?' em '+fmtDatePDF(saved.realizado):'') : 'Pendente';
+      const status = saved && saved.status && saved.status!=='Pendente' ? saved.status+(saved.realizado?' em '+fmtDatePDF(saved.realizado):'') : 'Pendente';
       return [days+' dias', fmtDatePDF(due), status, saved?saved.observacao||'':''];
     });
     doc.setFontSize(11); doc.setTextColor(27,27,47);
@@ -5481,7 +5492,7 @@ function exportAcompanhamentosPDF(){
   const rows = filtered.map(r=>[
     r.nome, r.cargo, r.area, r.milestone+' dias',
     fmtDatePDF(r.admissao), fmtDatePDF(r.dueDate),
-    r.done?'Realizado'+(r.realizado?' ('+fmtDatePDF(r.realizado)+')':''):'Pendente',
+    r.status&&r.status!=='Pendente'?r.status+(r.realizado?' ('+fmtDatePDF(r.realizado)+')':''):'Pendente',
     r.observacao||''
   ]);
 
