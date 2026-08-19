@@ -4532,7 +4532,16 @@ function renderLideresPage(){
             <div class="field"><label>Título</label><input type="text" class="report-titulo" placeholder="Ex: Relatório Jul/Ago 2026"></div>
             <div class="field"><label>Período</label><input type="text" class="report-periodo" placeholder="Ex: 01/07/2026 a 19/08/2026"></div>
           </div>
-          <div class="field" style="margin-bottom:12px;"><label>Conteúdo do relatório</label><textarea class="report-conteudo" rows="12" placeholder="Cole aqui o relatório gerado pelo agente do Claude..." style="font-family:inherit;line-height:1.6;"></textarea></div>
+          <div class="field" style="margin-bottom:12px;">
+            <label>Arquivo do relatório</label>
+            <div class="report-dropzone" style="border:2px dashed var(--border);border-radius:10px;padding:30px;text-align:center;cursor:pointer;transition:border-color .2s;background:#fff;">
+              <div style="font-size:24px;margin-bottom:6px;">${ICONS.file}</div>
+              <div style="font-size:13px;color:var(--text);">Arraste o arquivo aqui</div>
+              <div style="font-size:11px;color:var(--text-light);margin-top:4px;">ou clique para selecionar (.pdf, .docx, .doc, .txt)</div>
+              <input type="file" class="report-file-input" accept=".pdf,.docx,.doc,.txt,.md" style="display:none;">
+              <div class="report-file-name" style="margin-top:10px;font-size:12px;font-weight:600;color:var(--primary);display:none;"></div>
+            </div>
+          </div>
           <div style="display:flex;gap:8px;justify-content:flex-end;">
             <button class="btn btn-outline btn-sm lider-cancel-report" style="width:auto;">Cancelar</button>
             <button class="btn btn-primary btn-sm lider-save-report" data-lider-name="${esc(liderNome)}" style="width:auto;">Salvar</button>
@@ -4542,20 +4551,21 @@ function renderLideresPage(){
         ${liderReports.length===0 ? '<div style="text-align:center;padding:20px;color:#aaa;font-size:13px;border:1px dashed #ddd;border-radius:10px;">Nenhum relatório cadastrado.</div>' :
         liderReports.map(r=>{
           const dataStr = r.criadoEm ? new Date(r.criadoEm).toLocaleDateString('pt-BR') : '';
-          const isOpen = UI.reportOpen === r.id;
+          const fileIcon = (r.fileName||'').endsWith('.pdf') ? '📄' : (r.fileName||'').endsWith('.docx')||(r.fileName||'').endsWith('.doc') ? '📝' : '📋';
           return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;overflow:hidden;">'
-            + '<div class="report-toggle" data-report-id="'+esc(r.id)+'" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;">'
               + '<div style="display:flex;align-items:center;gap:10px;">'
-                + '<span style="font-weight:600;font-size:13px;">'+esc(r.titulo||'Sem título')+'</span>'
-                + '<span style="font-size:11px;color:#888;background:#f1f5f9;padding:2px 8px;border-radius:4px;">'+esc(r.periodo||'')+'</span>'
+                + '<span style="font-size:18px;">'+fileIcon+'</span>'
+                + '<div>'
+                  + '<div style="font-weight:600;font-size:13px;">'+esc(r.titulo||'Sem título')+'</div>'
+                  + '<div style="font-size:11px;color:#888;">'+esc(r.periodo||'')+' · '+dataStr+' · '+esc(r.fileName||'')+'</div>'
+                + '</div>'
               + '</div>'
-              + '<div style="display:flex;align-items:center;gap:10px;">'
-                + '<span style="font-size:11px;color:#888;">'+dataStr+'</span>'
+              + '<div style="display:flex;align-items:center;gap:8px;">'
+                + '<button class="btn btn-outline btn-sm report-download" data-report-id="'+esc(r.id)+'" style="width:auto;">Baixar</button>'
                 + '<button class="btn btn-danger btn-sm report-delete" data-report-id="'+esc(r.id)+'" style="width:auto;padding:4px 8px;" title="Excluir">'+ICONS.trash+'</button>'
-                + '<span style="font-size:14px;transition:transform .2s;'+(isOpen?'transform:rotate(180deg);':'')+'">&#9660;</span>'
               + '</div>'
             + '</div>'
-            + (isOpen ? '<div style="padding:0 16px 16px;border-top:1px solid #f0f0f0;"><div style="white-space:pre-wrap;font-size:13px;line-height:1.7;color:#333;padding-top:12px;">'+esc(r.conteudo||'')+'</div></div>' : '')
           + '</div>';
         }).join('')}
       </div>`;
@@ -4619,6 +4629,31 @@ function bindLideresPage(){
       btn.closest('.lider-report-form').style.display='none';
     });
   });
+  // File upload dropzone
+  document.querySelectorAll('.report-dropzone').forEach(dz=>{
+    const fileInput = dz.querySelector('.report-file-input');
+    const fileNameEl = dz.querySelector('.report-file-name');
+    dz.addEventListener('click', ()=> fileInput.click());
+    dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.style.borderColor='var(--primary)'; dz.style.background='var(--primary-light)'; });
+    dz.addEventListener('dragleave', ()=>{ dz.style.borderColor='var(--border)'; dz.style.background='#fff'; });
+    dz.addEventListener('drop', e=>{
+      e.preventDefault(); dz.style.borderColor='var(--border)'; dz.style.background='#fff';
+      if(e.dataTransfer.files.length) handleReportFile(e.dataTransfer.files[0], dz);
+    });
+    fileInput.addEventListener('change', ()=>{ if(fileInput.files.length) handleReportFile(fileInput.files[0], dz); });
+  });
+  function handleReportFile(file, dz){
+    const nameEl = dz.querySelector('.report-file-name');
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      dz._fileData = reader.result;
+      dz._fileName = file.name;
+      dz._fileType = file.type;
+      nameEl.textContent = '✓ ' + file.name;
+      nameEl.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
   // Save
   document.querySelectorAll('.lider-save-report').forEach(btn=>{
     btn.addEventListener('click', e=>{
@@ -4627,24 +4662,29 @@ function bindLideresPage(){
       const lider = btn.getAttribute('data-lider-name');
       const titulo = form.querySelector('.report-titulo').value.trim();
       const periodo = form.querySelector('.report-periodo').value.trim();
-      const conteudo = form.querySelector('.report-conteudo').value.trim();
-      if(!conteudo){ alert('Cole o conteúdo do relatório.'); return; }
+      const dz = form.querySelector('.report-dropzone');
+      if(!dz._fileData){ alert('Anexe o arquivo do relatório.'); return; }
       DB.relatorios1on1.push({
         id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
         lider, titulo: titulo || 'Relatório '+new Date().toLocaleDateString('pt-BR'),
-        periodo, conteudo, criadoEm: new Date().toISOString()
+        periodo, fileName: dz._fileName, fileType: dz._fileType,
+        fileData: dz._fileData, criadoEm: new Date().toISOString()
       });
       persist('relatorios1on1');
       rerender();
     });
   });
-  // Toggle report open
-  document.querySelectorAll('.report-toggle').forEach(el=>{
-    el.addEventListener('click', e=>{
-      if(e.target.closest('.report-delete')) return;
-      const id = el.getAttribute('data-report-id');
-      UI.reportOpen = UI.reportOpen===id ? null : id;
-      rerender();
+  // Download report
+  document.querySelectorAll('.report-download').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-report-id');
+      const r = DB.relatorios1on1.find(r=>r.id===id);
+      if(!r || !r.fileData) return;
+      const a = document.createElement('a');
+      a.href = r.fileData;
+      a.download = r.fileName || 'relatorio.pdf';
+      a.click();
     });
   });
   // Delete report
