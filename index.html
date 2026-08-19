@@ -540,6 +540,7 @@ const LS = {
   pdis:'planning_pdis',
   bancoHorasImport:'planning_banco_horas',
   acoes:'planning_acoes',
+  relatorios1on1:'planning_relatorios_1on1',
   session:'planning_session',
   seeded:'planning_seeded_v1',
   liderPasswords:'planning_lider_passwords'
@@ -559,7 +560,8 @@ let DB = {
   scores: loadJSON(LS.scores, []),
   pdis: loadJSON(LS.pdis, []),
   bancoHorasImport: loadJSON(LS.bancoHorasImport, []),
-  acoes: loadJSON(LS.acoes, [])
+  acoes: loadJSON(LS.acoes, []),
+  relatorios1on1: loadJSON(LS.relatorios1on1, [])
 };
 function persist(part){ saveJSON(LS[part], DB[part]); }
 
@@ -2893,8 +2895,8 @@ function bindImport(){
   const btnClear = document.getElementById('btnClearAllImport');
   if(btnClear) btnClear.addEventListener('click', ()=>{
     if(!confirm('Tem certeza que deseja limpar TODAS as bases importadas (colaboradores, desligamentos e promoções)?')) return;
-    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[]; DB.oneOnOnes=[]; DB.scores=[]; DB.pdis=[]; DB.bancoHorasImport=[];
-    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos'); persist('oneOnOnes'); persist('scores'); persist('pdis'); persist('bancoHorasImport');
+    DB.colaboradores=[]; DB.desligamentos=[]; DB.promocoes=[]; DB.acompanhamentos=[]; DB.oneOnOnes=[]; DB.scores=[]; DB.pdis=[]; DB.bancoHorasImport=[]; DB.relatorios1on1=[];
+    persist('colaboradores'); persist('desligamentos'); persist('promocoes'); persist('acompanhamentos'); persist('oneOnOnes'); persist('scores'); persist('pdis'); persist('bancoHorasImport'); persist('relatorios1on1');
     renderShellAndPage();
   });
 }
@@ -4518,6 +4520,52 @@ function renderLideresPage(){
       html += '</div>';
     }
 
+      // Relatórios 1:1
+      const liderReports = DB.relatorios1on1.filter(r=>normalizeStr(r.lider)===normalizeStr(liderNome));
+      liderReports.sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
+
+      html += `<div style="margin-top:18px;padding-top:16px;border-top:1px solid #e5e7eb;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="font-weight:700;font-size:13px;">Relatórios de Percepção (${liderReports.length})</div>
+          <button class="btn btn-primary btn-sm lider-add-report" data-lider-name="${esc(liderNome)}" style="width:auto;">${ICONS.plus} Novo Relatório</button>
+        </div>
+
+        <div class="lider-report-form" data-lider-name="${esc(liderNome)}" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:14px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div class="field"><label>Título</label><input type="text" class="report-titulo" placeholder="Ex: Relatório Jul/Ago 2026"></div>
+            <div class="field"><label>Período</label><input type="text" class="report-periodo" placeholder="Ex: 01/07/2026 a 19/08/2026"></div>
+          </div>
+          <div class="field" style="margin-bottom:12px;"><label>Conteúdo do relatório</label><textarea class="report-conteudo" rows="12" placeholder="Cole aqui o relatório gerado pelo agente do Claude..." style="font-family:inherit;line-height:1.6;"></textarea></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn btn-outline btn-sm lider-cancel-report" style="width:auto;">Cancelar</button>
+            <button class="btn btn-primary btn-sm lider-save-report" data-lider-name="${esc(liderNome)}" style="width:auto;">Salvar</button>
+          </div>
+        </div>
+
+        ${liderReports.length===0 ? '<div style="text-align:center;padding:20px;color:#aaa;font-size:13px;border:1px dashed #ddd;border-radius:10px;">Nenhum relatório cadastrado.</div>' :
+        liderReports.map(r=>{
+          const dataStr = r.criadoEm ? new Date(r.criadoEm).toLocaleDateString('pt-BR') : '';
+          const isOpen = UI.reportOpen === r.id;
+          return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;overflow:hidden;">'
+            + '<div class="report-toggle" data-report-id="'+esc(r.id)+'" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;">'
+              + '<div style="display:flex;align-items:center;gap:10px;">'
+                + '<span style="font-weight:600;font-size:13px;">'+esc(r.titulo||'Sem título')+'</span>'
+                + '<span style="font-size:11px;color:#888;background:#f1f5f9;padding:2px 8px;border-radius:4px;">'+esc(r.periodo||'')+'</span>'
+              + '</div>'
+              + '<div style="display:flex;align-items:center;gap:10px;">'
+                + '<span style="font-size:11px;color:#888;">'+dataStr+'</span>'
+                + '<button class="btn btn-danger btn-sm report-delete" data-report-id="'+esc(r.id)+'" style="width:auto;padding:4px 8px;" title="Excluir">'+ICONS.trash+'</button>'
+                + '<span style="font-size:14px;transition:transform .2s;'+(isOpen?'transform:rotate(180deg);':'')+'">&#9660;</span>'
+              + '</div>'
+            + '</div>'
+            + (isOpen ? '<div style="padding:0 16px 16px;border-top:1px solid #f0f0f0;"><div style="white-space:pre-wrap;font-size:13px;line-height:1.7;color:#333;padding-top:12px;">'+esc(r.conteudo||'')+'</div></div>' : '')
+          + '</div>';
+        }).join('')}
+      </div>`;
+
+      html += '</div>';
+    }
+
     html += '</div>';
     return html;
   }
@@ -4555,6 +4603,61 @@ function bindLideresPage(){
     el.addEventListener('click', ()=>{
       const nome = el.getAttribute('data-lider-toggle');
       UI.liderExpanded = UI.liderExpanded===nome ? null : nome;
+      rerender();
+    });
+  });
+
+  // Relatórios 1:1 — add
+  document.querySelectorAll('.lider-add-report').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const form = btn.closest('.card').querySelector('.lider-report-form[data-lider-name="'+btn.getAttribute('data-lider-name')+'"]');
+      if(form) form.style.display = form.style.display==='none'?'block':'none';
+    });
+  });
+  // Cancel
+  document.querySelectorAll('.lider-cancel-report').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      btn.closest('.lider-report-form').style.display='none';
+    });
+  });
+  // Save
+  document.querySelectorAll('.lider-save-report').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const form = btn.closest('.lider-report-form');
+      const lider = btn.getAttribute('data-lider-name');
+      const titulo = form.querySelector('.report-titulo').value.trim();
+      const periodo = form.querySelector('.report-periodo').value.trim();
+      const conteudo = form.querySelector('.report-conteudo').value.trim();
+      if(!conteudo){ alert('Cole o conteúdo do relatório.'); return; }
+      DB.relatorios1on1.push({
+        id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+        lider, titulo: titulo || 'Relatório '+new Date().toLocaleDateString('pt-BR'),
+        periodo, conteudo, criadoEm: new Date().toISOString()
+      });
+      persist('relatorios1on1');
+      rerender();
+    });
+  });
+  // Toggle report open
+  document.querySelectorAll('.report-toggle').forEach(el=>{
+    el.addEventListener('click', e=>{
+      if(e.target.closest('.report-delete')) return;
+      const id = el.getAttribute('data-report-id');
+      UI.reportOpen = UI.reportOpen===id ? null : id;
+      rerender();
+    });
+  });
+  // Delete report
+  document.querySelectorAll('.report-delete').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      if(!confirm('Excluir este relatório?')) return;
+      const id = btn.getAttribute('data-report-id');
+      DB.relatorios1on1 = DB.relatorios1on1.filter(r=>r.id!==id);
+      persist('relatorios1on1');
       rerender();
     });
   });
@@ -5675,6 +5778,7 @@ function renderSettings(){
       <tr><td>Notas eNPS/lNPS</td><td><strong>${DB.scores.length}</strong> registros</td></tr>
       <tr><td>Registros 1:1</td><td><strong>${DB.oneOnOnes.length}</strong> registros</td></tr>
       <tr><td>Banco de Horas</td><td><strong>${DB.bancoHorasImport.length}</strong> registros</td></tr>
+      <tr><td>Relatórios 1:1</td><td><strong>${DB.relatorios1on1.length}</strong> relatórios</td></tr>
     </tbody></table>
   </div>
   <div class="card" style="margin-top:20px;">
