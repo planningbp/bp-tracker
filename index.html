@@ -614,7 +614,10 @@ const ICONS = {
   promo:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
   desl:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg>',
   kanban:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>',
-  cake:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-8a2 2 0 00-2-2H6a2 2 0 00-2 2v8"/><path d="M4 16h16"/><path d="M2 21h20"/><path d="M7 8v3M12 8v3M17 8v3"/><path d="M7 4.5a1.5 1.5 0 110 3M12 4.5a1.5 1.5 0 110 3M17 4.5a1.5 1.5 0 110 3"/></svg>'
+  cake:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-8a2 2 0 00-2-2H6a2 2 0 00-2 2v8"/><path d="M4 16h16"/><path d="M2 21h20"/><path d="M7 8v3M12 8v3M17 8v3"/><path d="M7 4.5a1.5 1.5 0 110 3M12 4.5a1.5 1.5 0 110 3M17 4.5a1.5 1.5 0 110 3"/></svg>',
+  org:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="4" rx="1"/><rect x="2" y="14" width="6" height="4" rx="1"/><rect x="9" y="14" width="6" height="4" rx="1"/><rect x="16" y="14" width="6" height="4" rx="1"/><path d="M12 6v4M5 14v-2a2 2 0 012-2h10a2 2 0 012 2v2M12 10v4"/></svg>',
+  salary:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>',
+  calendar:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>'
 };
 
 /* =========================================================
@@ -1760,6 +1763,9 @@ const NAV_ITEMS = [
   {key:'oneOnOnes', label:'1:1s', icon:'oneone'},
   {key:'acoes', label:'Planos de Ação', icon:'kanban'},
   {key:'lideres', label:'Líderes', icon:'users'},
+  {key:'organograma', label:'Organograma', icon:'org'},
+  {key:'equidade', label:'Equidade Salarial', icon:'salary'},
+  {key:'agenda', label:'Agenda BP', icon:'calendar'},
   {key:'import', label:'Importar Dados', icon:'import'},
   {key:'history', label:'Histórico', icon:'history'},
   {key:'acompanhamentos', label:'Acompanhamentos', icon:'acomp'},
@@ -1782,7 +1788,10 @@ const PAGE_TITLES = {
   bancoHorasImport:['Banco de Horas','Gestão de banco de horas'],
   oneOnOnes:['1:1s','Registros de reuniões individuais'],
   acoes:['Planos de Ação','Gerencie ações em formato kanban — a fazer, em andamento, concluído'],
-  lideres:['Líderes','Visão completa por líder — equipe, indicadores, PDIs, 1:1s']
+  lideres:['Líderes','Visão completa por líder — equipe, indicadores, PDIs, 1:1s'],
+  organograma:['Organograma','Estrutura hierárquica da organização'],
+  equidade:['Equidade Salarial','Análise comparativa de remuneração por cargo, área e regime'],
+  agenda:['Agenda BP','Timeline consolidada — prazos, aniversários, ações e alertas']
 };
 function hasImportedData(){
   return DB.colaboradores.length>0 || DB.desligamentos.length>0 || DB.promocoes.length>0;
@@ -1846,6 +1855,9 @@ function renderPageContent(){
   else if(UI.page==='colaboradorDetail'){ c.innerHTML = renderColaboradorDetail(); bindColaboradorDetail(); }
   else if(UI.page==='acoes'){ c.innerHTML = renderKanban(); bindKanban(); }
   else if(UI.page==='lideres'){ c.innerHTML = renderLideresPage(); bindLideresPage(); }
+  else if(UI.page==='organograma'){ c.innerHTML = renderOrganograma(); bindOrganograma(); }
+  else if(UI.page==='equidade'){ c.innerHTML = renderEquidade(); bindEquidade(); }
+  else if(UI.page==='agenda'){ c.innerHTML = renderAgendaBP(); bindAgendaBP(); }
   else if(CRUD_PAGES[UI.page]){ c.innerHTML = renderCrudPage(UI.page); bindCrudPage(UI.page); }
 }
 
@@ -5780,6 +5792,433 @@ function exportIndicadoresPDF(){
 
   pdfFooter(doc);
   doc.save('Indicadores'+(fArea?'_'+fArea:'')+'_'+new Date().toISOString().slice(0,10)+'.pdf');
+}
+
+/* =========================================================
+   ORGANOGRAMA
+========================================================= */
+if(!UI.orgArea) UI.orgArea='';
+if(!UI.orgCollapsed) UI.orgCollapsed={};
+
+function renderOrganograma(){
+  const bp=currentBP();
+  const areas=bp?bp.areas:[];
+  const colabs=getMyColaboradores();
+
+  function getLider(c){return c.lider||c['Líder']||c.Lider||'';}
+  function getNome(c){return c.nome||c.Nome||'';}
+  function getArea(c){return c.area||c.departamento||'';}
+
+  // Build adjacency: lider -> direct reports
+  const childrenMap={};
+  const allNomes=new Set(colabs.map(c=>normalizeStr(getNome(c))));
+  colabs.forEach(c=>{
+    const l=normalizeStr(getLider(c));
+    if(!l) return;
+    if(!childrenMap[l]) childrenMap[l]=[];
+    childrenMap[l].push(c);
+  });
+
+  // Find roots: people who are leaders but have no leader in the system
+  const allLiderKeys=new Set(Object.keys(childrenMap));
+  const roots=[];
+  const seen=new Set();
+  allLiderKeys.forEach(lk=>{
+    if(seen.has(lk)) return;
+    // find the colab record for this leader
+    const lColab=colabs.find(c=>normalizeStr(getNome(c))===lk);
+    const liderOfThis=lColab?normalizeStr(getLider(lColab)):'';
+    if(!liderOfThis||!allNomes.has(liderOfThis)){
+      roots.push(lk);
+      seen.add(lk);
+    }
+  });
+  // Also add colaboradores who are not leaders and have no leader (standalone)
+  // but we focus on tree, so skip isolated leaf nodes without a leader
+
+  function countTeam(key){
+    const ch=childrenMap[key]||[];
+    let n=ch.length;
+    ch.forEach(c=>{ n+=countTeam(normalizeStr(getNome(c))); });
+    return n;
+  }
+
+  function nodeColor(nome){
+    if(isHead(nome)) return 'var(--dark)';
+    if(isCoordinator(nome)) return '#8b5cf6';
+    const nk=normalizeStr(nome);
+    if(childrenMap[nk]&&childrenMap[nk].length>0) return 'var(--primary)';
+    return 'var(--border)';
+  }
+
+  function renderNode(key,depth){
+    const colab=colabs.find(c=>normalizeStr(getNome(c))===key);
+    const nome=colab?getNome(colab):(DB.colaboradores.find(c=>normalizeStr(getNome(c))===key)?getNome(DB.colaboradores.find(c=>normalizeStr(getNome(c))===key)):key);
+    const cargo=colab?(colab.cargo||''):'';
+    const area=colab?getArea(colab):'';
+    const children=childrenMap[key]||[];
+
+    // Filter by area
+    if(UI.orgArea){
+      const hasAreaMatch=(c)=>{
+        if(normalizeStr(getArea(c))===normalizeStr(UI.orgArea)) return true;
+        const ch2=childrenMap[normalizeStr(getNome(c))]||[];
+        return ch2.some(hasAreaMatch);
+      };
+      if(colab&&normalizeStr(area)!==normalizeStr(UI.orgArea)&&!children.some(hasAreaMatch)) return '';
+    }
+
+    const tc=countTeam(key);
+    const isCollapsed=UI.orgCollapsed[key]||false;
+    const hasChildren=children.length>0;
+    const borderColor=nodeColor(nome);
+    const textColor=borderColor==='var(--border)'?'var(--text)':'#fff';
+    const bgColor=borderColor==='var(--border)'?'var(--card)':borderColor;
+    const isLeader=hasChildren;
+
+    let childrenHtml='';
+    if(hasChildren&&!isCollapsed){
+      const filteredChildren=UI.orgArea?children.filter(c=>{
+        const cArea=normalizeStr(getArea(c));
+        if(cArea===normalizeStr(UI.orgArea)) return true;
+        const ck=normalizeStr(getNome(c));
+        const hasMatch=(k)=>{
+          const ch2=childrenMap[k]||[];
+          return ch2.some(cc=>normalizeStr(getArea(cc))===normalizeStr(UI.orgArea)||hasMatch(normalizeStr(getNome(cc))));
+        };
+        return hasMatch(ck);
+      }):children;
+      childrenHtml=filteredChildren.map(c=>renderNode(normalizeStr(getNome(c)),depth+1)).join('');
+    }
+
+    return `<div style="margin-left:${depth>0?32:0}px;${depth>0?'border-left:2px solid var(--border);padding-left:16px;':''}margin-top:${depth>0?8:0}px;">
+      <div class="card org-node" data-org-key="${esc(key)}" style="padding:12px 16px;display:inline-flex;align-items:center;gap:12px;cursor:${hasChildren?'pointer':'default'};border-left:4px solid ${borderColor};max-width:420px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(nome)}</div>
+          <div style="font-size:11.5px;color:var(--text-light);">${esc(cargo)}${area?' · '+esc(area):''}</div>
+        </div>
+        ${isLeader?`<span style="background:${bgColor};color:${textColor};font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap;">${tc} ${tc===1?'pessoa':'pessoas'}</span>`:''}
+        ${hasChildren?`<span style="font-size:12px;color:var(--text-light);transition:transform .2s;display:inline-block;transform:rotate(${isCollapsed?'-90':'0'}deg);">▼</span>`:''}
+      </div>
+      ${childrenHtml}
+    </div>`;
+  }
+
+  const treeHtml=roots.length>0?roots.map(r=>renderNode(r,0)).join(''):'<div class="card" style="text-align:center;padding:40px;color:var(--text-light);">Nenhum organograma disponível. Importe dados de colaboradores com campo "Líder".</div>';
+
+  return `
+    <div class="toolbar">
+      <div style="display:flex;align-items:center;gap:8px;">${ICONS.org}<span style="font-weight:700;font-size:16px;">Organograma</span></div>
+      <div class="spacer"></div>
+      <select id="orgFilterArea">
+        <option value="">Todas as áreas</option>
+        ${areas.map(a=>'<option value="'+esc(a)+'"'+(UI.orgArea===a?' selected':'')+'>'+esc(a)+'</option>').join('')}
+      </select>
+    </div>
+    <div style="margin-top:8px;">
+      <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:14px;height:14px;border-radius:4px;background:var(--dark);display:inline-block;"></span> Head</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:14px;height:14px;border-radius:4px;background:#8b5cf6;display:inline-block;"></span> Coordenador</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:14px;height:14px;border-radius:4px;background:var(--primary);display:inline-block;"></span> Líder</div>
+      </div>
+      ${treeHtml}
+    </div>`;
+}
+
+function bindOrganograma(){
+  const sel=document.getElementById('orgFilterArea');
+  if(sel) sel.addEventListener('change',function(){UI.orgArea=this.value;renderPageContent();});
+  document.querySelectorAll('.org-node').forEach(n=>{
+    n.addEventListener('click',function(){
+      const key=this.dataset.orgKey;
+      UI.orgCollapsed[key]=!UI.orgCollapsed[key];
+      renderPageContent();
+    });
+  });
+}
+
+/* =========================================================
+   EQUIDADE SALARIAL
+========================================================= */
+if(!UI.equidadeArea) UI.equidadeArea='';
+
+function parseSalary(val){
+  if(!val&&val!==0) return 0;
+  const n=parseFloat(String(val).replace(/[^\d.,]/g,'').replace(',','.'));
+  return isNaN(n)?0:n;
+}
+
+function renderEquidade(){
+  const bp=currentBP();
+  const areas=bp?bp.areas:[];
+  let colabs=getMyColaboradores();
+  if(UI.equidadeArea) colabs=colabs.filter(c=>normalizeStr(c.area||c.departamento||'')===normalizeStr(UI.equidadeArea));
+
+  const salaries=colabs.map(c=>parseSalary(c.faixaSalarial||c.salario||c.Salário||0));
+  const validSalaries=salaries.filter(s=>s>0);
+  const totalHC=colabs.length;
+  const avgSal=validSalaries.length?validSalaries.reduce((a,b)=>a+b,0)/validSalaries.length:0;
+  const totalPayroll=validSalaries.reduce((a,b)=>a+b,0);
+  const minSal=validSalaries.length?Math.min(...validSalaries):0;
+  const maxSal=validSalaries.length?Math.max(...validSalaries):0;
+
+  function fmt(v){return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+  // Group by Cargo
+  const byCargo={};
+  colabs.forEach(c=>{
+    const cargo=c.cargo||'Não informado';
+    if(!byCargo[cargo]) byCargo[cargo]=[];
+    byCargo[cargo].push(parseSalary(c.faixaSalarial||c.salario||c.Salário||0));
+  });
+
+  const cargoRows=Object.keys(byCargo).sort().map(cargo=>{
+    const sals=byCargo[cargo].filter(s=>s>0);
+    if(!sals.length) return `<tr><td style="font-weight:600;">${esc(cargo)}</td><td>${byCargo[cargo].length}</td><td colspan="4" style="color:var(--text-light);">Sem dados salariais</td></tr>`;
+    const mn=Math.min(...sals),mx=Math.max(...sals),av=sals.reduce((a,b)=>a+b,0)/sals.length;
+    const amp=mx-mn;
+    const ampPct=av>0?(amp/av*100):0;
+    const isHigh=ampPct>40;
+    return `<tr>
+      <td style="font-weight:600;">${esc(cargo)}</td>
+      <td>${byCargo[cargo].length}</td>
+      <td>${fmt(mn)}</td>
+      <td>${fmt(mx)}</td>
+      <td>${fmt(av)}</td>
+      <td style="color:${isHigh?'var(--red)':'var(--text)'};font-weight:${isHigh?'700':'400'};">${fmt(amp)} (${ampPct.toFixed(1)}%)</td>
+    </tr>`;
+  }).join('');
+
+  // Group by Area
+  const byArea={};
+  colabs.forEach(c=>{
+    const area=c.area||c.departamento||'Não informado';
+    if(!byArea[area]) byArea[area]=[];
+    byArea[area].push(parseSalary(c.faixaSalarial||c.salario||c.Salário||0));
+  });
+  const areaRows=Object.keys(byArea).sort().map(area=>{
+    const sals=byArea[area].filter(s=>s>0);
+    const av=sals.length?sals.reduce((a,b)=>a+b,0)/sals.length:0;
+    const tot=sals.reduce((a,b)=>a+b,0);
+    return `<tr><td style="font-weight:600;">${esc(area)}</td><td>${byArea[area].length}</td><td>${fmt(av)}</td><td>${fmt(tot)}</td></tr>`;
+  }).join('');
+
+  // Group by Regime
+  const byRegime={};
+  colabs.forEach(c=>{
+    const regime=c.regime||'Não informado';
+    if(!byRegime[regime]) byRegime[regime]=[];
+    byRegime[regime].push(parseSalary(c.faixaSalarial||c.salario||c.Salário||0));
+  });
+  const regimeRows=Object.keys(byRegime).sort().map(regime=>{
+    const sals=byRegime[regime].filter(s=>s>0);
+    const av=sals.length?sals.reduce((a,b)=>a+b,0)/sals.length:0;
+    return `<tr><td style="font-weight:600;">${esc(regime)}</td><td>${byRegime[regime].length}</td><td>${fmt(av)}</td></tr>`;
+  }).join('');
+
+  return `
+    <div class="toolbar">
+      <div style="display:flex;align-items:center;gap:8px;">${ICONS.salary}<span style="font-weight:700;font-size:16px;">Equidade Salarial</span></div>
+      <div class="spacer"></div>
+      <select id="equidadeFilterArea">
+        <option value="">Todas as áreas</option>
+        ${areas.map(a=>'<option value="'+esc(a)+'"'+(UI.equidadeArea===a?' selected':'')+'>'+esc(a)+'</option>').join('')}
+      </select>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:20px;">
+      <div class="kpi-card"><div class="kpi-label">Headcount</div><div class="kpi-value">${totalHC}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Salário Médio</div><div class="kpi-value" style="font-size:18px;">${fmt(avgSal)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Folha Total</div><div class="kpi-value" style="font-size:18px;">${fmt(totalPayroll)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Faixa Salarial</div><div class="kpi-value" style="font-size:16px;">${fmt(minSal)} – ${fmt(maxSal)}</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title">Por Cargo</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+            <th style="text-align:left;padding:10px 8px;">Cargo</th>
+            <th style="text-align:left;padding:10px 8px;">Qtd</th>
+            <th style="text-align:left;padding:10px 8px;">Mín</th>
+            <th style="text-align:left;padding:10px 8px;">Máx</th>
+            <th style="text-align:left;padding:10px 8px;">Média</th>
+            <th style="text-align:left;padding:10px 8px;">Amplitude</th>
+          </tr></thead>
+          <tbody>${cargoRows||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-light);">Sem dados</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="card">
+        <div class="section-title">Por Área / Departamento</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+              <th style="text-align:left;padding:10px 8px;">Área</th>
+              <th style="text-align:left;padding:10px 8px;">HC</th>
+              <th style="text-align:left;padding:10px 8px;">Média</th>
+              <th style="text-align:left;padding:10px 8px;">Folha</th>
+            </tr></thead>
+            <tbody>${areaRows||'<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-light);">Sem dados</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-title">Por Regime</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+              <th style="text-align:left;padding:10px 8px;">Regime</th>
+              <th style="text-align:left;padding:10px 8px;">Qtd</th>
+              <th style="text-align:left;padding:10px 8px;">Média</th>
+            </tr></thead>
+            <tbody>${regimeRows||'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-light);">Sem dados</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindEquidade(){
+  const sel=document.getElementById('equidadeFilterArea');
+  if(sel) sel.addEventListener('change',function(){UI.equidadeArea=this.value;renderPageContent();});
+}
+
+/* =========================================================
+   AGENDA BP
+========================================================= */
+if(!UI.agendaDays) UI.agendaDays=30;
+
+function renderAgendaBP(){
+  const bp=currentBP();
+  const areas=bp?bp.areas:[];
+  const colabs=getMyColaboradores();
+  const acoes=DB.acoes||[];
+  const acomps=DB.acompanhamentos||[];
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const days=parseInt(UI.agendaDays)||30;
+  const limit=new Date(today.getTime()+days*86400000);
+
+  function parseDate(v){
+    if(!v) return null;
+    const d=new Date(v);
+    return isNaN(d.getTime())?null:d;
+  }
+  function fmtDate(d){return d.toLocaleDateString('pt-BR');}
+  function dayKey(d){return d.toISOString().slice(0,10);}
+
+  const events=[];
+
+  // Experiencia milestones from admissao
+  const expMilestones=[7,15,45,90];
+  colabs.forEach(c=>{
+    const adm=parseDate(c.admissao||c.Admissão||c.dataAdmissao||'');
+    if(!adm) return;
+    expMilestones.forEach(m=>{
+      const target=new Date(adm.getTime()+m*86400000);
+      if(target>=today&&target<=limit){
+        events.push({date:target,type:'experiencia',color:'var(--primary)',label:'Experiência',nome:c.nome||c.Nome||'',desc:m+' dias de empresa'});
+      }
+    });
+  });
+
+  // Aniversario (birthday)
+  colabs.forEach(c=>{
+    const nasc=parseDate(c.nascimento||c.Nascimento||c.dataNascimento||'');
+    if(!nasc) return;
+    // Check birthday in the range
+    for(let yr=today.getFullYear()-1;yr<=today.getFullYear()+1;yr++){
+      const bday=new Date(yr,nasc.getMonth(),nasc.getDate());
+      if(bday>=today&&bday<=limit){
+        const age=yr-nasc.getFullYear();
+        events.push({date:bday,type:'aniversario',color:'var(--yellow)',label:'Aniversário',nome:c.nome||c.Nome||'',desc:'Completa '+age+' anos'});
+      }
+    }
+  });
+
+  // Acoes pendentes
+  acoes.forEach(a=>{
+    if((a.status||'todo')==='done') return;
+    const prazo=parseDate(a.prazo);
+    if(!prazo) return;
+    if(prazo>=today&&prazo<=limit){
+      events.push({date:prazo,type:'acao',color:'var(--red)',label:'Ação pendente',nome:a.responsavel||'',desc:a.titulo||''});
+    }
+  });
+
+  // Aniversario de empresa
+  colabs.forEach(c=>{
+    const adm=parseDate(c.admissao||c.Admissão||c.dataAdmissao||'');
+    if(!adm) return;
+    for(let yr=1;yr<=30;yr++){
+      const aniv=new Date(adm.getFullYear()+yr,adm.getMonth(),adm.getDate());
+      if(aniv>=today&&aniv<=limit){
+        events.push({date:aniv,type:'empresa',color:'var(--primary)',label:'Aniv. Empresa',nome:c.nome||c.Nome||'',desc:yr+(yr===1?' ano':' anos')+' de empresa'});
+      }
+    }
+  });
+
+  // Sort by date
+  events.sort((a,b)=>a.date-b.date);
+
+  // Count by type
+  const counts={experiencia:0,aniversario:0,acao:0,empresa:0};
+  events.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);
+
+  // Group by day
+  const grouped={};
+  events.forEach(e=>{
+    const k=dayKey(e.date);
+    if(!grouped[k]) grouped[k]=[];
+    grouped[k].push(e);
+  });
+
+  const dayKeys=Object.keys(grouped).sort();
+
+  const timelineHtml=dayKeys.length>0?dayKeys.map(dk=>{
+    const d=new Date(dk+'T12:00:00');
+    const weekday=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()];
+    const isToday=dk===dayKey(today);
+    return `<div style="margin-bottom:16px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+        <span style="background:${isToday?'var(--primary)':'var(--dark)'};color:#fff;padding:4px 10px;border-radius:8px;font-size:11px;">${weekday}</span>
+        ${fmtDate(d)}${isToday?' <span style="color:var(--primary);font-size:11px;font-weight:600;">HOJE</span>':''}
+      </div>
+      ${grouped[dk].map(e=>`<div class="card" style="padding:12px 16px;margin-bottom:6px;margin-left:24px;border-left:4px solid ${e.color};display:flex;align-items:center;gap:12px;">
+        <span style="background:${e.color};color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;white-space:nowrap;">${esc(e.label)}</span>
+        <div style="flex:1;min-width:0;">
+          <span style="font-weight:600;font-size:13px;">${esc(e.nome)}</span>
+          <span style="color:var(--text-light);font-size:12px;margin-left:8px;">${esc(e.desc)}</span>
+        </div>
+      </div>`).join('')}
+    </div>`;
+  }).join(''):'<div class="card" style="text-align:center;padding:40px;color:var(--text-light);">Nenhum evento nos próximos '+days+' dias.</div>';
+
+  return `
+    <div class="toolbar">
+      <div style="display:flex;align-items:center;gap:8px;">${ICONS.calendar}<span style="font-weight:700;font-size:16px;">Agenda BP</span></div>
+      <div class="spacer"></div>
+      <select id="agendaDaysFilter">
+        ${[15,30,60,90].map(d=>'<option value="'+d+'"'+(days===d?' selected':'')+'>Próximos '+d+' dias</option>').join('')}
+      </select>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:20px;">
+      <div class="kpi-card"><div class="kpi-label" style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--primary);display:inline-block;"></span> Experiência</div><div class="kpi-value">${counts.experiencia}</div></div>
+      <div class="kpi-card"><div class="kpi-label" style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--yellow);display:inline-block;"></span> Aniversários</div><div class="kpi-value">${counts.aniversario}</div></div>
+      <div class="kpi-card"><div class="kpi-label" style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block;"></span> Ações Pendentes</div><div class="kpi-value">${counts.acao}</div></div>
+      <div class="kpi-card"><div class="kpi-label" style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--primary);display:inline-block;"></span> Aniv. Empresa</div><div class="kpi-value">${counts.empresa}</div></div>
+    </div>
+
+    <div>${timelineHtml}</div>`;
+}
+
+function bindAgendaBP(){
+  const sel=document.getElementById('agendaDaysFilter');
+  if(sel) sel.addEventListener('change',function(){UI.agendaDays=parseInt(this.value)||30;renderPageContent();});
 }
 
 /* =========================================================
