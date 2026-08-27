@@ -700,19 +700,43 @@ function readWorkbookFile(file, cb){
 
 function parseColaboradores(rows){
   const out=[];
+  if(!rows.length) return out;
+  // Build header map for flexible column matching
+  const hdr = rows[0].map(h=> normalizeStr(String(h||'')));
+  function col(keywords){
+    const idx = hdr.findIndex(h=> keywords.some(k=> h.includes(normalizeStr(k))));
+    return idx;
+  }
+  const iNome=col(['nome']), iEmail=col(['email']), iLider=col(['lider','líder']);
+  const iNasc=col(['nascimento']), iDept=col(['departamento']), iArea=col(['area','área']);
+  const iCargo=col(['cargo']), iAdm=col(['admissao','admissão']);
+  const iFaixa=col(['faixa salarial','faixa']), iCpf=col(['cpf']);
+  const iRegime=col(['regime']), iEfet=col(['efetivacao','efetivação']);
+  const iPej=col(['pejotizacao','pejotização']), iPromo=col(['promoções','promocoes']);
+  const iCargoAdm=col(['cargo de admissao','cargo admissao','cargo de admissão']);
+  const iSalAdm=col(['salario admissao','salário admissão','salário admissao']);
+  const iObs=col(['observações','observacoes']);
+  const iSup=col(['supervisao','supervisão']), iCoord=col(['coordenacao','coordenação']);
+  const iGer=col(['gerencia','gerência']), iDir=col(['diretoria']);
+  const iBP=col(['business partner','bp responsavel','bp responsável']);
+  function g(r,i){ return i>=0 ? r[i] : null; }
   for(let i=1;i<rows.length;i++){
-    const r = rows[i]; if(!r || !r[0]) continue;
-    const deptRaw = r[4];
+    const r = rows[i]; if(!r || !g(r,iNome)) continue;
+    const deptRaw = g(r,iDept);
+    const areaRaw = g(r,iArea);
     out.push({
       id: uid(),
-      nome: r[0], email: r[1], lider: r[2],
-      nascimento: parseExcelDate(r[3]),
-      departamentoRaw: deptRaw, area: matchArea(deptRaw),
-      cargo: r[5], admissao: parseExcelDate(r[6]),
-      faixaSalarial: r[7], cpf: r[8], regime: r[9],
-      efetivacao: parseExcelDate(r[10]), pejotizacao: parseExcelDate(r[11]),
-      promocoes: r[12], cargoAdmissao: r[13], salarioAdmissao: r[14],
-      cargoDominio: r[15], bpResponsavel: r[16]
+      nome: g(r,iNome), email: g(r,iEmail), lider: g(r,iLider),
+      nascimento: parseExcelDate(g(r,iNasc)),
+      departamentoRaw: deptRaw, area: areaRaw || matchArea(deptRaw),
+      cargo: g(r,iCargo), admissao: parseExcelDate(g(r,iAdm)),
+      faixaSalarial: g(r,iFaixa), cpf: g(r,iCpf), regime: g(r,iRegime),
+      efetivacao: parseExcelDate(g(r,iEfet)), pejotizacao: parseExcelDate(g(r,iPej)),
+      promocoes: g(r,iPromo), cargoAdmissao: g(r,iCargoAdm), salarioAdmissao: g(r,iSalAdm),
+      observacoes: g(r,iObs),
+      supervisao: g(r,iSup), coordenacao: g(r,iCoord),
+      gerencia: g(r,iGer), diretoria: g(r,iDir),
+      bpResponsavel: g(r,iBP)
     });
   }
   return out;
