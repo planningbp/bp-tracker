@@ -2146,19 +2146,32 @@ function renderDashboard(){
     <div class="section-title">Composição por Líder — Regime e Salários</div>
     ${(()=>{
       let cList = myColabs;
+      // Get unique leaders that are heads/coordinators/managers (not leaf supervisors)
+      const allLiderNames = [...new Set(cList.map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))];
+      // Only show top-level leaders: those who are NOT a liderado of another leader in the same list
+      const allColabNames = new Set(cList.map(c=>normalizeStr(c.nome||c.Nome||'')));
+      const topLiders = allLiderNames.filter(l=>{
+        // A leader is "top" if they are NOT in the colaboradores list, OR if they are a head/coordinator
+        const isColab = allColabNames.has(normalizeStr(l));
+        if(!isColab) return true;
+        return isHead(l) || isCoordinator(l);
+      });
       const liderMap = {};
-      cList.forEach(c=>{
-        const l = c.lider||c['Líder']||c.Lider||'(Sem líder)';
-        if(!liderMap[l]) liderMap[l] = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
-        const r = normalizeStr(c.regime||c.Regime||'');
-        if(r==='clt') liderMap[l].clt++;
-        else if(r==='pj') liderMap[l].pj++;
-        else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') liderMap[l].estagio++;
-        else if(r==='temporario'||r==='temporário') liderMap[l].temp++;
-        else liderMap[l].outros++;
-        liderMap[l].total++;
-        const sal = getSalario(c);
-        if(!isNaN(sal)) liderMap[l].totalSalario += sal;
+      topLiders.forEach(l=>{
+        const team = getTeamTree(l);
+        if(!team.length) return;
+        liderMap[l] = {clt:0,pj:0,estagio:0,temp:0,outros:0,totalSalario:0,total:0};
+        team.forEach(c=>{
+          const r = normalizeStr(c.regime||c.Regime||'');
+          if(r==='clt') liderMap[l].clt++;
+          else if(r==='pj') liderMap[l].pj++;
+          else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') liderMap[l].estagio++;
+          else if(r==='temporario'||r==='temporário') liderMap[l].temp++;
+          else liderMap[l].outros++;
+          liderMap[l].total++;
+          const sal = getSalario(c);
+          if(!isNaN(sal)) liderMap[l].totalSalario += sal;
+        });
       });
       const liderKeys = Object.keys(liderMap).sort();
       if(!liderKeys.length) return '<div style="text-align:center;padding:30px;color:#aaa;">Nenhum colaborador encontrado.</div>';
