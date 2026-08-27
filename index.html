@@ -1768,9 +1768,28 @@ function renderLiderDashboard(ct){
     else regimeMap.outros++;
   });
 
-  // Aniversários
-  const anivAll = getAniversarios(30);
-  const anivTeam = anivAll.filter(a=> teamNames.includes(normalizeStr(a.nome)));
+  // Aniversários (calculados direto do time, sem chamar getAniversarios que depende de currentBP)
+  const anivTeam = (()=>{
+    const today = new Date(); today.setHours(0,0,0,0);
+    const results = [];
+    myColabs.forEach(c=>{
+      const nascRaw = c.nascimento||c['Dt Nascimento']||c['dt_nascimento']||'';
+      if(!nascRaw) return;
+      const nasc = nascRaw instanceof Date ? nascRaw : new Date(nascRaw);
+      if(isNaN(nasc)) return;
+      const thisYear = new Date(today.getFullYear(), nasc.getMonth(), nasc.getDate());
+      if(thisYear < today) thisYear.setFullYear(thisYear.getFullYear()+1);
+      const diff = Math.floor((thisYear - today) / 86400000);
+      if(diff <= 30){
+        const nome = c.nome||c.Nome||'';
+        const area = c.area||c.departamento||'';
+        const idade = thisYear.getFullYear() - nasc.getFullYear();
+        results.push({nome, area, data:thisYear, diff, idade, diaMes:nasc.getDate()+'/'+(nasc.getMonth()+1)});
+      }
+    });
+    results.sort((a,b)=>a.diff-b.diff);
+    return results;
+  })();
 
   // eNPS/lNPS scores table for display (read-only)
   const allScoresForTeam = [...myScoresLider, ...myScoresArea].sort((a,b)=>(b.period||'').localeCompare(a.period||''));
