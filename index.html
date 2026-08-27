@@ -1634,7 +1634,8 @@ const LIDER_NAV = [
   {key:'lider-acomp', label:'Acompanhamentos', icon:'acomp'},
   {key:'lider-promo', label:'Promoções', icon:'promo'},
   {key:'lider-desl', label:'Desligamentos', icon:'desl'},
-  {key:'lider-forms', label:'Formulários', icon:'forms'}
+  {key:'lider-forms', label:'Formulários', icon:'forms'},
+  {key:'lider-solicitacoes', label:'Solicitações', icon:'file'}
 ];
 
 function renderLiderShell(){
@@ -1704,6 +1705,7 @@ function bindLiderShell(){
   else if(liderPage==='lider-desl') renderLiderDataPage(ct, 'desligamentos', ['nome','data','tipo','motivo'], ['Colaborador','Data','Tipo','Motivo']);
   else if(liderPage==='lider-colab-detail') renderLiderColabDetail(ct);
   else if(liderPage==='lider-forms') renderLiderForms(ct);
+  else if(liderPage==='lider-solicitacoes') renderLiderSolicitacoes(ct);
 }
 
 function renderLiderDashboard(ct){
@@ -6893,22 +6895,6 @@ function renderLiderForms(ct){
       ${tabs.map(t=>`<button class="btn ${liderFormsTab===t.key?'primary':''}" data-ftab="${t.key}" style="${liderFormsTab===t.key?'':'background:#f3f4f6;color:#374151;'}">${t.label}</button>`).join('')}
     </div>
     <div id="formArea">${formMap[liderFormsTab]()}</div>
-    <h3 style="margin:24px 0 12px;">Minhas Solicitações</h3>
-    ${mySol.length===0?'<div class="card" style="padding:20px;text-align:center;color:#888;">Nenhuma solicitação enviada.</div>':''}
-    ${mySol.map(s=>`
-      <div class="card" style="padding:16px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <div>
-            <strong>${esc(s.nome||'')}</strong>
-            <span style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#f3e8ff;color:#962DFF;">${typeLabels[s.type]||s.type}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:12px;color:#888;">${s.dataSolicitacao?new Date(s.dataSolicitacao).toLocaleDateString('pt-BR'):''}</span>
-            <span style="padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;color:#fff;background:${statusColors[s.status]||'#888'};">${s.status==='pendente'?'Pendente':s.status==='aprovado'?'Aprovado':'Rejeitado'}</span>
-          </div>
-        </div>
-      </div>
-    `).join('')}
   `;
 
   ct.querySelectorAll('[data-ftab]').forEach(btn=>{
@@ -6945,6 +6931,79 @@ function renderLiderForms(ct){
     persist('solicitacoes');
     renderLiderForms(ct);
   });
+}
+
+/* =========================================================
+   LIDER SOLICITACOES PAGE (read-only detail view)
+========================================================= */
+function renderLiderSolicitacoes(ct){
+  const typeLabels = {promocao:'Promoção', desligamento:'Desligamento', movimentacao:'CLT→PJ', efetivacao:'Efetivação'};
+  const typeBg = {promocao:'#f3e8ff', desligamento:'#fdecec', movimentacao:'#e0f7fa', efetivacao:'#e6faf3'};
+  const typeColor = {promocao:'#962DFF', desligamento:'#ff4343', movimentacao:'#14C8FA', efetivacao:'#065f46'};
+  const statusColors = {pendente:'#FA6914', aprovado:'#14C8FA', rejeitado:'#ff4343'};
+  const statusLabels = {pendente:'Pendente', aprovado:'Aprovado', rejeitado:'Rejeitado'};
+  const fieldLabels = {
+    nome:'Nome', liderImediato:'Líder imediato', departamento:'Departamento', cargoAtual:'Cargo atual',
+    tipoPromocao:'Tipo promoção', cargoPromocao:'Cargo após promoção', mesAplicacao:'Mês aplicação',
+    classificacaoDesempenho:'Classificação desempenho', reunioes1on1:'1:1s em dia', pdiAndamento:'PDI em andamento',
+    justificativaPrincipal:'Justificativa', descricaoJustificativa:'Descrição justificativa', observacoes:'Observações',
+    cargoNivel:'Cargo e nível', custoRescisorio:'Custo rescisório', tipoDesligamento:'Tipo desligamento',
+    motivoDesligamento:'Motivo', descricaoMotivo:'Descrição motivo', motivoResposta:'Motivo da resposta (BP)'
+  };
+  const skipFields = ['id','type','status','liderNome','dataSolicitacao'];
+  const mySol = DB.solicitacoes.filter(s=>s.liderNome===SESSION.liderNome).sort((a,b)=>b.id-a.id);
+  const pendCount = mySol.filter(s=>s.status==='pendente').length;
+
+  ct.innerHTML = `
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+      <span style="font-weight:600;font-size:14px;color:#FA6914;">${pendCount} pendente${pendCount!==1?'s':''}</span>
+      <select id="lsolFilterType" class="select" style="min-width:140px;"><option value="">Todos os tipos</option><option value="promocao">Promoção</option><option value="desligamento">Desligamento</option><option value="movimentacao">CLT→PJ</option><option value="efetivacao">Efetivação</option></select>
+      <select id="lsolFilterStatus" class="select" style="min-width:130px;"><option value="">Todos os status</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="rejeitado">Rejeitado</option></select>
+    </div>
+    <div id="lsolList">
+      ${mySol.length===0?'<div class="card" style="padding:20px;text-align:center;color:#888;">Nenhuma solicitação enviada.</div>':''}
+      ${mySol.map(s=>{
+        const details = Object.keys(s).filter(k=>!skipFields.includes(k)&&s[k]).map(k=>'<div style="font-size:12px;margin-bottom:4px;"><strong>'+esc(fieldLabels[k]||k)+':</strong> '+esc(String(s[k]))+'</div>').join('');
+        return `
+        <div class="card lsol-card" data-sol-type="${s.type}" data-sol-status="${s.status}" style="padding:16px;margin-bottom:10px;cursor:pointer;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <strong>${esc(s.nome||'')}</strong>
+              <span style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${typeBg[s.type]||'#f3f4f6'};color:${typeColor[s.type]||'#374151'};">${typeLabels[s.type]||s.type}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:12px;color:#888;">${s.dataSolicitacao?new Date(s.dataSolicitacao).toLocaleDateString('pt-BR'):''}</span>
+              <span style="padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;color:#fff;background:${statusColors[s.status]||'#888'};">${statusLabels[s.status]||s.status}</span>
+            </div>
+          </div>
+          <div class="lsol-details" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;">${details}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  // Toggle details
+  ct.querySelectorAll('.lsol-card').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      const det = card.querySelector('.lsol-details');
+      if(det) det.style.display = det.style.display==='none'?'block':'none';
+    });
+  });
+
+  // Filters
+  const fType = ct.querySelector('#lsolFilterType');
+  const fStatus = ct.querySelector('#lsolFilterStatus');
+  function applyF(){
+    const t=fType.value, s=fStatus.value;
+    ct.querySelectorAll('.lsol-card').forEach(c=>{
+      const mt=!t||c.dataset.solType===t;
+      const ms=!s||c.dataset.solStatus===s;
+      c.style.display=(mt&&ms)?'':'none';
+    });
+  }
+  if(fType) fType.addEventListener('change', applyF);
+  if(fStatus) fStatus.addEventListener('change', applyF);
 }
 
 /* =========================================================
@@ -7000,7 +7059,8 @@ function renderSolicitacoes(){
           </div>
           <div class="sol-details" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;">${details}</div>
-            ${s.status==='pendente'?'<div style="margin-top:14px;display:flex;gap:8px;"><button class="btn btn-primary sol-approve" data-id="'+s.id+'">Aprovar</button><button class="btn sol-reject" data-id="'+s.id+'" style="background:#ff4343;color:#fff;">Rejeitar</button></div>':''}
+            ${s.status==='pendente'?'<div style="margin-top:14px;"><div style="margin-bottom:8px;"><label style="font-size:12px;font-weight:600;color:#888;">Motivo / Observação da resposta:</label><textarea class="input sol-motivo" data-id="'+s.id+'" rows="2" placeholder="Informe o motivo..." style="width:100%;margin-top:4px;"></textarea></div><div style="display:flex;gap:8px;"><button class="btn btn-primary sol-approve" data-id="'+s.id+'">Aprovar</button><button class="btn sol-reject" data-id="'+s.id+'" style="background:#ff4343;color:#fff;">Rejeitar</button></div></div>':''}
+            ${s.motivoResposta?'<div style="margin-top:10px;padding:8px 12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;"><span style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;">Resposta BP:</span><p style="margin:4px 0 0;font-size:13px;">'+esc(s.motivoResposta)+'</p></div>':''}
           </div>
         </div>`;
       }).join('')}
@@ -7035,7 +7095,8 @@ function bindSolicitacoes(){
     btn.addEventListener('click', ()=>{
       const id = Number(btn.dataset.id);
       const s = DB.solicitacoes.find(x=>x.id===id);
-      if(s){ s.status='aprovado'; persist('solicitacoes'); }
+      const motivo = (document.querySelector('.sol-motivo[data-id="'+id+'"]')||{}).value||'';
+      if(s){ s.status='aprovado'; s.motivoResposta=motivo; s.dataResposta=new Date().toISOString(); persist('solicitacoes'); }
       const c = document.getElementById('content');
       c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
     });
@@ -7043,8 +7104,10 @@ function bindSolicitacoes(){
   document.querySelectorAll('.sol-reject').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = Number(btn.dataset.id);
+      const motivo = (document.querySelector('.sol-motivo[data-id="'+id+'"]')||{}).value||'';
+      if(!motivo.trim()){ alert('Informe o motivo da rejeição.'); return; }
       const s = DB.solicitacoes.find(x=>x.id===id);
-      if(s){ s.status='rejeitado'; persist('solicitacoes'); }
+      if(s){ s.status='rejeitado'; s.motivoResposta=motivo; s.dataResposta=new Date().toISOString(); persist('solicitacoes'); }
       const c = document.getElementById('content');
       c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
     });
