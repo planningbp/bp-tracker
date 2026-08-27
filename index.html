@@ -2967,35 +2967,41 @@ function handleImportFile(type, file){
     else if(type==='pdis') parsed = parsePDIs(rows);
     else if(type==='bancoHorasImport') parsed = parseBancoHorasImport(rows);
     else parsed = parsePromocoes(rows);
-    // Merge: append new records, skip duplicates
-    const existing = DB[type]||[];
-    function dedupKey(r){
-      if(type==='colaboradores') return normalizeStr(r.nome)+'|'+normalizeStr(r.cpf||'');
-      if(type==='desligamentos') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
-      if(type==='promocoes') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
-      if(type==='pdis') return normalizeStr(r.nome);
-      if(type==='bancoHorasImport') return normalizeStr(r.nome);
-      return r.id;
-    }
-    const existingKeys = new Set(existing.map(dedupKey));
-    let added=0, updated=0;
-    parsed.forEach(p=>{
-      const key = dedupKey(p);
-      if(existingKeys.has(key)){
-        // Update existing record with new data
-        const idx = existing.findIndex(e=> dedupKey(e)===key);
-        if(idx>=0){ const id=existing[idx].id; existing[idx]={...p, id}; updated++; }
-      } else {
-        existing.push(p); added++;
+    // Colaboradores: full replace (planilha é a base de verdade)
+    // Outros: merge (append new, update existing)
+    if(type==='colaboradores'){
+      DB.colaboradores = parsed;
+      persist('colaboradores');
+      applyPromocoes();
+      statusEl.textContent = parsed.length+' colaboradores importados (base substituída)';
+    } else {
+      const existing = DB[type]||[];
+      function dedupKey(r){
+        if(type==='desligamentos') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
+        if(type==='promocoes') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
+        if(type==='pdis') return normalizeStr(r.nome);
+        if(type==='bancoHorasImport') return normalizeStr(r.nome);
+        return r.id;
       }
-    });
-    DB[type] = existing;
-    persist(type);
-    if(type==='promocoes' || type==='colaboradores') applyPromocoes();
-    const parts = [];
-    if(added) parts.push(added+' novos');
-    if(updated) parts.push(updated+' atualizados');
-    statusEl.textContent = (parts.length? parts.join(', ') : 'Nenhum novo registro') + ' — total: '+existing.length+' registros';
+      const existingKeys = new Set(existing.map(dedupKey));
+      let added=0, updated=0;
+      parsed.forEach(p=>{
+        const key = dedupKey(p);
+        if(existingKeys.has(key)){
+          const idx = existing.findIndex(e=> dedupKey(e)===key);
+          if(idx>=0){ const id=existing[idx].id; existing[idx]={...p, id}; updated++; }
+        } else {
+          existing.push(p); added++;
+        }
+      });
+      DB[type] = existing;
+      persist(type);
+      if(type==='promocoes') applyPromocoes();
+      const parts = [];
+      if(added) parts.push(added+' novos');
+      if(updated) parts.push(updated+' atualizados');
+      statusEl.textContent = (parts.length? parts.join(', ') : 'Nenhum novo registro') + ' — total: '+existing.length+' registros';
+    }
     statusEl.className = 'import-status ok';
     renderImportPreviewTables();
     renderShellAndPage(); // refresh sidebar dot
