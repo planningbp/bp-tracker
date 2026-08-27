@@ -6763,6 +6763,17 @@ function renderLiderForms(ct){
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const mySol = DB.solicitacoes.filter(s=>s.liderNome===SESSION.liderNome).sort((a,b)=>b.id-a.id);
 
+  // Team members for dropdown
+  const teamMembers = getLiderTeam().sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+  const teamOptions = '<option value="">Selecione o colaborador</option>' + teamMembers.map(c=>{
+    const nome = c.nome||c.Nome||'';
+    const cargo = c.cargo||c.Cargo||'';
+    const area = c.area||c.departamento||'';
+    const salario = getSalario(c);
+    const salarioFmt = salario ? 'R$ '+salario.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '';
+    return '<option value="'+esc(nome)+'" data-cargo="'+esc(cargo)+'" data-area="'+esc(area)+'" data-salario="'+esc(salarioFmt)+'" data-regime="'+esc(normalizeStr(c.regime||c.Regime||''))+'">'+esc(nome)+'</option>';
+  }).join('');
+
   function formPromocao(){
     return `
     <div class="card" style="padding:24px;margin-bottom:16px;">
@@ -6770,10 +6781,10 @@ function renderLiderForms(ct){
       <form id="formSol">
         <input type="hidden" name="type" value="promocao">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div><label class="form-label">Nome completo do colaborador</label><input class="input" name="nome" required></div>
-          <div><label class="form-label">Líder imediato</label><input class="input" name="liderImediato" value="${esc(SESSION.liderNome)}"></div>
-          <div><label class="form-label">Departamento</label><select class="input" name="departamento" required><option value="">Selecione</option>${deptOptions}</select></div>
-          <div><label class="form-label">Cargo e salário atual</label><input class="input" name="cargoAtual" required></div>
+          <div><label class="form-label">Nome completo do colaborador</label><select class="input team-select" name="nome" required>${teamOptions}</select></div>
+          <div><label class="form-label">Líder imediato</label><input class="input" name="liderImediato" value="${esc(SESSION.liderNome)}" readonly></div>
+          <div><label class="form-label">Departamento</label><input class="input auto-dept" name="departamento" readonly></div>
+          <div><label class="form-label">Cargo e salário atual</label><input class="input auto-cargo" name="cargoAtual" readonly></div>
           <div><label class="form-label">Tipo de promoção</label><select class="input" name="tipoPromocao" required><option value="">Selecione</option><option>Horizontal</option><option>Vertical</option></select></div>
           <div><label class="form-label">Cargo e salário após promoção</label><input class="input" name="cargoPromocao" required></div>
           <div><label class="form-label">Mês de aplicação</label><select class="input" name="mesAplicacao" required><option value="">Selecione</option>${meses.map(m=>'<option>'+m+'</option>').join('')}</select></div>
@@ -6796,9 +6807,9 @@ function renderLiderForms(ct){
       <form id="formSol">
         <input type="hidden" name="type" value="desligamento">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div><label class="form-label">Nome completo</label><input class="input" name="nome" required></div>
-          <div><label class="form-label">Cargo e nível</label><input class="input" name="cargoNivel" required></div>
-          <div><label class="form-label">Departamento</label><select class="input" name="departamento" required><option value="">Selecione</option>${deptOptions}</select></div>
+          <div><label class="form-label">Nome completo</label><select class="input team-select" name="nome" required>${teamOptions}</select></div>
+          <div><label class="form-label">Cargo e nível</label><input class="input auto-cargo" name="cargoNivel" readonly></div>
+          <div><label class="form-label">Departamento</label><input class="input auto-dept" name="departamento" readonly></div>
           <div><label class="form-label">Custo rescisório (solicitar ao DP)</label><input class="input" name="custoRescisorio"></div>
           <div><label class="form-label">Tipo de desligamento</label><select class="input" name="tipoDesligamento" required><option value="">Selecione</option><option>Demissão pela empresa</option><option>Distrato PJ (involuntário)</option><option>Encerramento experiência (involuntário)</option><option>Encerramento estágio (involuntário)</option><option>Pedido de demissão</option><option>Distrato PJ (voluntário)</option><option>Encerramento experiência (voluntário)</option><option>Encerramento estágio (voluntário)</option></select></div>
           <div><label class="form-label">Motivo do desligamento</label><select class="input" name="motivoDesligamento" required><option value="">Selecione</option><option>Baixo desempenho</option><option>Reestruturação</option><option>Questões comportamentais</option><option>Redução de custos</option><option>Término de contrato</option><option>Outro</option></select></div>
@@ -6824,9 +6835,9 @@ function renderLiderForms(ct){
       <form id="formSol">
         <input type="hidden" name="type" value="movimentacao">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div><label class="form-label">Nome completo do colaborador</label><input class="input" name="nome" required></div>
-          <div><label class="form-label">Cargo e nível atual</label><input class="input" name="cargoAtual" required></div>
-          <div><label class="form-label">Departamento</label><select class="input" name="departamento" required><option value="">Selecione</option>${deptOptions}</select></div>
+          <div><label class="form-label">Nome completo do colaborador</label><select class="input team-select" name="nome" required>${teamOptions}</select></div>
+          <div><label class="form-label">Cargo e nível atual</label><input class="input auto-cargo" name="cargoAtual" readonly></div>
+          <div><label class="form-label">Departamento</label><input class="input auto-dept" name="departamento" readonly></div>
           <div><label class="form-label">Tipo</label><input class="input" name="tipo" value="Migração de CLT para PJ" readonly></div>
           <div><label class="form-label">Banco de horas pendente?</label><select class="input" name="bancoHoras"><option>Sim</option><option>Não</option></select></div>
           <div><label class="form-label">Férias pendentes?</label><select class="input" name="feriasPendentes"><option>Sim</option><option>Não</option></select></div>
@@ -6848,9 +6859,9 @@ function renderLiderForms(ct){
       <form id="formSol">
         <input type="hidden" name="type" value="efetivacao">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div><label class="form-label">Nome completo do estagiário</label><input class="input" name="nome" required></div>
-          <div><label class="form-label">Cargo atual</label><input class="input" name="cargoAtual" value="Estagiário" readonly></div>
-          <div><label class="form-label">Departamento</label><select class="input" name="departamento" required><option value="">Selecione</option>${deptOptions}</select></div>
+          <div><label class="form-label">Nome completo do estagiário</label><select class="input team-select" name="nome" required>${teamOptions}</select></div>
+          <div><label class="form-label">Cargo atual</label><input class="input auto-cargo" name="cargoAtual" readonly></div>
+          <div><label class="form-label">Departamento</label><input class="input auto-dept" name="departamento" readonly></div>
           <div><label class="form-label">Data de admissão no estágio</label><input class="input" type="date" name="dataAdmissao" required></div>
           <div><label class="form-label">Tempo de estágio acima de 3 meses?</label><select class="input" name="tempoEstagio3Meses"><option>Sim</option><option>Não</option></select></div>
           <div><label class="form-label">Registros de 1:1 mensais?</label><select class="input" name="registros1on1"><option>Sim</option><option>Não</option></select></div>
@@ -6895,6 +6906,23 @@ function renderLiderForms(ct){
   ct.querySelectorAll('[data-ftab]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ liderFormsTab = btn.getAttribute('data-ftab'); renderLiderForms(ct); });
   });
+
+  // Auto-fill cargo/dept/salário when selecting a team member
+  const teamSelect = ct.querySelector('.team-select');
+  if(teamSelect){
+    teamSelect.addEventListener('change', ()=>{
+      const opt = teamSelect.selectedOptions[0];
+      if(!opt) return;
+      const cargo = opt.getAttribute('data-cargo')||'';
+      const area = opt.getAttribute('data-area')||'';
+      const salario = opt.getAttribute('data-salario')||'';
+      const cargoSal = cargo + (salario ? ' — ' + salario : '');
+      const autoCargo = ct.querySelector('.auto-cargo');
+      const autoDept = ct.querySelector('.auto-dept');
+      if(autoCargo) autoCargo.value = cargoSal;
+      if(autoDept) autoDept.value = area;
+    });
+  }
 
   const form = ct.querySelector('#formSol');
   if(form) form.addEventListener('submit', e=>{
