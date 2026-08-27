@@ -435,7 +435,7 @@ const CONFIG = {
     { id:1, name:"Carolina Lira", email:"carolina.lira@planning.com.br", avatar:"CL",
       areas:["Contábil","Contábil/Fiscal","Consultoria","Construção Civil","Gestão de Risco"] },
     { id:2, name:"Julia Soares", email:"julia.soares@planning.com.br", avatar:"JS",
-      areas:["Contábil","Contábil/Fiscal","Fiscal","Folha","Seguros","Societário","DOC","Integração de Novos Clientes"] },
+      areas:["Contábil","Contábil/Fiscal","Fiscal","Folha de Pagamento","Seguros","Societário","DOC","Integração de Novos Clientes"] },
     { id:3, name:"Maryanna Moura", email:"maryanna.moura@planning.com.br", avatar:"MM",
       areas:["TI","BPO Financeiro","Financeiro Interno","Controladoria","Desenvolvedores","Comercial","Marketing","Expansão"] }
   ],
@@ -738,7 +738,7 @@ function parseColaboradores(rows){
       id: uid(),
       nome: g(r,iNome), email: g(r,iEmail), lider: g(r,iLider),
       nascimento: parseExcelDate(g(r,iNasc)),
-      departamentoRaw: deptRaw, area: areaRaw || matchArea(deptRaw),
+      departamentoRaw: deptRaw, area: matchArea(areaRaw) || matchArea(deptRaw) || areaRaw || deptRaw,
       cargo: g(r,iCargo), admissao: parseExcelDate(g(r,iAdm)),
       faixaSalarial: g(r,iFaixa), cpf: g(r,iCpf), regime: g(r,iRegime),
       efetivacao: parseExcelDate(g(r,iEfet)), pejotizacao: parseExcelDate(g(r,iPej)),
