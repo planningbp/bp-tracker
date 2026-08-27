@@ -1181,18 +1181,45 @@ function applyPromocoes(){
    AUTO-CALC ENGINE
 ========================================================= */
 function getUltimaPromocao(nome){
-  const promos = DB.promocoes.filter(p=> normalizeStr(p.nome)===normalizeStr(nome) && p.mesDate);
-  if(!promos.length) return null;
-  promos.sort((a,b)=> b.mesDate - a.mesDate);
-  const p = promos[0];
+  const nk = normalizeStr(nome);
+  let bestDate = null, bestCargoDe='', bestCargoPara='', bestPct=null;
+  // 1) Check DB.promocoes
+  DB.promocoes.filter(p=> normalizeStr(p.nome)===nk && p.mesDate).forEach(p=>{
+    const d = p.mesDate instanceof Date ? p.mesDate : new Date(p.mesDate);
+    if(!isNaN(d) && (!bestDate || d > bestDate)){ bestDate=d; bestCargoDe=p.cargoAtual||''; bestCargoPara=p.cargoAprovado||''; bestPct=p.pct; }
+  });
+  // 2) Check inline promocoes field on colaborador (e.g. "08/2026;Analista III C;R$4.125,04")
+  const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===nk);
+  if(colab && colab.promocoes){
+    String(colab.promocoes).split('\n').filter(Boolean).forEach(line=>{
+      const parts = line.split(';');
+      if(parts.length>=2){
+        const raw = parts[0].trim();
+        let d = null;
+        const mmyyyy = raw.match(/^(\d{1,2})\/(\d{4})$/);
+        if(mmyyyy) d = new Date(parseInt(mmyyyy[2]), parseInt(mmyyyy[1])-1, 1);
+        if(!d || isNaN(d)) d = parseExcelDate(raw);
+        if(d && !isNaN(d) && (!bestDate || d > bestDate)){ bestDate=d; bestCargoDe=''; bestCargoPara=parts[1].trim(); bestPct=null; }
+      }
+    });
+  }
+  // 3) No promotion: use admission date as reference
+  if(!bestDate && colab){
+    const adm = colab.admissao;
+    if(adm){ const admDate = adm instanceof Date ? adm : new Date(adm); if(!isNaN(admDate)) return mkPromoResult(admDate, '', '', null, true); }
+    return null;
+  }
+  if(!bestDate) return null;
+  return mkPromoResult(bestDate, bestCargoDe, bestCargoPara, bestPct, false);
+}
+function mkPromoResult(dt, de, para, pct, semPromo){
   const now = new Date();
-  const diffMs = now - p.mesDate;
-  const diffDays = Math.floor(diffMs / 86400000);
+  const diffDays = Math.floor((now - dt) / 86400000);
   let tempoStr;
   if(diffDays < 30) tempoStr = diffDays + ' dias';
   else if(diffDays < 365) tempoStr = Math.floor(diffDays/30) + ' meses';
   else { const anos = Math.floor(diffDays/365); const meses = Math.floor((diffDays%365)/30); tempoStr = anos + (anos===1?' ano':' anos') + (meses>0 ? ' e '+meses+(meses===1?' mês':' meses') : ''); }
-  return { cargoAnterior: p.cargoAtual||'', cargoNovo: p.cargoAprovado||'', data: p.mesDate, dataFmt: fmtDate(p.mesDate), tempoStr, pct: p.pct };
+  return { cargoAnterior: de, cargoNovo: para, data: dt, dataFmt: fmtDate(dt), tempoStr, pct, semPromocao: semPromo };
 }
 function isHead(liderName){
   if(!liderName) return false;
@@ -4813,9 +4840,8 @@ function renderColaboradoresPage(){
     filtered = filtered.filter(c=>{
       const nome = c.nome||c.Nome||'';
       const promo = getUltimaPromocao(nome);
-      if(!promo){
-        return cf.tempo==='sem';
-      }
+      if(!promo) return cf.tempo==='sem';
+      if(cf.tempo==='sem') return promo.semPromocao===true;
       const diffDays = Math.floor((new Date() - promo.data) / 86400000);
       const meses = diffDays / 30;
       if(cf.tempo==='<3') return meses < 3;
