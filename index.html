@@ -6760,7 +6760,15 @@ function renderLiderForms(ct){
     const s = new Set(DB.colaboradores.map(c=>c.area||c.departamento||'').filter(Boolean));
     return [...s].sort().map(d=>'<option value="'+esc(d)+'">'+esc(d)+'</option>').join('');
   })();
-  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const mesesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const now = new Date();
+  const mesesOptions = [];
+  for(let i=0;i<12;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+    const label = mesesNomes[d.getMonth()]+'/'+d.getFullYear();
+    mesesOptions.push('<option value="'+label+'">'+label+'</option>');
+  }
+  const mesesOptStr = mesesOptions.join('');
   const mySol = DB.solicitacoes.filter(s=>s.liderNome===SESSION.liderNome).sort((a,b)=>b.id-a.id);
 
   // Team members for dropdown
@@ -6787,8 +6795,8 @@ function renderLiderForms(ct){
           <div><label class="form-label">Cargo e salário atual</label><input class="input auto-cargo" name="cargoAtual" readonly></div>
           <div><label class="form-label">Tipo de promoção</label><select class="input" name="tipoPromocao" required><option value="">Selecione</option><option>Horizontal</option><option>Vertical</option></select></div>
           <div><label class="form-label">Cargo e salário após promoção</label><input class="input" name="cargoPromocao" required></div>
-          <div><label class="form-label">Mês de aplicação</label><select class="input" name="mesAplicacao" required><option value="">Selecione</option>${meses.map(m=>'<option>'+m+'</option>').join('')}</select></div>
-          <div><label class="form-label">Classificação de desempenho</label><select class="input" name="classificacaoDesempenho" required><option value="">Selecione</option><option>Excepcional</option><option>Acima da Média</option><option>Na Média</option><option>Abaixo da Média</option></select></div>
+          <div><label class="form-label">Mês de aplicação</label><select class="input" name="mesAplicacao" required><option value="">Selecione</option>${mesesOptStr}</select></div>
+          <div><label class="form-label">Classificação de desempenho</label><select class="input" name="classificacaoDesempenho" required><option value="">Selecione</option><option>Abaixo das Expectativas</option><option>Atende as Expectativas</option><option>Supera as Expectativas</option><option>Talento</option><option>Sem Avaliação</option></select></div>
           <div><label class="form-label">Reuniões 1:1 em dia?</label><select class="input" name="reunioes1on1"><option>Sim</option><option>Não</option></select></div>
           <div><label class="form-label">PDI em andamento?</label><select class="input" name="pdiAndamento"><option>Sim</option><option>Não</option></select></div>
           <div style="grid-column:1/-1;"><label class="form-label">Justificativa principal</label><select class="input" name="justificativaPrincipal" required><option value="">Selecione</option><option>Desempenho excepcional</option><option>Evolução de competências</option><option>Novas responsabilidades</option><option>Contribuição estratégica</option></select></div>
