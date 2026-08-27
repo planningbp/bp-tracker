@@ -1241,11 +1241,24 @@ function isHead(liderName){
    HIERARQUIA ORGANIZACIONAL
 ========================================================= */
 // Retorna todos os líderes únicos da base
+function isCargoLideranca(cargo){
+  const c = normalizeStr(cargo);
+  return /(supervisor|coordenador|gerente|head|socio|sócio|diretor)/i.test(c);
+}
 function getAllLiders(){
   const liders = new Set();
+  // 1) Anyone with a leadership cargo
   DB.colaboradores.forEach(c=>{
-    const l = c.lider||c['Líder']||c.Lider||'';
-    if(l.trim()) liders.add(l.trim());
+    const cargo = c.cargo||c.Cargo||'';
+    if(isCargoLideranca(cargo)){
+      const nome = (c.nome||c.Nome||'').trim();
+      if(nome) liders.add(nome);
+    }
+  });
+  // 2) Anyone listed as someone's leader
+  DB.colaboradores.forEach(c=>{
+    const l = (c.lider||c['Líder']||c.Lider||'').trim();
+    if(l) liders.add(l);
   });
   return [...liders].sort();
 }
