@@ -1709,8 +1709,7 @@ function bindLiderShell(){
 function renderLiderDashboard(ct){
   const team = getLiderTeam();
   const directs = getDirectReports(SESSION.liderNome);
-  const isH = isHead(SESSION.liderNome);
-  const isC = isCoordinator(SESSION.liderNome);
+  const teamNames = getLiderTeamNames();
 
   // Build org tree
   function buildTree(liderNome, depth){
@@ -1736,34 +1735,261 @@ function renderLiderDashboard(ct){
     return html;
   }
 
-  // Stats
-  const teamNames = getLiderTeamNames();
+  // Data filtered by team
+  const myColabs = team;
+  const myDeslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')));
+  const myPromos = DB.promocoes.filter(p=> teamNames.includes(normalizeStr(p.nome||p.Nome||'')));
   const pdisCount = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
   const oneOnOnesCount = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
-  const deslCount = DB.desligamentos.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
-  const promoCount = DB.promocoes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+
+  // KPIs
+  const totalHC = myColabs.length;
+  const totalSalario = myColabs.reduce((s,c)=>s+getSalario(c),0);
+  const totalDesl = myDeslig.length;
+  const totalPromos = myPromos.length;
+  const turnover = totalHC > 0 ? Math.round(totalDesl/totalHC*10000)/100 : 0;
+
+  // eNPS/lNPS - check scores for leader or for team areas
+  const teamAreas = [...new Set(myColabs.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))];
+  const myScoresLider = DB.scores.filter(s=>s.tipo==='lider' && normalizeStr(s.lider||'')===normalizeStr(SESSION.liderNome));
+  const myScoresArea = DB.scores.filter(s=>(s.tipo||'area')==='area' && teamAreas.includes(normalizeStr(s.area||'')));
+  const myScores = myScoresLider.length ? myScoresLider : myScoresArea;
+  const avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : 0;
+  const avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : 0;
+
+  // Composition by regime
+  const regimeMap = {clt:0,pj:0,estagio:0,temp:0,outros:0};
+  myColabs.forEach(c=>{
+    const r = normalizeStr(c.regime||c.Regime||'');
+    if(r==='clt') regimeMap.clt++;
+    else if(r==='pj') regimeMap.pj++;
+    else if(r==='estagio'||r==='estágio'||r==='estagiario'||r==='estagiário') regimeMap.estagio++;
+    else if(r==='temporario'||r==='temporário') regimeMap.temp++;
+    else regimeMap.outros++;
+  });
+
+  // Aniversários
+  const anivAll = getAniversarios(30);
+  const anivTeam = anivAll.filter(a=> teamNames.includes(normalizeStr(a.nome)));
+
+  // eNPS/lNPS scores table for display (read-only)
+  const allScoresForTeam = [...myScoresLider, ...myScoresArea].sort((a,b)=>(b.period||'').localeCompare(a.period||''));
 
   ct.innerHTML = `
-    <div class="grid2">
-      <div class="kpi-card"><div class="kpi-label">Total na Equipe</div><div class="kpi-value">${team.length}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Diretos</div><div class="kpi-value">${directs.length}</div></div>
-      <div class="kpi-card"><div class="kpi-label">PDIs Ativos</div><div class="kpi-value">${pdisCount}</div></div>
-      <div class="kpi-card"><div class="kpi-label">1:1s Registradas</div><div class="kpi-value">${oneOnOnesCount}</div></div>
+    <!-- KPI Cards Row 1 -->
+    <div class="grid grid-4" style="margin-bottom:20px;">
+      <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.users}</div></div><div class="kpi-value">${totalHC}</div><div class="kpi-label">Total na Equipe</div></div>
+      <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#e6faf3;">${ICONS.users}</div></div><div class="kpi-value">${directs.length}</div><div class="kpi-label">Diretos</div></div>
+      <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#f3e8ff;">${ICONS.dashboard}</div></div><div class="kpi-value">R$ ${(totalSalario/1000).toFixed(0)}k</div><div class="kpi-label">Salário Total</div></div>
+      <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#fdecec;">${ICONS.alert}</div></div><div class="kpi-value">${turnover.toFixed(1)}%</div><div class="kpi-label">Turnover %</div></div>
     </div>
-    <div class="card" style="margin-top:20px;">
+    <div class="grid grid-4" style="margin-bottom:20px;">
+      <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#e6faf3;">${ICONS.dashboard}</div></div><div class="kpi-value">${avgEnps}</div><div class="kpi-label">eNPS</div></div>
+      <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#f3e8ff;">${ICONS.dashboard}</div></div><div class="kpi-value">${avgLnps}</div><div class="kpi-label">lNPS</div></div>
+      <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#f3e8ff;">${ICONS.promo}</div></div><div class="kpi-value">${totalPromos}</div><div class="kpi-label">Promoções</div></div>
+      <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#fff6e6;">${ICONS.pdi}</div></div><div class="kpi-value">${pdisCount}</div><div class="kpi-label">PDIs ativos</div></div>
+    </div>
+
+    <!-- Charts row 1 -->
+    <div class="grid grid-2" style="margin-bottom:20px;">
+      <div class="card"><div class="section-title">Admissões vs Desligamentos (por mês)</div><canvas id="chartLiderAdmDesl" height="220"></canvas></div>
+      <div class="card"><div class="section-title">Promoções (por mês)</div><canvas id="chartLiderPromos" height="220"></canvas></div>
+    </div>
+
+    <!-- Charts row 2: eNPS, lNPS -->
+    <div class="grid grid-2" style="margin-bottom:20px;">
+      <div class="card"><div class="section-title">eNPS — Evolução por período</div><canvas id="chartLiderEnps" height="220"></canvas></div>
+      <div class="card"><div class="section-title">lNPS — Evolução por período</div><canvas id="chartLiderLnps" height="220"></canvas></div>
+    </div>
+
+    <!-- Charts row 3: Headcount, Regime -->
+    <div class="grid grid-2" style="margin-bottom:20px;">
+      <div class="card"><div class="section-title">Headcount — Evolução mensal</div><canvas id="chartLiderHCevo" height="220"></canvas></div>
+      <div class="card"><div class="section-title">Composição por Regime</div><canvas id="chartLiderRegime" height="220"></canvas></div>
+    </div>
+
+    <!-- Composição por Regime - tabela -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title">Composição da Equipe — Regime e Salários</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+            <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">CLT</th>
+            <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">PJ</th>
+            <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Estágio</th>
+            <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Temporário</th>
+            <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Outros</th>
+            <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;font-weight:800;">Total</th>
+            <th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:#888;">Valor Total Salários</th>
+          </tr></thead>
+          <tbody><tr>
+            <td style="padding:10px 14px;text-align:center;font-weight:600;">${regimeMap.clt}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:600;">${regimeMap.pj}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:600;">${regimeMap.estagio}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:600;">${regimeMap.temp}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:600;">${regimeMap.outros}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;">${totalHC}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:800;font-size:15px;">R$ ${totalSalario.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+          </tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- eNPS/lNPS scores read-only -->
+    ${allScoresForTeam.length ? `<div class="card" style="margin-bottom:20px;">
+      <div class="section-title">Registros de eNPS e lNPS</div>
+      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+          <th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nível</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Ref.</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th>
+        </tr></thead><tbody>
+        ${allScoresForTeam.map((s,i)=>{
+          const tipo = s.tipo||'area';
+          const tipoLabel = tipo==='lider'?'Líder':'Área';
+          const ref = tipo==='lider'?esc(s.lider||''):esc(s.area||'');
+          const enpsColor = s.enps>=50?'#14C8FA':s.enps>=0?'#FA6914':'#ff4343';
+          const lnpsColor = s.lnps>=50?'#14C8FA':s.lnps>=0?'#FA6914':'#ff4343';
+          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
+            '<td style="padding:10px 14px;">'+tipoLabel+'</td>'+
+            '<td style="padding:10px 14px;font-weight:600;">'+ref+'</td>'+
+            '<td style="padding:10px 14px;">'+esc(s.period)+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td></tr>';
+        }).join('')}
+        </tbody></table></div>
+    </div>` : ''}
+
+    <!-- Resumo Mensal -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title">Resumo Mensal Detalhado</div>
+      <div style="overflow-x:auto;"><table id="tblLiderResumoMensal" style="width:100%;border-collapse:collapse;font-size:13px;"></table></div>
+    </div>
+
+    <!-- Árvore da equipe -->
+    <div class="card" style="margin-bottom:20px;">
       <h3 style="margin:0 0 16px;">Árvore da Equipe</h3>
       ${buildTree(SESSION.liderNome, 0)}
     </div>
-    <div class="grid2" style="margin-top:20px;">
-      <div class="card" style="padding:16px;">
-        <h4 style="margin:0 0 10px;">Promoções</h4>
-        <div class="kpi-value" style="font-size:28px;">${promoCount}</div>
+
+    <!-- Aniversários -->
+    ${anivTeam.length ? `<div class="card" style="margin-bottom:20px;">
+      <div class="section-title" style="display:flex;align-items:center;gap:8px;">${ICONS.cake||'&#127874;'} Aniversários nos próximos 30 dias (${anivTeam.length})</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px;">
+      ${anivTeam.map(a=>{
+        const isToday = a.diff===0;
+        const label = isToday?'HOJE!':a.diff===1?'Amanhã':'em '+a.diff+' dias';
+        const bg = isToday?'#fef3c7':a.diff<=7?'#EAF3EE':'#f9fafb';
+        const border = isToday?'#FA6914':a.diff<=7?'#14C8FA':'#e5e7eb';
+        return '<div style="background:'+bg+';border:1px solid '+border+';border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;">'+
+          '<div style="font-size:24px;">&#127874;</div>'+
+          '<div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">'+esc(a.nome)+'</div><div style="font-size:11px;color:#888;">'+esc(a.area)+' &#183; '+a.diaMes+' &#183; '+a.idade+' anos</div></div>'+
+          '<span style="font-size:11px;font-weight:700;color:'+(isToday?'#FA6914':'#14C8FA')+';white-space:nowrap;">'+label+'</span></div>';
+      }).join('')}
       </div>
-      <div class="card" style="padding:16px;">
-        <h4 style="margin:0 0 10px;">Desligamentos</h4>
-        <div class="kpi-value" style="font-size:28px;">${deslCount}</div>
-      </div>
-    </div>`;
+    </div>` : ''}`;
+
+  // ---- CHARTS ----
+  const months = buildMonthLabels(12);
+  const mlabels = months.map(m=>m.label);
+  const periods = CONFIG.periods;
+
+  // Admissões vs Desligamentos
+  const admData = countByMonth(myColabs, 'admissao', months);
+  const deslData = countByMonth(myDeslig, 'ultimoDia', months);
+  destroyChart('chartLiderAdmDesl');
+  const elAD = document.getElementById('chartLiderAdmDesl');
+  if(elAD) CHARTS.chartLiderAdmDesl = new Chart(elAD, {
+    type:'bar',
+    data:{labels:mlabels, datasets:[
+      {label:'Admissões', data:admData, backgroundColor:'#14C8FA'},
+      {label:'Desligamentos', data:deslData, backgroundColor:'#ff4343'}
+    ]},
+    options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
+  });
+
+  // Promoções
+  const promoData = countByMonth(myPromos, 'mesDate', months);
+  destroyChart('chartLiderPromos');
+  const elP = document.getElementById('chartLiderPromos');
+  if(elP) CHARTS.chartLiderPromos = new Chart(elP, {
+    type:'bar',
+    data:{labels:mlabels, datasets:[{label:'Promoções', data:promoData, backgroundColor:'#962DFF'}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
+  });
+
+  // eNPS / lNPS evolution
+  const scoresForChart = myScoresLider.length ? myScoresLider : myScoresArea;
+  const periodEnps = periods.map(p=>{
+    const sc = scoresForChart.filter(s=>s.period===p);
+    return sc.length ? Math.round(sc.reduce((s,r)=>s+(r.enps||0),0)/sc.length) : null;
+  });
+  const periodLnps = periods.map(p=>{
+    const sc = scoresForChart.filter(s=>s.period===p);
+    return sc.length ? Math.round(sc.reduce((s,r)=>s+(r.lnps||0),0)/sc.length) : null;
+  });
+
+  destroyChart('chartLiderEnps');
+  const elE = document.getElementById('chartLiderEnps');
+  if(elE) CHARTS.chartLiderEnps = new Chart(elE, {
+    type:'line',
+    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#962DFF', backgroundColor:'rgba(150,45,255,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+  });
+
+  destroyChart('chartLiderLnps');
+  const elL = document.getElementById('chartLiderLnps');
+  if(elL) CHARTS.chartLiderLnps = new Chart(elL, {
+    type:'line',
+    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+  });
+
+  // Headcount evolution
+  function toMK(d){ if(!d)return null; const dt=d instanceof Date?d:new Date(d); if(isNaN(dt))return null; return dt.getFullYear()*100+(dt.getMonth()+1); }
+  const monthlyHC = months.map(m=>{
+    const [y,mo]=m.key.split('-').map(Number);
+    const eom=y*100+mo;
+    const active=myColabs.filter(c=>{const ak=toMK(c.admissao||c['Data de admissão']||c['data de admissao']); return ak&&ak<=eom;});
+    const deslNames=new Set(myDeslig.filter(d=>{const dk=toMK(d.ultimoDia||d.mesDate);return dk&&dk<=eom;}).map(d=>normalizeStr(d.nome||'')));
+    return active.filter(c=>!deslNames.has(normalizeStr(c.nome||c.Nome||''))).length;
+  });
+
+  destroyChart('chartLiderHCevo');
+  const elHC = document.getElementById('chartLiderHCevo');
+  if(elHC) CHARTS.chartLiderHCevo = new Chart(elHC, {
+    type:'line',
+    data:{labels:mlabels, datasets:[{label:'Headcount', data:monthlyHC, borderColor:'#14C8FA', backgroundColor:'rgba(20,200,250,0.15)', fill:true, tension:.3}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+  });
+
+  // Regime doughnut
+  const regLabels = ['CLT','PJ','Estágio','Temporário','Outros'];
+  const regData = [regimeMap.clt, regimeMap.pj, regimeMap.estagio, regimeMap.temp, regimeMap.outros];
+  const regColors = ['#14C8FA','#962DFF','#FA6914','#000000','#888888'];
+  destroyChart('chartLiderRegime');
+  const elR = document.getElementById('chartLiderRegime');
+  if(elR) CHARTS.chartLiderRegime = new Chart(elR, {
+    type:'doughnut',
+    data:{labels:regLabels, datasets:[{data:regData, backgroundColor:regColors}]},
+    options:{responsive:true, plugins:{legend:{position:'bottom'}}}
+  });
+
+  // Resumo mensal table
+  const tbl = document.getElementById('tblLiderResumoMensal');
+  if(tbl){
+    let html = '<thead><tr style="background:#f9fafb;"><th style="padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Mês</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Admissões</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Desligamentos</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Promoções</th><th style="padding:10px 12px;text-align:center;color:#888;font-size:11px;">Saldo</th></tr></thead><tbody>';
+    months.forEach((m,i)=>{
+      const saldo=admData[i]-deslData[i];
+      const saldoColor=saldo>0?'#14C8FA':saldo<0?'#ff4343':'#888';
+      const saldoSign=saldo>0?'+':'';
+      html+='<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:10px 12px;font-weight:600;">'+m.label+'</td><td style="padding:10px 12px;text-align:center;color:#14C8FA;font-weight:700;">'+admData[i]+'</td><td style="padding:10px 12px;text-align:center;color:#ff4343;font-weight:700;">'+deslData[i]+'</td><td style="padding:10px 12px;text-align:center;color:#962DFF;font-weight:700;">'+promoData[i]+'</td><td style="padding:10px 12px;text-align:center;color:'+saldoColor+';font-weight:700;">'+saldoSign+saldo+'</td></tr>';
+    });
+    html+='</tbody>';
+    tbl.innerHTML=html;
+  }
 
   // Bind colab clicks
   ct.querySelectorAll('[data-lider-colab]').forEach(el=>{
