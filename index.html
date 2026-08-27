@@ -92,6 +92,9 @@ input,select,textarea{font-family:inherit;}
 .divider{display:flex;align-items:center;gap:10px;color:var(--text-light);font-size:11px;margin:18px 0 12px;text-transform:uppercase;letter-spacing:.05em;}
 .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border);}
 .login-err{background:var(--red-bg);color:var(--red);font-size:12.5px;padding:8px 10px;border-radius:8px;margin-bottom:12px;}
+.form-label{font-size:12px;font-weight:600;color:var(--text-light);display:block;margin-bottom:6px;}
+.input{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;outline:none;transition:border-color .15s;background:#fff;color:var(--text);box-sizing:border-box;}
+.input:focus{border-color:var(--primary);}
 
 /* Shell */
 .shell{display:flex;min-height:100vh;}
@@ -547,7 +550,8 @@ const LS = {
   relatorios1on1:'planning_relatorios_1on1',
   session:'planning_session',
   seeded:'planning_seeded_v1',
-  liderPasswords:'planning_lider_passwords'
+  liderPasswords:'planning_lider_passwords',
+  solicitacoes:'planning_solicitacoes'
 };
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v?JSON.parse(v):fallback; }catch(e){ return fallback; }
@@ -565,7 +569,8 @@ let DB = {
   pdis: loadJSON(LS.pdis, []),
   bancoHorasImport: loadJSON(LS.bancoHorasImport, []),
   acoes: loadJSON(LS.acoes, []),
-  relatorios1on1: loadJSON(LS.relatorios1on1, [])
+  relatorios1on1: loadJSON(LS.relatorios1on1, []),
+  solicitacoes: loadJSON(LS.solicitacoes, [])
 };
 function persist(part){ saveJSON(LS[part], DB[part]); }
 
@@ -621,7 +626,8 @@ const ICONS = {
   cake:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-8a2 2 0 00-2-2H6a2 2 0 00-2 2v8"/><path d="M4 16h16"/><path d="M2 21h20"/><path d="M7 8v3M12 8v3M17 8v3"/><path d="M7 4.5a1.5 1.5 0 110 3M12 4.5a1.5 1.5 0 110 3M17 4.5a1.5 1.5 0 110 3"/></svg>',
   org:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="4" rx="1"/><rect x="2" y="14" width="6" height="4" rx="1"/><rect x="9" y="14" width="6" height="4" rx="1"/><rect x="16" y="14" width="6" height="4" rx="1"/><path d="M12 6v4M5 14v-2a2 2 0 012-2h10a2 2 0 012 2v2M12 10v4"/></svg>',
   salary:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>',
-  calendar:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>'
+  calendar:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>',
+  forms:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h6"/></svg>'
 };
 
 /* =========================================================
@@ -1497,7 +1503,8 @@ const LIDER_NAV = [
   {key:'lider-banco', label:'Banco de Horas', icon:'banco'},
   {key:'lider-acomp', label:'Acompanhamentos', icon:'acomp'},
   {key:'lider-promo', label:'Promoções', icon:'promo'},
-  {key:'lider-desl', label:'Desligamentos', icon:'desl'}
+  {key:'lider-desl', label:'Desligamentos', icon:'desl'},
+  {key:'lider-forms', label:'Formulários', icon:'forms'}
 ];
 
 function renderLiderShell(){
@@ -1515,7 +1522,8 @@ function renderLiderShell(){
     'lider-acomp':['Acompanhamentos','Acompanhamento de novos colaboradores'],
     'lider-promo':['Promoções','Movimentações da equipe'],
     'lider-desl':['Desligamentos','Desligamentos da equipe'],
-    'lider-colab-detail':['Colaborador','Detalhes do colaborador']
+    'lider-colab-detail':['Colaborador','Detalhes do colaborador'],
+    'lider-forms':['Formulários','Solicitações de movimentação']
   };
   const t = titles[liderPage]||['Portal do Líder',''];
 
@@ -1565,6 +1573,7 @@ function bindLiderShell(){
   else if(liderPage==='lider-promo') renderLiderDataPage(ct, 'promocoes', ['nome','de','para','data','motivo'], ['Colaborador','De','Para','Data','Motivo']);
   else if(liderPage==='lider-desl') renderLiderDataPage(ct, 'desligamentos', ['nome','data','tipo','motivo'], ['Colaborador','Data','Tipo','Motivo']);
   else if(liderPage==='lider-colab-detail') renderLiderColabDetail(ct);
+  else if(liderPage==='lider-forms') renderLiderForms(ct);
 }
 
 function renderLiderDashboard(ct){
@@ -1770,6 +1779,7 @@ const NAV_ITEMS = [
   {key:'organograma', label:'Organograma', icon:'org'},
   {key:'equidade', label:'Equidade Salarial', icon:'salary'},
   {key:'agenda', label:'Agenda BP', icon:'calendar'},
+  {key:'solicitacoes', label:'Solicitações', icon:'forms'},
   {key:'import', label:'Importar Dados', icon:'import'},
   {key:'history', label:'Histórico', icon:'history'},
   {key:'acompanhamentos', label:'Acompanhamentos', icon:'acomp'},
@@ -1795,7 +1805,8 @@ const PAGE_TITLES = {
   lideres:['Líderes','Visão completa por líder — equipe, indicadores, PDIs, 1:1s'],
   organograma:['Organograma','Estrutura hierárquica da organização'],
   equidade:['Equidade Salarial','Análise comparativa de remuneração por cargo, área e regime'],
-  agenda:['Agenda BP','Timeline consolidada — prazos, aniversários, ações e alertas']
+  agenda:['Agenda BP','Timeline consolidada — prazos, aniversários, ações e alertas'],
+  solicitacoes:['Solicitações','Solicitações de movimentação dos líderes']
 };
 function hasImportedData(){
   return DB.colaboradores.length>0 || DB.desligamentos.length>0 || DB.promocoes.length>0;
@@ -1862,6 +1873,7 @@ function renderPageContent(){
   else if(UI.page==='organograma'){ c.innerHTML = renderOrganograma(); bindOrganograma(); }
   else if(UI.page==='equidade'){ c.innerHTML = renderEquidade(); bindEquidade(); }
   else if(UI.page==='agenda'){ c.innerHTML = renderAgendaBP(); bindAgendaBP(); }
+  else if(UI.page==='solicitacoes'){ c.innerHTML = renderSolicitacoes(); bindSolicitacoes(); }
   else if(CRUD_PAGES[UI.page]){ c.innerHTML = renderCrudPage(UI.page); bindCrudPage(UI.page); }
 }
 
@@ -1927,6 +1939,7 @@ function renderDashboard(){
   const turnover = totalHC > 0 ? Math.round(totalDesl/totalHC*10000)/100 : 0;
   const totalPromos = promosPeriod.length;
   const totalPDIs = DB.pdis.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && (p.status||'')!=='Concluído').length;
+  const totalSolPendentes = DB.solicitacoes.filter(s=>s.status==='pendente').length;
 
   // eNPS/lNPS from scores
   const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
@@ -1975,6 +1988,9 @@ function renderDashboard(){
     <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#f3e8ff;">${ICONS.promo}</div></div><div class="kpi-value">${totalPromos}</div><div class="kpi-label">Promoções</div></div>
     <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#fff6e6;">${ICONS.pdi}</div></div><div class="kpi-value">${totalPDIs}</div><div class="kpi-label">PDIs ativos</div></div>
   </div>
+  ${totalSolPendentes > 0 ? `<div class="grid grid-4" style="margin-bottom:20px;">
+    <div class="card kpi-card" style="cursor:pointer;" onclick="UI.page='solicitacoes';render();"><div class="kpi-top"><div class="kpi-icon" style="background:#fff3e0;">${ICONS.forms}</div></div><div class="kpi-value">${totalSolPendentes}</div><div class="kpi-label">Solicitações pendentes</div></div>
+  </div>` : ''}
 
   <!-- Charts row 1: Adm vs Desl, Promoções -->
   <div class="grid grid-2" style="margin-bottom:20px;">
@@ -6326,6 +6342,277 @@ function bindSettings(){
       }
     };
     reader.readAsText(file);
+  });
+}
+
+/* =========================================================
+   LEADER FORMS — Solicitacoes
+========================================================= */
+let liderFormsTab = 'promocao';
+
+function renderLiderForms(ct){
+  const tabs = [
+    {key:'promocao', label:'Promoções e Progressões'},
+    {key:'desligamento', label:'Desligamento'},
+    {key:'movimentacao', label:'Movimentação CLT→PJ'},
+    {key:'efetivacao', label:'Efetivação de Estagiário'}
+  ];
+  const deptOptions = (() => {
+    const s = new Set(DB.colaboradores.map(c=>c.area||c.departamento||'').filter(Boolean));
+    return [...s].sort().map(d=>'<option value="'+esc(d)+'">'+esc(d)+'</option>').join('');
+  })();
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const mySol = DB.solicitacoes.filter(s=>s.liderNome===SESSION.liderNome).sort((a,b)=>b.id-a.id);
+
+  function formPromocao(){
+    return `
+    <div class="card" style="padding:24px;margin-bottom:16px;">
+      <h3 style="margin:0 0 16px;">Promoções e Progressões</h3>
+      <form id="formSol">
+        <input type="hidden" name="type" value="promocao">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><label class="form-label">Nome completo do colaborador</label><input class="input" name="nome" required></div>
+          <div><label class="form-label">Líder imediato</label><input class="input" name="liderImediato" value="${esc(SESSION.liderNome)}"></div>
+          <div><label class="form-label">Departamento</label><select class="input" name="departamento" required><option value="">Selecione</option>${deptOptions}</select></div>
+          <div><label class="form-label">Cargo e salário atual</label><input class="input" name="cargoAtual" required></div>
+          <div><label class="form-label">Tipo de promoção</label><select class="input" name="tipoPromocao" required><option value="">Selecione</option><option>Horizontal</option><option>Vertical</option></select></div>
+          <div><label class="form-label">Cargo e salário após promoção</label><input class="input" name="cargoPromocao" required></div>
+          <div><label class="form-label">Mês de aplicação</label><select class="input" name="mesAplicacao" required><option value="">Selecione</option>${meses.map(m=>'<option>'+m+'</option>').join('')}</select></div>
+          <div><label class="form-label">Classificação de desempenho</label><select class="input" name="classificacaoDesempenho" required><option value="">Selecione</option><option>Excepcional</option><option>Acima da Média</option><option>Na Média</option><option>Abaixo da Média</option></select></div>
+          <div><label class="form-label">Reuniões 1:1 em dia?</label><select class="input" name="reunioes1on1"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">PDI em andamento?</label><select class="input" name="pdiAndamento"><option>Sim</option><option>Não</option></select></div>
+          <div style="grid-column:1/-1;"><label class="form-label">Justificativa principal</label><select class="input" name="justificativaPrincipal" required><option value="">Selecione</option><option>Desempenho excepcional</option><option>Evolução de competências</option><option>Novas responsabilidades</option><option>Contribuição estratégica</option></select></div>
+          <div style="grid-column:1/-1;"><label class="form-label">Descrição detalhada da justificativa</label><textarea class="input" name="descricaoJustificativa" rows="3" required></textarea></div>
+          <div style="grid-column:1/-1;"><label class="form-label">Observações</label><textarea class="input" name="observacoes" rows="2"></textarea></div>
+        </div>
+        <div style="margin-top:16px;text-align:right;"><button type="submit" class="btn btn-primary">Enviar Solicitação</button></div>
+      </form>
+    </div>`;
+  }
+
+  function formDesligamento(){
+    return `
+    <div class="card" style="padding:24px;margin-bottom:16px;">
+      <h3 style="margin:0 0 16px;">Desligamento</h3>
+      <form id="formSol">
+        <input type="hidden" name="type" value="desligamento">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><label class="form-label">Nome completo</label><input class="input" name="nome" required></div>
+          <div><label class="form-label">Cargo e nível</label><input class="input" name="cargoNivel" required></div>
+          <div><label class="form-label">Departamento</label><select class="input" name="departamento" required><option value="">Selecione</option>${deptOptions}</select></div>
+          <div><label class="form-label">Custo rescisório (solicitar ao DP)</label><input class="input" name="custoRescisorio"></div>
+          <div><label class="form-label">Tipo de desligamento</label><select class="input" name="tipoDesligamento" required><option value="">Selecione</option><option>Demissão pela empresa</option><option>Distrato PJ (involuntário)</option><option>Encerramento experiência (involuntário)</option><option>Encerramento estágio (involuntário)</option><option>Pedido de demissão</option><option>Distrato PJ (voluntário)</option><option>Encerramento experiência (voluntário)</option><option>Encerramento estágio (voluntário)</option></select></div>
+          <div><label class="form-label">Motivo do desligamento</label><select class="input" name="motivoDesligamento" required><option value="">Selecione</option><option>Baixo desempenho</option><option>Reestruturação</option><option>Questões comportamentais</option><option>Redução de custos</option><option>Término de contrato</option><option>Outro</option></select></div>
+          <div style="grid-column:1/-1;"><label class="form-label">Descrição do motivo</label><textarea class="input" name="descricaoMotivo" rows="3"></textarea></div>
+          <div><label class="form-label">Feedbacks na Qulture?</label><select class="input" name="feedbacksQulture"><option>Sim</option><option>Não</option><option>N/A</option></select></div>
+          <div><label class="form-label">Nota de desempenho</label><select class="input" name="notaDesempenho"><option>N/A</option><option>Excepcional</option><option>Acima da Média</option><option>Na Média</option><option>Abaixo da Média</option></select></div>
+          <div><label class="form-label">PDI atualizado?</label><select class="input" name="pdiAtualizado"><option>Sim</option><option>Não</option><option>N/A</option></select></div>
+          <div><label class="form-label">Saldo banco de horas?</label><select class="input" name="saldoBancoHoras"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">Férias vencidas?</label><select class="input" name="feriasVencidas"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">Tipo de aviso prévio</label><select class="input" name="tipoAvisoPrevio"><option>Trabalhado</option><option>Indenizado</option></select></div>
+          <div><label class="form-label">Último dia</label><input class="input" type="date" name="ultimoDia" required></div>
+          <div><label class="form-label">Data de comunicação</label><input class="input" type="date" name="dataComunicacao" required></div>
+        </div>
+        <div style="margin-top:16px;text-align:right;"><button type="submit" class="btn btn-primary">Enviar Solicitação</button></div>
+      </form>
+    </div>`;
+  }
+
+  function formMovimentacao(){
+    return `
+    <div class="card" style="padding:24px;margin-bottom:16px;">
+      <h3 style="margin:0 0 16px;">Movimentação CLT &rarr; PJ</h3>
+      <form id="formSol">
+        <input type="hidden" name="type" value="movimentacao">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><label class="form-label">Nome completo do colaborador</label><input class="input" name="nome" required></div>
+          <div><label class="form-label">Cargo e nível atual</label><input class="input" name="cargoAtual" required></div>
+          <div><label class="form-label">Departamento</label><select class="input" name="departamento" required><option value="">Selecione</option>${deptOptions}</select></div>
+          <div><label class="form-label">Tipo</label><input class="input" name="tipo" value="Migração de CLT para PJ" readonly></div>
+          <div><label class="form-label">Banco de horas pendente?</label><select class="input" name="bancoHoras"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">Férias pendentes?</label><select class="input" name="feriasPendentes"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">Data de encerramento CLT</label><input class="input" type="date" name="dataEncerramento" required></div>
+          <div><label class="form-label">Custo rescisório</label><input class="input" name="custoRescisorio"></div>
+          <div><label class="form-label">Cargo PJ destino</label><select class="input" name="cargoPJDestino" required><option value="">Selecione</option><option>Especialista</option><option>Especialista Sênior</option><option>Consultor</option><option>Consultor Sênior</option><option>Gerente</option><option>Diretor</option></select></div>
+          <div style="grid-column:1/-1;"><label class="form-label">Considerações sobre remuneração</label><textarea class="input" name="consideracoesRemuneracao" rows="3"></textarea></div>
+        </div>
+        <div style="margin-top:16px;text-align:right;"><button type="submit" class="btn btn-primary">Enviar Solicitação</button></div>
+      </form>
+    </div>`;
+  }
+
+  function formEfetivacao(){
+    return `
+    <div class="card" style="padding:24px;margin-bottom:16px;">
+      <h3 style="margin:0 0 16px;">Efetivação de Estagiário</h3>
+      <div style="background:#e6faf3;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#065f46;"><strong>Cargo destino:</strong> Auxiliar R$1.900,00</div>
+      <form id="formSol">
+        <input type="hidden" name="type" value="efetivacao">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><label class="form-label">Nome completo do estagiário</label><input class="input" name="nome" required></div>
+          <div><label class="form-label">Cargo atual</label><input class="input" name="cargoAtual" value="Estagiário" readonly></div>
+          <div><label class="form-label">Departamento</label><select class="input" name="departamento" required><option value="">Selecione</option>${deptOptions}</select></div>
+          <div><label class="form-label">Data de admissão no estágio</label><input class="input" type="date" name="dataAdmissao" required></div>
+          <div><label class="form-label">Tempo de estágio acima de 3 meses?</label><select class="input" name="tempoEstagio3Meses"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">Registros de 1:1 mensais?</label><select class="input" name="registros1on1"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">PDI com mínimo 3 ações concluídas?</label><select class="input" name="pdi3Acoes"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">Horas extras registradas?</label><select class="input" name="horasExtras"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">Vaga aberta no Pandapé?</label><select class="input" name="vagaPandape"><option>Sim</option><option>Não</option></select></div>
+          <div><label class="form-label">Head aprovou?</label><select class="input" name="headAprovacao"><option>Sim</option><option>Não</option></select></div>
+          <div style="grid-column:1/-1;"><label class="form-label">Observações</label><textarea class="input" name="observacoes" rows="3"></textarea></div>
+        </div>
+        <div style="margin-top:16px;text-align:right;"><button type="submit" class="btn btn-primary">Enviar Solicitação</button></div>
+      </form>
+    </div>`;
+  }
+
+  const formMap = {promocao:formPromocao, desligamento:formDesligamento, movimentacao:formMovimentacao, efetivacao:formEfetivacao};
+  const typeLabels = {promocao:'Promoção', desligamento:'Desligamento', movimentacao:'CLT→PJ', efetivacao:'Efetivação'};
+  const statusColors = {pendente:'#FA6914', aprovado:'#14C8FA', rejeitado:'#ff4343'};
+
+  ct.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+      ${tabs.map(t=>`<button class="btn ${liderFormsTab===t.key?'primary':''}" data-ftab="${t.key}" style="${liderFormsTab===t.key?'':'background:#f3f4f6;color:#374151;'}">${t.label}</button>`).join('')}
+    </div>
+    <div id="formArea">${formMap[liderFormsTab]()}</div>
+    <h3 style="margin:24px 0 12px;">Minhas Solicitações</h3>
+    ${mySol.length===0?'<div class="card" style="padding:20px;text-align:center;color:#888;">Nenhuma solicitação enviada.</div>':''}
+    ${mySol.map(s=>`
+      <div class="card" style="padding:16px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div>
+            <strong>${esc(s.nome||'')}</strong>
+            <span style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#f3e8ff;color:#962DFF;">${typeLabels[s.type]||s.type}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:12px;color:#888;">${s.dataSolicitacao?new Date(s.dataSolicitacao).toLocaleDateString('pt-BR'):''}</span>
+            <span style="padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;color:#fff;background:${statusColors[s.status]||'#888'};">${s.status==='pendente'?'Pendente':s.status==='aprovado'?'Aprovado':'Rejeitado'}</span>
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+
+  ct.querySelectorAll('[data-ftab]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ liderFormsTab = btn.getAttribute('data-ftab'); renderLiderForms(ct); });
+  });
+
+  const form = ct.querySelector('#formSol');
+  if(form) form.addEventListener('submit', e=>{
+    e.preventDefault();
+    const fd = new FormData(form);
+    const data = {};
+    fd.forEach((v,k)=>{ data[k]=v; });
+    const sol = {id:Date.now(), type:data.type, status:'pendente', liderNome:SESSION.liderNome, dataSolicitacao:new Date().toISOString()};
+    delete data.type;
+    Object.assign(sol, data);
+    DB.solicitacoes.push(sol);
+    persist('solicitacoes');
+    renderLiderForms(ct);
+  });
+}
+
+/* =========================================================
+   BP SOLICITACOES PAGE
+========================================================= */
+function renderSolicitacoes(){
+  const typeLabels = {promocao:'Promoção', desligamento:'Desligamento', movimentacao:'CLT→PJ', efetivacao:'Efetivação'};
+  const typeBg = {promocao:'#f3e8ff', desligamento:'#fdecec', movimentacao:'#e0f7fa', efetivacao:'#e6faf3'};
+  const typeColor = {promocao:'#962DFF', desligamento:'#ff4343', movimentacao:'#14C8FA', efetivacao:'#065f46'};
+  const statusColors = {pendente:'#FA6914', aprovado:'#14C8FA', rejeitado:'#ff4343'};
+  const statusLabels = {pendente:'Pendente', aprovado:'Aprovado', rejeitado:'Rejeitado'};
+  const all = DB.solicitacoes.slice().sort((a,b)=>b.id-a.id);
+  const pendCount = all.filter(s=>s.status==='pendente').length;
+
+  const fieldLabels = {
+    nome:'Nome', liderImediato:'Líder imediato', departamento:'Departamento', cargoAtual:'Cargo atual',
+    tipoPromocao:'Tipo promoção', cargoPromocao:'Cargo após promoção', mesAplicacao:'Mês aplicação',
+    classificacaoDesempenho:'Classificação desempenho', reunioes1on1:'1:1s em dia', pdiAndamento:'PDI em andamento',
+    justificativaPrincipal:'Justificativa', descricaoJustificativa:'Descrição justificativa', observacoes:'Observações',
+    cargoNivel:'Cargo e nível', custoRescisorio:'Custo rescisório', tipoDesligamento:'Tipo desligamento',
+    motivoDesligamento:'Motivo', descricaoMotivo:'Descrição motivo', feedbacksQulture:'Feedbacks Qulture',
+    notaDesempenho:'Nota desempenho', pdiAtualizado:'PDI atualizado', saldoBancoHoras:'Saldo banco horas',
+    feriasVencidas:'Férias vencidas', tipoAvisoPrevio:'Aviso prévio', ultimoDia:'Último dia',
+    dataComunicacao:'Data comunicação', tipo:'Tipo', bancoHoras:'Banco horas', feriasPendentes:'Férias pendentes',
+    dataEncerramento:'Data encerramento CLT', cargoPJDestino:'Cargo PJ destino',
+    consideracoesRemuneracao:'Considerações remuneração', dataAdmissao:'Data admissão',
+    tempoEstagio3Meses:'Estágio > 3 meses', registros1on1:'1:1 mensais', pdi3Acoes:'PDI 3+ ações',
+    horasExtras:'Horas extras', vagaPandape:'Vaga Pandapé', headAprovacao:'Head aprovou'
+  };
+  const skipFields = ['id','type','status','liderNome','dataSolicitacao'];
+
+  return `
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+      <span style="font-weight:600;font-size:14px;color:#FA6914;">${pendCount} pendente${pendCount!==1?'s':''}</span>
+      <select id="solFilterType" class="select" style="min-width:140px;"><option value="">Todos os tipos</option><option value="promocao">Promoção</option><option value="desligamento">Desligamento</option><option value="movimentacao">CLT→PJ</option><option value="efetivacao">Efetivação</option></select>
+      <select id="solFilterStatus" class="select" style="min-width:130px;"><option value="">Todos os status</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="rejeitado">Rejeitado</option></select>
+    </div>
+    <div id="solList">
+      ${all.map(s=>{
+        const details = Object.keys(s).filter(k=>!skipFields.includes(k)&&s[k]).map(k=>'<div style="font-size:12px;"><strong>'+esc(fieldLabels[k]||k)+':</strong> '+esc(String(s[k]))+'</div>').join('');
+        return `
+        <div class="card sol-card" data-sol-id="${s.id}" data-sol-type="${s.type}" data-sol-status="${s.status}" style="padding:16px;margin-bottom:10px;cursor:pointer;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <strong>${esc(s.nome||'')}</strong>
+              <span style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${typeBg[s.type]||'#f3f4f6'};color:${typeColor[s.type]||'#374151'};">${typeLabels[s.type]||s.type}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:12px;color:#888;">Líder: ${esc(s.liderNome||'')}</span>
+              <span style="font-size:12px;color:#888;">${s.dataSolicitacao?new Date(s.dataSolicitacao).toLocaleDateString('pt-BR'):''}</span>
+              <span style="padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;color:#fff;background:${statusColors[s.status]||'#888'};">${statusLabels[s.status]||s.status}</span>
+            </div>
+          </div>
+          <div class="sol-details" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;">${details}</div>
+            ${s.status==='pendente'?'<div style="margin-top:14px;display:flex;gap:8px;"><button class="btn btn-primary sol-approve" data-id="'+s.id+'">Aprovar</button><button class="btn sol-reject" data-id="'+s.id+'" style="background:#ff4343;color:#fff;">Rejeitar</button></div>':''}
+          </div>
+        </div>`;
+      }).join('')}
+      ${all.length===0?'<div class="card" style="padding:20px;text-align:center;color:#888;">Nenhuma solicitação.</div>':''}
+    </div>
+  `;
+}
+
+function bindSolicitacoes(){
+  const fType = document.getElementById('solFilterType');
+  const fStatus = document.getElementById('solFilterStatus');
+  function applyFilters(){
+    const t = fType.value, s = fStatus.value;
+    document.querySelectorAll('.sol-card').forEach(c=>{
+      const mt = !t || c.dataset.solType===t;
+      const ms = !s || c.dataset.solStatus===s;
+      c.style.display = (mt&&ms)?'':'none';
+    });
+  }
+  if(fType) fType.addEventListener('change', applyFilters);
+  if(fStatus) fStatus.addEventListener('change', applyFilters);
+
+  document.querySelectorAll('.sol-card').forEach(card=>{
+    card.addEventListener('click', e=>{
+      if(e.target.closest('.sol-approve')||e.target.closest('.sol-reject')) return;
+      const det = card.querySelector('.sol-details');
+      if(det) det.style.display = det.style.display==='none'?'block':'none';
+    });
+  });
+
+  document.querySelectorAll('.sol-approve').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = Number(btn.dataset.id);
+      const s = DB.solicitacoes.find(x=>x.id===id);
+      if(s){ s.status='aprovado'; persist('solicitacoes'); }
+      const c = document.getElementById('content');
+      c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
+    });
+  });
+  document.querySelectorAll('.sol-reject').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = Number(btn.dataset.id);
+      const s = DB.solicitacoes.find(x=>x.id===id);
+      if(s){ s.status='rejeitado'; persist('solicitacoes'); }
+      const c = document.getElementById('content');
+      c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
+    });
   });
 }
 
