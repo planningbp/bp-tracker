@@ -7351,9 +7351,84 @@ function bindSolicitacoes(){
 }
 
 /* =========================================================
+   SYNC PROMOCOES FROM TEXT FIELD
+========================================================= */
+function syncPromocoesFromText(){
+  let added = 0;
+  const mesesMap = {'01':'Jan','02':'Fev','03':'Mar','04':'Abr','05':'Mai','06':'Jun','07':'Jul','08':'Ago','09':'Set','10':'Out','11':'Nov','12':'Dez'};
+  DB.colaboradores.forEach(c=>{
+    const promoText = c.promocoes||c['Promoções']||'';
+    if(!promoText) return;
+    const nome = c.nome||c.Nome||'';
+    const nk = normalizeStr(nome);
+    const area = c.area||c.departamento||'';
+    const lider = c.lider||c['Líder']||c.Lider||'';
+    // Parse lines: "MM/YYYY;Cargo;R$Valor"
+    const lines = promoText.split(/\n/).map(l=>l.trim()).filter(Boolean);
+    let prevCargo = c.cargo_admissao||c['Cargo Admissão']||'';
+    let prevSalario = parseBRL(c.salario_admissao||c['Salário Admissão']||'0');
+    // Sort lines by date
+    const parsed = lines.map(line=>{
+      const parts = line.split(';').map(p=>p.trim());
+      if(parts.length<2) return null;
+      const dateStr = parts[0]; // MM/YYYY
+      const cargo = parts[1]||'';
+      const salarioStr = parts[2]||'';
+      const salario = parseBRL(salarioStr);
+      const dateParts = dateStr.split('/');
+      let mesDate = null;
+      if(dateParts.length===2){
+        const m = parseInt(dateParts[0])-1;
+        const y = parseInt(dateParts[1]);
+        if(!isNaN(m)&&!isNaN(y)) mesDate = new Date(y, m, 1);
+      }
+      return {dateStr, cargo, salario, mesDate};
+    }).filter(Boolean);
+    parsed.sort((a,b)=>(a.mesDate||0)-(b.mesDate||0));
+
+    parsed.forEach(p=>{
+      // Check if this promo already exists in DB
+      const exists = DB.promocoes.some(pr=>
+        normalizeStr(pr.nome)===nk &&
+        pr.cargoAprovado &&
+        normalizeStr(pr.cargoAprovado)===normalizeStr(p.cargo) &&
+        pr.mesDate && Math.abs(new Date(pr.mesDate).getTime()-(p.mesDate?p.mesDate.getTime():0))<86400000*35
+      );
+      if(!exists && p.mesDate){
+        const reajuste = (p.salario && prevSalario) ? (p.salario - prevSalario) : 0;
+        const pct = (prevSalario && p.salario) ? (reajuste / prevSalario) : 0;
+        DB.promocoes.push({
+          id: uid(),
+          mesRaw: p.dateStr,
+          mesDate: p.mesDate,
+          nome: nome,
+          area: area,
+          gestor: lider,
+          aprovador: '',
+          cargoAtual: prevCargo,
+          salarioAtual: prevSalario||'',
+          cargoAprovado: p.cargo,
+          valorAprovado: p.salario||'',
+          reajuste: reajuste||'',
+          pct: pct||''
+        });
+        added++;
+      }
+      prevCargo = p.cargo;
+      if(p.salario) prevSalario = p.salario;
+    });
+  });
+  if(added>0){
+    persist('promocoes');
+    console.log('Sync: '+added+' promoções criadas a partir do texto dos colaboradores.');
+  }
+}
+
+/* =========================================================
    INIT
 ========================================================= */
 applyPromocoes();
+syncPromocoesFromText();
 render();
 </script>
 
