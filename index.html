@@ -7009,14 +7009,29 @@ function renderLiderSolicitacoes(ct){
 /* =========================================================
    BP SOLICITACOES PAGE
 ========================================================= */
+let solBpTab = 'todos';
 function renderSolicitacoes(){
+  const types = [
+    {key:'todos', label:'Todas'},
+    {key:'promocao', label:'Promoções'},
+    {key:'desligamento', label:'Desligamentos'},
+    {key:'movimentacao', label:'CLT→PJ'},
+    {key:'efetivacao', label:'Efetivações'}
+  ];
   const typeLabels = {promocao:'Promoção', desligamento:'Desligamento', movimentacao:'CLT→PJ', efetivacao:'Efetivação'};
   const typeBg = {promocao:'#f3e8ff', desligamento:'#fdecec', movimentacao:'#e0f7fa', efetivacao:'#e6faf3'};
   const typeColor = {promocao:'#962DFF', desligamento:'#ff4343', movimentacao:'#14C8FA', efetivacao:'#065f46'};
   const statusColors = {pendente:'#FA6914', aprovado:'#14C8FA', rejeitado:'#ff4343'};
   const statusLabels = {pendente:'Pendente', aprovado:'Aprovado', rejeitado:'Rejeitado'};
   const all = DB.solicitacoes.slice().sort((a,b)=>b.id-a.id);
+  const filtered = solBpTab==='todos' ? all : all.filter(s=>s.type===solBpTab);
   const pendCount = all.filter(s=>s.status==='pendente').length;
+
+  // Counts per type
+  const countByType = {};
+  types.forEach(t=>{ countByType[t.key] = t.key==='todos' ? all.length : all.filter(s=>s.type===t.key).length; });
+  const pendByType = {};
+  types.forEach(t=>{ pendByType[t.key] = t.key==='todos' ? pendCount : all.filter(s=>s.type===t.key&&s.status==='pendente').length; });
 
   const fieldLabels = {
     nome:'Nome', liderImediato:'Líder imediato', departamento:'Departamento', cargoAtual:'Cargo atual',
@@ -7031,19 +7046,28 @@ function renderSolicitacoes(){
     dataEncerramento:'Data encerramento CLT', cargoPJDestino:'Cargo PJ destino',
     consideracoesRemuneracao:'Considerações remuneração', dataAdmissao:'Data admissão',
     tempoEstagio3Meses:'Estágio > 3 meses', registros1on1:'1:1 mensais', pdi3Acoes:'PDI 3+ ações',
-    horasExtras:'Horas extras', vagaPandape:'Vaga Pandapé', headAprovacao:'Head aprovou'
+    horasExtras:'Horas extras', vagaPandape:'Vaga Pandapé', headAprovacao:'Head aprovou',
+    motivoResposta:'Resposta BP', dataResposta:'Data resposta'
   };
-  const skipFields = ['id','type','status','liderNome','dataSolicitacao'];
+  const skipFields = ['id','type','status','liderNome','dataSolicitacao','motivoResposta','dataResposta'];
 
   return `
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
       <span style="font-weight:600;font-size:14px;color:#FA6914;">${pendCount} pendente${pendCount!==1?'s':''}</span>
-      <select id="solFilterType" class="select" style="min-width:140px;"><option value="">Todos os tipos</option><option value="promocao">Promoção</option><option value="desligamento">Desligamento</option><option value="movimentacao">CLT→PJ</option><option value="efetivacao">Efetivação</option></select>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+      ${types.map(t=>{
+        const active = solBpTab===t.key;
+        const pend = pendByType[t.key];
+        return '<button class="btn sol-type-tab" data-soltab="'+t.key+'" style="'+(active?'background:'+( t.key==='todos'?'#000':typeColor[t.key]||'#000')+';color:#fff;':'background:#f3f4f6;color:#374151;')+'position:relative;">'+t.label+' ('+countByType[t.key]+')'+(pend>0?'<span style="position:absolute;top:-6px;right:-6px;background:#FA6914;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;">'+pend+'</span>':'')+'</button>';
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
       <select id="solFilterStatus" class="select" style="min-width:130px;"><option value="">Todos os status</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="rejeitado">Rejeitado</option></select>
     </div>
     <div id="solList">
-      ${all.map(s=>{
-        const details = Object.keys(s).filter(k=>!skipFields.includes(k)&&s[k]).map(k=>'<div style="font-size:12px;"><strong>'+esc(fieldLabels[k]||k)+':</strong> '+esc(String(s[k]))+'</div>').join('');
+      ${filtered.map(s=>{
+        const details = Object.keys(s).filter(k=>!skipFields.includes(k)&&s[k]).map(k=>'<div style="font-size:12px;margin-bottom:4px;"><strong>'+esc(fieldLabels[k]||k)+':</strong> '+esc(String(s[k]))+'</div>').join('');
         return `
         <div class="card sol-card" data-sol-id="${s.id}" data-sol-type="${s.type}" data-sol-status="${s.status}" style="padding:16px;margin-bottom:10px;cursor:pointer;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -7059,28 +7083,34 @@ function renderSolicitacoes(){
           </div>
           <div class="sol-details" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;">${details}</div>
+            ${s.motivoResposta?'<div style="margin-top:10px;padding:8px 12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;"><span style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;">Resposta BP'+(s.dataResposta?' — '+new Date(s.dataResposta).toLocaleDateString('pt-BR'):'')+':</span><p style="margin:4px 0 0;font-size:13px;">'+esc(s.motivoResposta)+'</p></div>':''}
             ${s.status==='pendente'?'<div style="margin-top:14px;"><div style="margin-bottom:8px;"><label style="font-size:12px;font-weight:600;color:#888;">Motivo / Observação da resposta:</label><textarea class="input sol-motivo" data-id="'+s.id+'" rows="2" placeholder="Informe o motivo..." style="width:100%;margin-top:4px;"></textarea></div><div style="display:flex;gap:8px;"><button class="btn btn-primary sol-approve" data-id="'+s.id+'">Aprovar</button><button class="btn sol-reject" data-id="'+s.id+'" style="background:#ff4343;color:#fff;">Rejeitar</button></div></div>':''}
-            ${s.motivoResposta?'<div style="margin-top:10px;padding:8px 12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;"><span style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;">Resposta BP:</span><p style="margin:4px 0 0;font-size:13px;">'+esc(s.motivoResposta)+'</p></div>':''}
           </div>
         </div>`;
       }).join('')}
-      ${all.length===0?'<div class="card" style="padding:20px;text-align:center;color:#888;">Nenhuma solicitação.</div>':''}
+      ${filtered.length===0?'<div class="card" style="padding:20px;text-align:center;color:#888;">Nenhuma solicitação nesta categoria.</div>':''}
     </div>
   `;
 }
 
 function bindSolicitacoes(){
-  const fType = document.getElementById('solFilterType');
+  // Tab buttons
+  document.querySelectorAll('.sol-type-tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      solBpTab = btn.dataset.soltab;
+      const c = document.getElementById('content');
+      c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
+    });
+  });
+
   const fStatus = document.getElementById('solFilterStatus');
   function applyFilters(){
-    const t = fType.value, s = fStatus.value;
+    const s = fStatus.value;
     document.querySelectorAll('.sol-card').forEach(c=>{
-      const mt = !t || c.dataset.solType===t;
       const ms = !s || c.dataset.solStatus===s;
-      c.style.display = (mt&&ms)?'':'none';
+      c.style.display = ms?'':'none';
     });
   }
-  if(fType) fType.addEventListener('change', applyFilters);
   if(fStatus) fStatus.addEventListener('change', applyFilters);
 
   document.querySelectorAll('.sol-card').forEach(card=>{
