@@ -5743,6 +5743,12 @@ function bindColaboradorDetail(){
       if(idx<0){ alert('Colaborador não encontrado.'); return; }
       const c = DB.colaboradores[idx];
       const v = id => (document.getElementById(id)||{}).value||'';
+
+      // Capture old values before update
+      const oldCargo = c.cargo||c.Cargo||'';
+      const oldSalario = c.faixaSalarial||c.faixa_salarial||c.salario||'';
+      const oldSalarioNum = parseBRL(String(oldSalario));
+
       c.email = v('cd_email'); c.cargo = v('cd_cargo'); c.lider = v('cd_lider');
       c.departamento = v('cd_departamento'); c.area = v('cd_area');
       const admV = v('cd_admissao'); c.admissao = admV ? new Date(admV+'T00:00:00') : c.admissao;
@@ -5751,7 +5757,34 @@ function bindColaboradorDetail(){
       c.dt_efetivacao = v('cd_dt_efetivacao'); c.dt_pejotizacao = v('cd_dt_pejotizacao');
       c.promocoes = v('cd_promocoes'); c.cargo_admissao = v('cd_cargo_admissao');
       c.salario_admissao = v('cd_salario_admissao');
-      // Update nome reference if cargo changed for display
+
+      // Auto-create promotion if cargo or salary changed
+      const newCargo = c.cargo||'';
+      const newSalarioNum = parseBRL(String(c.faixaSalarial||''));
+      const cargoChanged = newCargo && oldCargo && normalizeStr(newCargo)!==normalizeStr(oldCargo);
+      const salaryChanged = newSalarioNum && oldSalarioNum && newSalarioNum!==oldSalarioNum;
+      if(cargoChanged || salaryChanged){
+        const reajuste = (salaryChanged && oldSalarioNum) ? (newSalarioNum - oldSalarioNum) : 0;
+        const pct = (salaryChanged && oldSalarioNum) ? (reajuste / oldSalarioNum) : 0;
+        const lider = c.lider||c['Líder']||c.Lider||'';
+        DB.promocoes.push({
+          id: uid(),
+          mesRaw: new Date().toISOString(),
+          mesDate: new Date(),
+          nome: c.nome||c.Nome||'',
+          area: c.area||c.departamento||'',
+          gestor: lider,
+          aprovador: '',
+          cargoAtual: oldCargo,
+          salarioAtual: oldSalarioNum||'',
+          cargoAprovado: newCargo,
+          valorAprovado: newSalarioNum||'',
+          reajuste: reajuste||'',
+          pct: pct||''
+        });
+        persist('promocoes');
+      }
+
       const newNome = c.nome||c.Nome||'';
       UI.colabDetailNome = newNome;
       persist('colaboradores');
