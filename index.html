@@ -2,7 +2,8 @@
 <html lang="pt-BR"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning · BP Meeting Tracker</title>
+<title>Planning · BP Gestão</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAABGJJREFUWEftl2tMk1cYx/+FllIKBYYgiCjihKFOp3NzS5a5m9t0Lm7J4rJkWbJlX5Yt+7JsS7bsy7KYmM1lc3NxzjkvOBVFUBEVuSggl3IpBaSlhZaWtrSlvX3o+77nfQul7Ysf9iR9E9qe8/+d53nO/zyE0x0KHHsQ4v7ADwY2QJZAlkcQqBP+MEh0d/O8FKYPQuH4x0kQZYn4LeIiOb1WMD2BkBcDiKcGd9jGMC3BoDoHEQ6M74BALlE0JWP/70FAFESEHpR+D4gJhoAkmJgjQQQJZFgmAQkJjoBIkUi0t1dOREEqmMAFBPx9nACdPcgMgDBZxA1Huk/DuB8LABRJoGeQbS7O+wE3N0t/DOgiwGAJBK0Bnj/cQL09DAA0H+e0EM0e8SZ7unuDgNI4vYGABIVk4AJRFQqIj0AIkUi3N0VBpAQqJgALgRjMQCJIoH+ADICAzJ+RG/z+Z4OgPaexOkA8gLsBGDyUFuAvQB7APbFAhBFAX0B3gKwL8BOgIMxAIQ7e+8ASAhwKBaA8GC/MYb23sTJMXKAtPeGHYD9Tj0AfA4g/2+f+e4V2RPy1gB8B6AwFoBYvpcJ8J8mEq/H81bF4kFZ0Z//LKLvGXbFBBBzGM0+4RYj/5kBAL3Hkf94OpYNlhcF+Rvj2kc43JOjwHcCh3Afr2Hy21fF5TtHxzTxcgIKOuILwGsiwFAriZ+AMhSIKomQCoXMVTY50NANkBODIBxBy94xjgVCwA4VF8BhE9iOnPRBHAPwAEAh2IBCBd39gA4/X+Z/J8aQC/f1wM4E5MAUZ4l5nNMQH6A8wE+jQVAFIlhAGIJNswAJi8GgIrpfpwALECR3zfn72k1v2f3qP2d3tBb+a8CKA9w/u9dfQBUTACUABwBIJBB5FNKNwTfauT1vYxjHf1hNgKPAjgAALlEUk5AAUEsgsAPsD7IRxLCuD2PQB2ASiJBUAUjrMDFcEAAPIDXI0BIOj3ANL+AHCC+Ox+5mZ4D5Dc+J/ffggQ5l6h/cYBfArg85gA6D34cwCfxQRA/8G/B2BH6AN83k8FvAjAEROAewf+1wAU+33z/l6hY2f/mBuiHWYugNLQLQzjHocPgNe/1gdEnqBFmBbRqezpi5kAvhBtgPKjAbB/jAZAYoy9ECFWf+v+gJv/wn4eBEDMAhT5WBkrQLjD+1TUGBSAsT3Q7h5/fywA8UN3HVqCIzCgMsCpWACCAXASwO6oMWB5qDvAXwB2xwQQDpB+APvHt+R/+VIDkBWTg6D93c8AOBYTgNc/5gBJCL7Vy7R7JL2MHTcAVAX47B/7WkQEfBRIHoArAEoY/rZ9AmfN+tVSgPyOBkDvxc8AOBkTgHf3uBEgQRf8DG3e1TGWgN/3NPbGz/1VB1AYQKrPVymIDECigLKg90N2XDYAZBPhDhcJWEqMhpLJ5pBFB2K6BzxPQLaDPwXTEvL8xt5GZVOv2MHkVS+f+5L9w+fwL0u6xqEAAAAASUVORK5CYII=">
 <link rel="preconnect" href="https://fonts.googleapis.com/">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -233,7 +234,7 @@ tr:last-child td{border-bottom:none;}
 <div id="app">
   <div class="shell">
     <div class="sidebar">
-      <div class="brand"><svg width="34" height="34" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><line x1="60.00" y1="50.00" x2="88.00" y2="50.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="59.40" y1="53.42" x2="76.31" y2="59.58" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="57.66" y1="56.43" x2="79.11" y2="74.43" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="55.00" y1="58.66" x2="64.00" y2="74.25" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="51.74" y1="59.85" x2="56.60" y2="87.42" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="48.26" y1="59.85" x2="45.14" y2="77.57" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="45.00" y1="58.66" x2="31.00" y2="82.91" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="42.34" y1="56.43" x2="28.55" y2="68.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="40.60" y1="53.42" x2="14.29" y2="63.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="40.00" y1="50.00" x2="22.00" y2="50.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="40.60" y1="46.58" x2="14.29" y2="37.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="42.34" y1="43.57" x2="28.55" y2="32.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="45.00" y1="41.34" x2="31.00" y2="17.09" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="48.26" y1="40.15" x2="45.14" y2="22.43" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="51.74" y1="40.15" x2="56.60" y2="12.58" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="55.00" y1="41.34" x2="64.00" y2="25.75" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="57.66" y1="43.57" x2="79.11" y2="25.57" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="59.40" y1="46.58" x2="76.31" y2="40.42" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line></svg><div><div class="brand-name">Planning</div><div class="brand-sub">BP Tracker</div></div></div>
+      <div class="brand"><svg width="34" height="34" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><line x1="60.00" y1="50.00" x2="88.00" y2="50.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="59.40" y1="53.42" x2="76.31" y2="59.58" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="57.66" y1="56.43" x2="79.11" y2="74.43" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="55.00" y1="58.66" x2="64.00" y2="74.25" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="51.74" y1="59.85" x2="56.60" y2="87.42" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="48.26" y1="59.85" x2="45.14" y2="77.57" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="45.00" y1="58.66" x2="31.00" y2="82.91" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="42.34" y1="56.43" x2="28.55" y2="68.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="40.60" y1="53.42" x2="14.29" y2="63.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="40.00" y1="50.00" x2="22.00" y2="50.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="40.60" y1="46.58" x2="14.29" y2="37.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="42.34" y1="43.57" x2="28.55" y2="32.00" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="45.00" y1="41.34" x2="31.00" y2="17.09" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="48.26" y1="40.15" x2="45.14" y2="22.43" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="51.74" y1="40.15" x2="56.60" y2="12.58" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="55.00" y1="41.34" x2="64.00" y2="25.75" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="57.66" y1="43.57" x2="79.11" y2="25.57" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line><line x1="59.40" y1="46.58" x2="76.31" y2="40.42" stroke="#0AE18C" stroke-width="5" stroke-linecap="round"></line></svg><div><div class="brand-name">Planning</div><div class="brand-sub">BP Gestão</div></div></div>
       <nav>
         
           <div class="nav-item " data-nav="dashboard">
@@ -1598,7 +1599,7 @@ function renderLogin(){
     <div class="login-card">
       <div class="login-logo">${logoImg(64)}</div>
       <div class="login-title">Planning</div>
-      <div class="login-sub">BP Meeting Tracker</div>
+      <div class="login-sub">BP Gestão</div>
 
       <div style="display:flex;gap:0;margin-bottom:20px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
         <button id="tabBP" type="button" style="flex:1;padding:10px;border:none;cursor:pointer;font-weight:700;font-size:13px;transition:all .2s;${loginTab==='bp'?'background:var(--primary);color:#fff;':'background:#f9fafb;color:#888;'}">Business Partner</button>
@@ -2317,7 +2318,7 @@ function renderShell(){
   return `
   <div class="shell">
     <div class="sidebar">
-      <div class="brand">${logoImg(32)}<div><div class="brand-sub" style="margin-top:4px;">BP Tracker</div></div></div>
+      <div class="brand">${logoImg(32)}<div><div class="brand-sub" style="margin-top:4px;">BP Gestão</div></div></div>
       <nav>
         ${NAV_ITEMS.map(item=>`
           <div class="nav-item ${UI.page===item.key?'active':''}" data-nav="${item.key}">
@@ -4093,7 +4094,7 @@ function renderMeetingDetail(){
     <button class="btn btn-primary" style="width:auto;" id="btnEditDetail">Editar</button>
   </div>
   <div class="detail-summary">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;" class="only-print">${logoImg(40)}<span style="font-size:12px;color:#888;">BP Tracker · Relatório de Reunião</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;" class="only-print">${logoImg(40)}<span style="font-size:12px;color:#888;">BP Gestão · Relatório de Reunião</span></div>
     <h2>Resumo Executivo — ${m.area} · ${m.period}</h2>
     <p>${summary}</p>
   </div>
@@ -6237,7 +6238,7 @@ function pdfHeader(doc, title, subtitle){
   // Logo
   try{ doc.addImage(PLANNING_LOGO, 'PNG', 14, 10, 40, 8); } catch(e){}
   doc.setFontSize(8); doc.setTextColor(150);
-  doc.text('BP Tracker', pw-14, 16, {align:'right'});
+  doc.text('BP Gestão', pw-14, 16, {align:'right'});
   // Title
   doc.setFontSize(16); doc.setTextColor(27,27,47);
   doc.text(title, 14, 30);
