@@ -10,6 +10,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
@@ -569,7 +570,9 @@ const LS = {
   tags:'planning_tags',
   colabTags:'planning_colab_tags',
   enps:'planning_enps',
-  formConfigs:'planning_form_configs'
+  formConfigs:'planning_form_configs',
+  notificacoes:'planning_notificacoes',
+  emailjsConfig:'planning_emailjs_config'
 };
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v?JSON.parse(v):fallback; }catch(e){ return fallback; }
@@ -667,7 +670,9 @@ let DB = {
   tags: loadJSON(LS.tags, []),
   colabTags: loadJSON(LS.colabTags, {}),
   enps: loadJSON(LS.enps, []),
-  formConfigs: loadJSON(LS.formConfigs, null) || getDefaultFormConfigs()
+  formConfigs: loadJSON(LS.formConfigs, null) || getDefaultFormConfigs(),
+  notificacoes: loadJSON(LS.notificacoes, []),
+  emailjsConfig: loadJSON(LS.emailjsConfig, {serviceId:'', templateId:'', publicKey:'', enabled:false})
 };
 function persist(part){
   saveJSON(LS[part], DB[part]);
@@ -745,6 +750,20 @@ function logoImg(height){
   return '<img src="'+PLANNING_LOGO+'" alt="Planning" style="height:'+height+'px;object-fit:contain;">';
 }
 function logoSVG(size){ return logoImg(size); }
+
+/* ---- EmailJS Integration ---- */
+function sendNotificationEmail(toEmail, toName, subject, body){
+  var cfg = DB.emailjsConfig;
+  if(!cfg || !cfg.enabled || !cfg.publicKey) return;
+  try {
+    emailjs.send(cfg.serviceId, cfg.templateId, {
+      to_email: toEmail,
+      to_name: toName,
+      subject: subject,
+      message: body
+    }, cfg.publicKey);
+  } catch(e){ console.warn('EmailJS error:', e); }
+}
 
 /* Icon set (inline SVG, stroke currentColor) */
 const ICONS = {
@@ -1807,8 +1826,21 @@ function renderLiderShell(){
       </div>
     </div>
     <div class="main">
-      <div class="topbar">
+      <div class="topbar" style="display:flex;justify-content:space-between;align-items:center;">
         <div><h1>${t[0]}</h1><div class="sub">${t[1]}</div></div>
+        <div style="position:relative;display:inline-block;">
+          <button id="btnNotif" style="background:none;border:none;cursor:pointer;position:relative;padding:6px;color:var(--text);" title="Notificações">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span id="notifBadge" style="display:none;position:absolute;top:0;right:0;background:#ff4343;color:#fff;border-radius:50%;min-width:16px;height:16px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;padding:0 3px;"></span>
+          </button>
+          <div id="notifPanel" style="display:none;position:absolute;right:0;top:36px;width:340px;max-height:420px;overflow-y:auto;background:#fff;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.2);z-index:999;padding:12px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+              Notificações
+              <button id="markAllRead" style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:12px;font-weight:600;">Marcar tudo como lido</button>
+            </div>
+            <div id="notifList"></div>
+          </div>
+        </div>
       </div>
       <div class="content" id="liderContent"></div>
     </div>
@@ -1824,6 +1856,100 @@ function bindLiderShell(){
       render();
     });
   });
+
+  // ---- Notification system ----
+  var btnNotif = document.getElementById('btnNotif');
+  var notifPanel = document.getElementById('notifPanel');
+  var notifBadge = document.getElementById('notifBadge');
+  var notifList = document.getElementById('notifList');
+  var markAllReadBtn = document.getElementById('markAllRead');
+
+  function getMyNotifications(){
+    return (DB.notificacoes||[]).filter(function(n){ return normalizeStr(n.liderNome||'') === normalizeStr(SESSION.liderNome||''); });
+  }
+  function getUnreadCount(){
+    return getMyNotifications().filter(function(n){ return !n.lido; }).length;
+  }
+  function updateNotifBadge(){
+    var count = getUnreadCount();
+    if(notifBadge){
+      if(count > 0){
+        notifBadge.style.display = 'flex';
+        notifBadge.textContent = count > 99 ? '99+' : count;
+      } else {
+        notifBadge.style.display = 'none';
+      }
+    }
+  }
+  function renderNotifList(){
+    var myNotifs = getMyNotifications().sort(function(a,b){ return new Date(b.data)-new Date(a.data); }).slice(0,20);
+    var typeLabels = {promocao:'Promoção', desligamento:'Desligamento', movimentacao:'Movimentação', efetivacao:'Efetivação'};
+    if(!myNotifs.length){
+      notifList.innerHTML = '<div style="text-align:center;color:var(--text-light);font-size:13px;padding:20px 0;">Nenhuma notificação</div>';
+      return;
+    }
+    notifList.innerHTML = myNotifs.map(function(n){
+      var icon = n.tipo === 'aprovado' ? '<span style="color:#14C870;font-weight:700;font-size:16px;">✓</span>' : '<span style="color:#ff4343;font-weight:700;font-size:16px;">✗</span>';
+      var statusTxt = n.tipo === 'aprovado' ? 'aprovada' : 'rejeitada';
+      var tipoLabel = typeLabels[n.tipoSolicitacao] || n.tipoSolicitacao || '';
+      var dateStr = '';
+      try { var d = new Date(n.data); dateStr = d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); } catch(e){}
+      var bgColor = n.lido ? '#fff' : '#f0faf5';
+      var borderLeft = n.lido ? '3px solid transparent' : '3px solid var(--primary)';
+      return '<div class="notif-item" data-notif-id="'+n.id+'" style="padding:10px;margin-bottom:6px;border-radius:8px;background:'+bgColor+';border-left:'+borderLeft+';cursor:pointer;transition:background 0.2s;">'
+        +'<div style="display:flex;align-items:flex-start;gap:8px;">'
+        +icon
+        +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:13px;font-weight:'+(n.lido?'400':'600')+';color:var(--text);">'+esc(tipoLabel)+' de '+esc(n.colaborador||'')+' foi '+statusTxt+'</div>'
+        +(n.motivo ? '<div style="font-size:12px;color:var(--text-light);margin-top:3px;">'+esc(n.motivo)+'</div>' : '')
+        +'<div style="font-size:11px;color:var(--text-light);margin-top:4px;">'+dateStr+'</div>'
+        +'</div></div></div>';
+    }).join('');
+  }
+
+  if(btnNotif){
+    btnNotif.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(notifPanel.style.display === 'none'){
+        notifPanel.style.display = 'block';
+        renderNotifList();
+      } else {
+        notifPanel.style.display = 'none';
+      }
+    });
+  }
+  if(notifPanel){
+    notifPanel.addEventListener('click', function(e){
+      e.stopPropagation();
+      var item = e.target.closest('.notif-item');
+      if(item){
+        var nid = Number(item.getAttribute('data-notif-id'));
+        var n = DB.notificacoes.find(function(x){ return x.id === nid; });
+        if(n && !n.lido){ n.lido = true; persist('notificacoes'); updateNotifBadge(); renderNotifList(); }
+      }
+    });
+  }
+  if(markAllReadBtn){
+    markAllReadBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var changed = false;
+      DB.notificacoes.forEach(function(n){
+        if(normalizeStr(n.liderNome||'') === normalizeStr(SESSION.liderNome||'') && !n.lido){ n.lido = true; changed = true; }
+      });
+      if(changed){ persist('notificacoes'); }
+      updateNotifBadge();
+      renderNotifList();
+    });
+  }
+  // Close panel on outside click
+  document.addEventListener('click', function(e){
+    if(notifPanel && notifPanel.style.display !== 'none' && !notifPanel.contains(e.target) && e.target !== btnNotif && !btnNotif.contains(e.target)){
+      notifPanel.style.display = 'none';
+    }
+  });
+  updateNotifBadge();
+  // ---- End notification system ----
+
   const ct = document.getElementById('liderContent');
   if(liderPage==='lider-dashboard') renderLiderDashboard(ct);
   else if(liderPage==='lider-pdis') renderLiderDataPage(ct, 'pdis', ['nome','titulo','status','prazo','progresso'], ['Colaborador','Título','Status','Prazo','Progresso']);
@@ -7053,6 +7179,28 @@ function renderSettings(){
       </label>
     </div>
     <div id="backupStatus" style="margin-top:10px;font-size:12.5px;"></div>
+  </div>
+  <div class="card" style="margin-top:20px;">
+    <div class="section-title" style="margin-bottom:6px;">Notificações por E-mail (EmailJS)</div>
+    <p style="font-size:12.5px;color:var(--text-light);margin:0 0 16px;">Configure o EmailJS para enviar notificações por e-mail aos líderes quando solicitações forem aprovadas ou rejeitadas. Crie uma conta em <a href="https://www.emailjs.com" target="_blank" style="color:var(--primary);">emailjs.com</a> para obter as credenciais.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+      <div class="field"><label>Service ID</label><input id="emailjsServiceId" class="input" value="${esc(DB.emailjsConfig.serviceId||'')}" placeholder="service_xxxxxxx"></div>
+      <div class="field"><label>Template ID</label><input id="emailjsTemplateId" class="input" value="${esc(DB.emailjsConfig.templateId||'')}" placeholder="template_xxxxxxx"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+      <div class="field"><label>Public Key</label><input id="emailjsPublicKey" class="input" value="${esc(DB.emailjsConfig.publicKey||'')}" placeholder="sua_public_key"></div>
+      <div class="field" style="display:flex;align-items:flex-end;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+          <input type="checkbox" id="emailjsEnabled" ${DB.emailjsConfig.enabled?'checked':''}>
+          Ativar envio de e-mails
+        </label>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:auto;" id="btnSaveEmailjs">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Salvar Configuração EmailJS
+    </button>
+    <div id="emailjsStatus" style="margin-top:10px;font-size:12.5px;"></div>
   </div>`;
 }
 function bindSettings(){
@@ -7103,6 +7251,21 @@ function bindSettings(){
       }
     };
     reader.readAsText(file);
+  });
+
+  // EmailJS config save
+  var btnSaveEmailjs = document.getElementById('btnSaveEmailjs');
+  if(btnSaveEmailjs) btnSaveEmailjs.addEventListener('click', function(){
+    var cfg = {
+      serviceId: (document.getElementById('emailjsServiceId')||{}).value||'',
+      templateId: (document.getElementById('emailjsTemplateId')||{}).value||'',
+      publicKey: (document.getElementById('emailjsPublicKey')||{}).value||'',
+      enabled: !!(document.getElementById('emailjsEnabled')||{}).checked
+    };
+    DB.emailjsConfig = cfg;
+    persist('emailjsConfig');
+    var st = document.getElementById('emailjsStatus');
+    if(st){ st.innerHTML = '<span style="color:#14C8FA;font-weight:600;">✓ Configuração EmailJS salva com sucesso!</span>'; }
   });
 }
 
@@ -8131,7 +8294,34 @@ function bindSolicitacoes(){
       const id = Number(btn.dataset.id);
       const s = DB.solicitacoes.find(x=>x.id===id);
       const motivo = (document.querySelector('.sol-motivo[data-id="'+id+'"]')||{}).value||'';
-      if(s){ s.status='aprovado'; s.motivoResposta=motivo; s.dataResposta=new Date().toISOString(); persist('solicitacoes'); }
+      if(s){
+        s.status='aprovado'; s.motivoResposta=motivo; s.dataResposta=new Date().toISOString(); persist('solicitacoes');
+        // Create in-app notification for the leader
+        DB.notificacoes.push({
+          id: Date.now(),
+          liderNome: s.liderNome,
+          tipo: s.status,
+          tipoSolicitacao: s.type,
+          colaborador: s.nome,
+          motivo: motivo,
+          data: new Date().toISOString(),
+          lido: false
+        });
+        persist('notificacoes');
+        // Send email notification
+        var typeLabels = {promocao:'Promoção', desligamento:'Desligamento', movimentacao:'Movimentação CLT→PJ', efetivacao:'Efetivação'};
+        var liderColab = DB.colaboradores.find(function(c){ return normalizeStr(c.nome||c.Nome||'') === normalizeStr(s.liderNome); });
+        var liderEmail = liderColab ? (liderColab.email || liderColab.Email || '') : '';
+        if(liderEmail){
+          var statusText = 'APROVADA';
+          sendNotificationEmail(
+            liderEmail,
+            s.liderNome,
+            'Solicitação '+statusText+': '+(typeLabels[s.type]||s.type)+' - '+s.nome,
+            'Olá '+s.liderNome+',\n\nSua solicitação de '+(typeLabels[s.type]||s.type)+' para '+s.nome+' foi '+statusText.toLowerCase()+'.\n\n'+(motivo ? 'Observação: '+motivo+'\n\n' : '')+'Acesse o BP Gestão para mais detalhes.'
+          );
+        }
+      }
       const c = document.getElementById('content');
       c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
     });
@@ -8142,7 +8332,34 @@ function bindSolicitacoes(){
       const motivo = (document.querySelector('.sol-motivo[data-id="'+id+'"]')||{}).value||'';
       if(!motivo.trim()){ alert('Informe o motivo da rejeição.'); return; }
       const s = DB.solicitacoes.find(x=>x.id===id);
-      if(s){ s.status='rejeitado'; s.motivoResposta=motivo; s.dataResposta=new Date().toISOString(); persist('solicitacoes'); }
+      if(s){
+        s.status='rejeitado'; s.motivoResposta=motivo; s.dataResposta=new Date().toISOString(); persist('solicitacoes');
+        // Create in-app notification for the leader
+        DB.notificacoes.push({
+          id: Date.now(),
+          liderNome: s.liderNome,
+          tipo: s.status,
+          tipoSolicitacao: s.type,
+          colaborador: s.nome,
+          motivo: motivo,
+          data: new Date().toISOString(),
+          lido: false
+        });
+        persist('notificacoes');
+        // Send email notification
+        var typeLabels = {promocao:'Promoção', desligamento:'Desligamento', movimentacao:'Movimentação CLT→PJ', efetivacao:'Efetivação'};
+        var liderColab = DB.colaboradores.find(function(c){ return normalizeStr(c.nome||c.Nome||'') === normalizeStr(s.liderNome); });
+        var liderEmail = liderColab ? (liderColab.email || liderColab.Email || '') : '';
+        if(liderEmail){
+          var statusText = 'REJEITADA';
+          sendNotificationEmail(
+            liderEmail,
+            s.liderNome,
+            'Solicitação '+statusText+': '+(typeLabels[s.type]||s.type)+' - '+s.nome,
+            'Olá '+s.liderNome+',\n\nSua solicitação de '+(typeLabels[s.type]||s.type)+' para '+s.nome+' foi '+statusText.toLowerCase()+'.\n\n'+(motivo ? 'Observação: '+motivo+'\n\n' : '')+'Acesse o BP Gestão para mais detalhes.'
+          );
+        }
+      }
       const c = document.getElementById('content');
       c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
     });
