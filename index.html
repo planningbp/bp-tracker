@@ -873,7 +873,7 @@ function getLatestEnps(liderNome){
 }
 function enpsColor(val){
   if(val==null) return '#888';
-  if(val>50) return '#14C8FA';
+  if(val>50) return '#22c55e';
   if(val>=0) return '#f59e0b';
   return '#ff4343';
 }
@@ -1906,8 +1906,8 @@ function renderLiderDashboard(ct){
           const tipo = s.tipo||'area';
           const tipoLabel = tipo==='lider'?'Líder':'Área';
           const ref = tipo==='lider'?esc(s.lider||''):esc(s.area||'');
-          const enpsColor = s.enps>=50?'#14C8FA':s.enps>=0?'#FA6914':'#ff4343';
-          const lnpsColor = s.lnps>=50?'#14C8FA':s.lnps>=0?'#FA6914':'#ff4343';
+          const enpsColor = s.enps>=50?'#22c55e':s.enps>=0?'#FA6914':'#ff4343';
+          const lnpsColor = s.lnps>=50?'#22c55e':s.lnps>=0?'#FA6914':'#ff4343';
           return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
             '<td style="padding:10px 14px;">'+tipoLabel+'</td>'+
             '<td style="padding:10px 14px;font-weight:600;">'+ref+'</td>'+
@@ -2636,8 +2636,8 @@ function renderDashboard(){
       return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nível</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Área / Líder</th><th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th><th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Data</th><th style="padding:10px 14px;"></th></tr></thead><tbody>'+
       filtered.map((s,i)=>{
         const tipo = s.tipo||'area';
-        const enpsColor = s.enps>=50?'#14C8FA':s.enps>=0?'#FA6914':'#ff4343';
-        const lnpsColor = s.lnps>=50?'#14C8FA':s.lnps>=0?'#FA6914':'#ff4343';
+        const enpsColor = s.enps>=50?'#22c55e':s.enps>=0?'#FA6914':'#ff4343';
+        const lnpsColor = s.lnps>=50?'#22c55e':s.lnps>=0?'#FA6914':'#ff4343';
         const dtStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-BR') : '';
         let refLabel = '';
         if(tipo==='empresa') refLabel = '<span style="color:#888;font-style:italic;">Geral</span>';
@@ -5277,7 +5277,7 @@ function bindLideresPage(){
       data:{
         labels: records.map(r=>r.periodo),
         datasets:[
-          {label:'eNPS', data:records.map(r=>r.enps), borderColor:'#14C8FA', backgroundColor:'#14C8FA22', tension:0.3, fill:true},
+          {label:'eNPS', data:records.map(r=>r.enps), borderColor:'#22c55e', backgroundColor:'#22c55e22', tension:0.3, fill:true},
           {label:'lNPS', data:records.map(r=>r.lnps), borderColor:'#962DFF', backgroundColor:'#962DFF22', tension:0.3, fill:true}
         ]
       },
@@ -7565,7 +7565,7 @@ function bindEnpsPage(){
         // Group by tipo
         const tipos = ['lider','departamento','empresa'];
         const tipoLabels = {lider:'Líder',departamento:'Departamento',empresa:'Empresa'};
-        const tipoColors = {lider:'#14C8FA',departamento:'#962DFF',empresa:'#00C48C'};
+        const tipoColors = {lider:'#22c55e',departamento:'#962DFF',empresa:'#00C48C'};
         const allPeriods = [...new Set(chartRecords.map(r=>r.periodo||''))].sort();
         const datasets = tipos.map(t=>{
           const recs = chartRecords.filter(r=>r.tipo===t);
@@ -7585,7 +7585,7 @@ function bindEnpsPage(){
         // Group by referencia
         const refs = [...new Set(chartRecords.map(r=>r.referencia||''))];
         const allPeriods = [...new Set(chartRecords.map(r=>r.periodo||''))].sort();
-        const colors = ['#14C8FA','#962DFF','#00C48C','#f59e0b','#ff4343','#6366f1','#ec4899','#14b8a6','#f97316','#8b5cf6'];
+        const colors = ['#22c55e','#962DFF','#00C48C','#f59e0b','#ff4343','#6366f1','#ec4899','#14b8a6','#f97316','#8b5cf6'];
         const datasets = refs.map((ref,i)=>{
           const recs = chartRecords.filter(r=>r.referencia===ref);
           const data = allPeriods.map(p=>{
