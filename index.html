@@ -3303,7 +3303,6 @@ function openAddModal(db){
         reajuste:v('add_reajuste').trim(), pct:isNaN(pctVal)?null:pctVal/100
       });
       persist('promocoes');
-      applyPromocoes();
     }
     close();
     renderImportPreviewTables();
@@ -3346,7 +3345,9 @@ function handleImportFile(type, file){
     if(type==='colaboradores'){
       DB.colaboradores = parsed;
       persist('colaboradores');
-      applyPromocoes();
+      // Re-sync promotions from text field of new collaborators
+      DB.promocoes = []; persist('promocoes');
+      syncPromocoesFromText();
       statusEl.textContent = parsed.length+' colaboradores importados (base substituída)';
     } else {
       const existing = DB[type]||[];
