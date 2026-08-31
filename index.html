@@ -956,7 +956,8 @@ const CRUD_PAGES = {
     title:'1:1s', icon:'oneone', dbKey:'oneOnOnes', lsKey:'oneOnOnes',
     parser:null, pageTitle:['1:1s','Registros de reuniões individuais — adicionar, editar e remover'],
     cols:[
-      {key:'nome',label:'Colaborador',type:'text'},{key:'data',label:'Data',type:'date'},
+      {key:'nome',label:'Colaborador',type:'text'},{key:'lider',label:'Líder',type:'text',computed:true},
+      {key:'data',label:'Data',type:'date'},
       {key:'tipo',label:'Tipo',type:'select',options:['1:1','Feedback','Acompanhamento','Desenvolvimento','Outro']},
       {key:'resumo',label:'Resumo',type:'text'},{key:'acoes',label:'Ações',type:'text'},
       {key:'humor',label:'Humor',type:'select',options:['Muito bem','Bem','Neutro','Mal','Muito mal']}
@@ -999,6 +1000,13 @@ function computeCrudFields(pageKey, data){
       r.aumentoFmt = isNaN(aumento)?'—':'R$ '+aumento.toLocaleString('pt-BR',{minimumFractionDigits:2});
       const pctVal = (!isNaN(salAnt)&&salAnt>0&&!isNaN(salNovo))?((salNovo-salAnt)/salAnt*100):NaN;
       r.pctFmt = isNaN(pctVal)?String(r.pct||''):(pctVal>=0?'+':'')+pctVal.toFixed(1)+'%';
+    });
+  }
+  if(pageKey==='oneOnOnes'){
+    data.forEach(r=>{
+      const nome = normalizeStr(r.nome||'');
+      const colab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===nome);
+      r.lider = colab ? (colab.lider||colab['Líder']||colab.Lider||'') : '';
     });
   }
 }
