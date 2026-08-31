@@ -959,6 +959,21 @@ function parsePromocoes(rows){
   return out;
 }
 
+/* Check if a promotion record has a salary change (only these count as real promotions) */
+function isPromoSalarial(p){
+  // If reajuste or pct is non-zero, it's a salary change
+  if(p.pct && !isNaN(p.pct) && p.pct !== 0) return true;
+  var rej = parseBRL(p.reajuste);
+  if(rej && rej !== 0) return true;
+  // Compare salarioAtual vs valorAprovado
+  var antes = parseBRL(p.salarioAtual);
+  var depois = parseBRL(p.valorAprovado);
+  if(antes > 0 && depois > 0 && antes !== depois) return true;
+  // If only valorAprovado is filled (no salarioAtual to compare), check if it's non-zero
+  if(depois > 0 && antes === 0) return true;
+  return false;
+}
+
 function parsePDIs(rows){
   const out=[];
   for(let i=1;i<rows.length;i++){
@@ -1403,7 +1418,7 @@ function getUltimaPromocao(nome){
   const nk = normalizeStr(nome);
   let bestDate = null, bestCargoDe='', bestCargoPara='', bestPct=null;
   // 1) Check DB.promocoes
-  DB.promocoes.filter(p=> normalizeStr(p.nome)===nk && p.mesDate).forEach(p=>{
+  DB.promocoes.filter(p=> normalizeStr(p.nome)===nk && p.mesDate && isPromoSalarial(p)).forEach(p=>{
     const d = p.mesDate instanceof Date ? p.mesDate : new Date(p.mesDate);
     if(!isNaN(d) && (!bestDate || d > bestDate)){ bestDate=d; bestCargoDe=p.cargoAtual||''; bestCargoPara=p.cargoAprovado||''; bestPct=p.pct; }
   });
@@ -1413,6 +1428,8 @@ function getUltimaPromocao(nome){
     String(colab.promocoes).split('\n').filter(Boolean).forEach(line=>{
       const parts = line.split(';');
       if(parts.length>=2){
+        // Only count as promotion if there's a salary value (3rd part)
+        if(parts.length < 3 || !parseBRL(parts[2])) return;
         const raw = parts[0].trim();
         let d = null;
         const mmyyyy = raw.match(/^(\d{1,2})\/(\d{4})$/);
@@ -1548,7 +1565,7 @@ function computeAutoData(area, period, lider, customStart, customEnd){
     if(p.area!==area) return false;
     if(!fullArea) return colabNames.has(normalizeStr(p.nome));
     return true;
-  }).filter(p=> p.mesDate && inRange(p.mesDate));
+  }).filter(p=> p.mesDate && inRange(p.mesDate) && isPromoSalarial(p));
 
   const desligadosByEnd = new Set(
     desligsAll.filter(d=>d.ultimoDia && d.ultimoDia<=end).map(d=>normalizeStr(d.nome))
@@ -2009,7 +2026,7 @@ function renderLiderDashboard(ct){
   // Data filtered by team
   const myColabs = team;
   const myDeslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')));
-  const myPromos = DB.promocoes.filter(p=> teamNames.includes(normalizeStr(p.nome||p.Nome||'')));
+  const myPromos = DB.promocoes.filter(p=> teamNames.includes(normalizeStr(p.nome||p.Nome||'')) && isPromoSalarial(p));
   const pdisCount = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
   const oneOnOnesCount = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
 
@@ -2338,7 +2355,7 @@ function renderLiderColabDetail(ct){
   const pdis = DB.pdis.filter(r=>normalizeStr(r.nome||r.Nome||'')===nk);
   const oneones = DB.oneOnOnes.filter(r=>normalizeStr(r.nome||r.Nome||'')===nk);
   const banco = (DB.bancoHorasImport||[]).filter(r=>normalizeStr(r.nome||r.Nome||'')===nk);
-  const promos = DB.promocoes.filter(r=>normalizeStr(r.nome||r.Nome||'')===nk);
+  const promos = DB.promocoes.filter(r=>normalizeStr(r.nome||r.Nome||'')===nk && isPromoSalarial(r));
   const acomp = DB.acompanhamentos.filter(r=>normalizeStr(r.colaborador||r.Colaborador||'')===nk);
 
   let html = `
@@ -2560,7 +2577,7 @@ function renderDashboard(){
   // Get base data
   let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
   let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
-  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
+  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && isPromoSalarial(p));
   let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
 
   // Apply area filter
@@ -2966,7 +2983,7 @@ function bindDashboard(){
   const fLider = UI.dashLider || '';
   let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
   let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
-  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
+  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && isPromoSalarial(p));
   let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
   if(fArea){
     myColabs = myColabs.filter(c=>(c.area||c.departamento||'')===fArea);
@@ -5205,7 +5222,7 @@ function renderLideresPage(){
     const pdisCount = DB.pdis.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
     const oneOnOnesCount = DB.oneOnOnes.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
     const deslCount = DB.desligamentos.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
-    const promoCount = DB.promocoes.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+    const promoCount = DB.promocoes.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||'')) && isPromoSalarial(r)).length;
 
     const expanded = UI.liderExpanded===liderNome;
 
@@ -6363,7 +6380,7 @@ function getIndicadoresData(filterArea){
   const bpAreas = bp.areas.map(a=>normalizeStr(a));
   let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
   let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
-  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')));
+  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && isPromoSalarial(p));
   let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
   if(filterArea){
     myColabs = myColabs.filter(c=>(c.area||c.departamento||'')===filterArea);
