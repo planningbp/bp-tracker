@@ -672,7 +672,16 @@ let DB = {
   enps: loadJSON(LS.enps, []),
   formConfigs: loadJSON(LS.formConfigs, null) || getDefaultFormConfigs(),
   notificacoes: loadJSON(LS.notificacoes, []),
-  emailjsConfig: loadJSON(LS.emailjsConfig, {serviceId:'', templateId:'', publicKey:'', enabled:false})
+  emailjsConfig: (function(){
+    var saved = loadJSON(LS.emailjsConfig, null);
+    // Migrate old single-config to per-BP format
+    if(saved && saved.serviceId !== undefined && !saved._perBp){
+      var migrated = {_perBp:true, templateId:saved.templateId||'', publicKey:saved.publicKey||''};
+      CONFIG.bps.forEach(function(bp){ migrated[bp.id] = {serviceId:saved.serviceId||'', enabled:!!saved.enabled}; });
+      return migrated;
+    }
+    return saved || {_perBp:true, templateId:'', publicKey:''};
+  })()
 };
 function persist(part){
   saveJSON(LS[part], DB[part]);
@@ -754,9 +763,14 @@ function logoSVG(size){ return logoImg(size); }
 /* ---- EmailJS Integration ---- */
 function sendNotificationEmail(toEmail, toName, subject, body){
   var cfg = DB.emailjsConfig;
-  if(!cfg || !cfg.enabled || !cfg.publicKey) return;
+  if(!cfg || !cfg.publicKey) return;
+  // Get current BP's service config
+  var bp = currentBP();
+  if(!bp) return;
+  var bpCfg = cfg[bp.id];
+  if(!bpCfg || !bpCfg.enabled || !bpCfg.serviceId) return;
   try {
-    emailjs.send(cfg.serviceId, cfg.templateId, {
+    emailjs.send(bpCfg.serviceId, cfg.templateId, {
       to_email: toEmail,
       to_name: toName,
       subject: subject,
@@ -7182,19 +7196,22 @@ function renderSettings(){
   </div>
   <div class="card" style="margin-top:20px;">
     <div class="section-title" style="margin-bottom:6px;">Notificações por E-mail (EmailJS)</div>
-    <p style="font-size:12.5px;color:var(--text-light);margin:0 0 16px;">Configure o EmailJS para enviar notificações por e-mail aos líderes quando solicitações forem aprovadas ou rejeitadas. Crie uma conta em <a href="https://www.emailjs.com" target="_blank" style="color:var(--primary);">emailjs.com</a> para obter as credenciais.</p>
+    <p style="font-size:12.5px;color:var(--text-light);margin:0 0 16px;">Configure o EmailJS para enviar notificações por e-mail aos líderes. Cada BP pode ter seu próprio Service ID (e-mail remetente). Template ID e Public Key são compartilhados. Crie uma conta em <a href="https://www.emailjs.com" target="_blank" style="color:var(--primary);">emailjs.com</a> para obter as credenciais.</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-      <div class="field"><label>Service ID</label><input id="emailjsServiceId" class="input" value="${esc(DB.emailjsConfig.serviceId||'')}" placeholder="service_xxxxxxx"></div>
-      <div class="field"><label>Template ID</label><input id="emailjsTemplateId" class="input" value="${esc(DB.emailjsConfig.templateId||'')}" placeholder="template_xxxxxxx"></div>
+      <div class="field"><label>Template ID <span style="color:var(--text-light);font-weight:400;">(compartilhado)</span></label><input id="emailjsTemplateId" class="input" value="${esc(DB.emailjsConfig.templateId||'')}" placeholder="template_xxxxxxx"></div>
+      <div class="field"><label>Public Key <span style="color:var(--text-light);font-weight:400;">(compartilhado)</span></label><input id="emailjsPublicKey" class="input" value="${esc(DB.emailjsConfig.publicKey||'')}" placeholder="sua_public_key"></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-      <div class="field"><label>Public Key</label><input id="emailjsPublicKey" class="input" value="${esc(DB.emailjsConfig.publicKey||'')}" placeholder="sua_public_key"></div>
-      <div class="field" style="display:flex;align-items:flex-end;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
-          <input type="checkbox" id="emailjsEnabled" ${DB.emailjsConfig.enabled?'checked':''}>
-          Ativar envio de e-mails
-        </label>
-      </div>
+    <div style="margin-top:16px;margin-bottom:14px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:10px;">Service ID por BP</div>
+      ${CONFIG.bps.map(function(bp){
+        var bpCfg = DB.emailjsConfig[bp.id] || {serviceId:'', enabled:false};
+        return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:10px 14px;background:var(--bg-main);border-radius:8px;">' +
+          '<div style="width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">'+esc(bp.avatar)+'</div>' +
+          '<div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:600;margin-bottom:4px;">'+esc(bp.name)+'</div>' +
+          '<input id="emailjsServiceId_'+bp.id+'" class="input" value="'+esc(bpCfg.serviceId||'')+'" placeholder="service_xxxxxxx" style="font-size:12.5px;"></div>' +
+          '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;">' +
+          '<input type="checkbox" id="emailjsEnabled_'+bp.id+'" '+(bpCfg.enabled?'checked':'')+'>Ativo</label></div>';
+      }).join('')}
     </div>
     <button class="btn btn-primary" style="width:auto;" id="btnSaveEmailjs">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -7253,15 +7270,20 @@ function bindSettings(){
     reader.readAsText(file);
   });
 
-  // EmailJS config save
+  // EmailJS config save (per-BP)
   var btnSaveEmailjs = document.getElementById('btnSaveEmailjs');
   if(btnSaveEmailjs) btnSaveEmailjs.addEventListener('click', function(){
     var cfg = {
-      serviceId: (document.getElementById('emailjsServiceId')||{}).value||'',
+      _perBp: true,
       templateId: (document.getElementById('emailjsTemplateId')||{}).value||'',
-      publicKey: (document.getElementById('emailjsPublicKey')||{}).value||'',
-      enabled: !!(document.getElementById('emailjsEnabled')||{}).checked
+      publicKey: (document.getElementById('emailjsPublicKey')||{}).value||''
     };
+    CONFIG.bps.forEach(function(bp){
+      cfg[bp.id] = {
+        serviceId: (document.getElementById('emailjsServiceId_'+bp.id)||{}).value||'',
+        enabled: !!(document.getElementById('emailjsEnabled_'+bp.id)||{}).checked
+      };
+    });
     DB.emailjsConfig = cfg;
     persist('emailjsConfig');
     var st = document.getElementById('emailjsStatus');
