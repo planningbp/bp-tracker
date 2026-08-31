@@ -7417,6 +7417,37 @@ function syncPromocoesFromText(){
       prevCargo = p.cargo;
       if(p.salario) prevSalario = p.salario;
     });
+
+    // If current cargo/salary differs from last text promotion, add the current as latest
+    const currentCargo = c.cargo||c.Cargo||'';
+    const currentSalario = getSalario(c);
+    if(parsed.length>0 && currentCargo && normalizeStr(currentCargo)!==normalizeStr(prevCargo)){
+      const existsCurrent = DB.promocoes.some(pr=>
+        normalizeStr(pr.nome)===nk &&
+        pr.cargoAprovado &&
+        normalizeStr(pr.cargoAprovado)===normalizeStr(currentCargo)
+      );
+      if(!existsCurrent){
+        const reajuste = (currentSalario && prevSalario) ? (currentSalario - prevSalario) : 0;
+        const pct = (prevSalario && currentSalario) ? (reajuste / prevSalario) : 0;
+        DB.promocoes.push({
+          id: uid(),
+          mesRaw: new Date().toISOString(),
+          mesDate: new Date(),
+          nome: nome,
+          area: area,
+          gestor: lider,
+          aprovador: '',
+          cargoAtual: prevCargo,
+          salarioAtual: prevSalario||'',
+          cargoAprovado: currentCargo,
+          valorAprovado: currentSalario||'',
+          reajuste: reajuste||'',
+          pct: pct||''
+        });
+        added++;
+      }
+    }
   });
   if(added>0){
     persist('promocoes');
