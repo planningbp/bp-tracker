@@ -3,7 +3,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Planning · BP Gestão</title>
-<link rel="icon" id="appFavicon" type="image/png" href="about:blank">
+<link rel="icon" id="appFavicon" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com/">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -1578,18 +1578,8 @@ function currentBP(){ return SESSION ? bpById(SESSION.bpId) : null; }
    FAVICON from PLANNING_LOGO
 ========================================================= */
 (function setFavicon(){
-  const img = new Image();
-  img.onload = function(){
-    const c = document.createElement('canvas');
-    c.width = 32; c.height = 32;
-    const ctx = c.getContext('2d');
-    const scale = Math.min(32/img.width, 32/img.height);
-    const w = img.width*scale, h = img.height*scale;
-    ctx.drawImage(img, (32-w)/2, (32-h)/2, w, h);
-    const link = document.getElementById('appFavicon');
-    if(link) link.href = c.toDataURL('image/png');
-  };
-  img.src = PLANNING_LOGO;
+  const link = document.getElementById('appFavicon');
+  if(link) link.href = PLANNING_LOGO;
 })();
 
 /* =========================================================
@@ -1840,8 +1830,8 @@ function bindLiderShell(){
   else if(liderPage==='lider-1on1s') renderLiderDataPage(ct, 'oneOnOnes', ['nome','data','tipo','resumo'], ['Colaborador','Data','Tipo','Resumo']);
   else if(liderPage==='lider-banco') renderLiderDataPage(ct, 'bancoHorasImport', ['nome','mes','saldo','observacao'], ['Colaborador','Mês','Saldo','Observação']);
   else if(liderPage==='lider-acomp') renderLiderDataPage(ct, 'acompanhamentos', ['colaborador','tipo','data','responsavel','status','observacoes'], ['Colaborador','Tipo','Data','Responsável','Status','Observações']);
-  else if(liderPage==='lider-promo') renderLiderDataPage(ct, 'promocoes', ['nome','de','para','data','motivo'], ['Colaborador','De','Para','Data','Motivo']);
-  else if(liderPage==='lider-desl') renderLiderDataPage(ct, 'desligamentos', ['nome','data','tipo','motivo'], ['Colaborador','Data','Tipo','Motivo']);
+  else if(liderPage==='lider-promo') renderLiderDataPage(ct, 'promocoes', ['nome','cargoAtual','cargoAprovado','area','gestor'], ['Colaborador','Cargo Anterior','Cargo Novo','Área','Gestor']);
+  else if(liderPage==='lider-desl') renderLiderDataPage(ct, 'desligamentos', ['nome','cargo','tipo','motivo','area'], ['Colaborador','Cargo','Tipo','Motivo','Área']);
   else if(liderPage==='lider-colab-detail') renderLiderColabDetail(ct);
   else if(liderPage==='lider-forms') renderLiderForms(ct);
   else if(liderPage==='lider-solicitacoes') renderLiderSolicitacoes(ct);
