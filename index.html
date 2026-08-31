@@ -1026,6 +1026,7 @@ function renderCrudPage(pageKey){
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="crudSearch_${pageKey}" placeholder="Buscar..." value="${esc(UI[searchKey]||'')}" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;min-width:200px;">
         ${activeFilterCount>0?'<button class="btn btn-outline" id="crudClearFilters_'+pageKey+'" style="width:auto;color:#ff4343;border-color:#ff4343;font-size:12px;">Limpar filtros ('+activeFilterCount+')</button>':''}
+        <button class="btn btn-outline" id="crudDeleteAll_${pageKey}" style="width:auto;background:#fdecec;color:#ff4343;border-color:#fcc;display:flex;align-items:center;gap:6px;">&#128465; Apagar tudo</button>
         <button class="btn" id="crudAdd_${pageKey}" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.plus} Adicionar</button>
         ${cfg.parser ? '<label class="btn btn-outline" style="width:auto;display:flex;align-items:center;gap:6px;cursor:pointer;">'+ICONS.import+' Importar<input type="file" id="crudImport_'+pageKey+'" accept=".xlsx,.xls,.csv" style="display:none;"></label>' : ''}
       </div>
@@ -1104,6 +1105,18 @@ function bindCrudPage(pageKey){
   // Search
   const searchInp = document.getElementById('crudSearch_'+pageKey);
   if(searchInp){ let t; searchInp.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(()=>{ UI[searchKey]=searchInp.value; rerender(); },300); }); searchInp.focus(); searchInp.setSelectionRange(searchInp.value.length,searchInp.value.length); }
+
+  // Delete all
+  const btnDeleteAll = document.getElementById('crudDeleteAll_'+pageKey);
+  if(btnDeleteAll) btnDeleteAll.addEventListener('click', ()=>{
+    const count = DB[cfg.dbKey].length;
+    if(!count){ alert('Nenhum registro para excluir.'); return; }
+    if(confirm('Excluir TODOS os '+count+' registros de '+cfg.title+'? Esta acao nao pode ser desfeita.')){
+      DB[cfg.dbKey] = [];
+      persist(cfg.dbKey);
+      rerender();
+    }
+  });
 
   // Column filters
   document.querySelectorAll('.crudColFilter[data-crud-page="'+pageKey+'"]').forEach(sel=>{
@@ -4578,6 +4591,7 @@ function renderKanban(){
         <option value="Baixa"${UI.kanbanPri==='Baixa'?' selected':''}>Baixa</option>
       </select>
       <div class="spacer"></div>
+      <button class="btn btn-outline" id="btnDeleteAllAcoes" style="width:auto;background:#fdecec;color:#ff4343;border-color:#fcc;">&#128465; Apagar tudo</button>
       <button class="btn btn-primary" id="btnAddAcao" style="width:auto;">${ICONS.plus} Nova Ação</button>
     </div>
 
@@ -4654,12 +4668,39 @@ function renderKanban(){
                 ${col.key!=='todo'?'<button class="btn btn-outline btn-sm kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='doing'?'todo':'doing')+'" style="width:auto;">&#8592;</button>':''}
                 ${col.key!=='done'?'<button class="btn btn-outline btn-sm kanban-move" data-move-id="'+a.id+'" data-move-to="'+(col.key==='todo'?'doing':'done')+'" style="width:auto;">&#8594;</button>':''}
                 <div style="flex:1;"></div>
+                <button class="btn btn-sm btn-outline kanban-edit" data-edit-id="${a.id}" style="width:auto;" title="Editar">&#9998;</button>
                 <button class="btn btn-sm btn-danger kanban-del" data-del-id="${a.id}" style="width:auto;">&#10005;</button>
               </div>
             </div>`;
           }).join('')}
         </div>`;
       }).join('')}
+    </div>
+
+    <div id="kanbanEditModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:16px;padding:28px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div style="font-weight:700;font-size:17px;margin-bottom:18px;color:var(--primary);">Editar Acao</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:14px;">
+          <div class="field"><label>Titulo</label><input type="text" id="kanbanEditTitulo"></div>
+          <div class="field"><label>Responsavel</label><input type="text" id="kanbanEditResp"></div>
+          <div class="field"><label>Area</label>
+            <select id="kanbanEditArea"><option value="">Selecione...</option>${areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}</select>
+          </div>
+          <div class="field"><label>Prazo</label><input type="date" id="kanbanEditPrazo"></div>
+          <div class="field"><label>Prioridade</label>
+            <select id="kanbanEditPri"><option value="Media">Media</option><option value="Alta">Alta</option><option value="Baixa">Baixa</option></select>
+          </div>
+          <div class="field"><label>Origem</label>
+            <select id="kanbanEditOrigem"><option value="">Selecione...</option><option value="Reuniao BP">Reuniao BP</option><option value="Pesquisa de Clima">Pesquisa de Clima</option><option value="PDI">PDI</option><option value="1:1">1:1</option><option value="Feedback">Feedback</option><option value="Outra">Outra</option></select>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:14px;"><label>Observacoes</label><textarea id="kanbanEditObs" rows="3"></textarea></div>
+        <input type="hidden" id="kanbanEditId">
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button class="btn btn-outline" id="kanbanEditCancel" style="width:auto;">Cancelar</button>
+          <button class="btn btn-primary" id="kanbanEditSave" style="width:auto;">Salvar</button>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -4784,7 +4825,19 @@ function bindKanban(){
     });
   });
 
-  // Delete
+  // Delete all acoes
+  const btnDelAllAcoes = document.getElementById('btnDeleteAllAcoes');
+  if(btnDelAllAcoes) btnDelAllAcoes.addEventListener('click', ()=>{
+    const count = DB.acoes.length;
+    if(!count){ alert('Nenhuma acao para excluir.'); return; }
+    if(confirm('Excluir TODAS as '+count+' acoes? Esta acao nao pode ser desfeita.')){
+      DB.acoes = [];
+      persist('acoes');
+      rerender();
+    }
+  });
+
+  // Delete individual
   document.querySelectorAll('.kanban-del').forEach(btn=>{
     btn.addEventListener('click', e=>{
       e.stopPropagation();
@@ -4795,6 +4848,48 @@ function bindKanban(){
       rerender();
     });
   });
+
+  // Edit action
+  document.querySelectorAll('.kanban-edit').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-edit-id');
+      const acao = DB.acoes.find(a=>a.id===id);
+      if(!acao) return;
+      const modal = document.getElementById('kanbanEditModal');
+      if(!modal) return;
+      document.getElementById('kanbanEditId').value = id;
+      document.getElementById('kanbanEditTitulo').value = acao.titulo||'';
+      document.getElementById('kanbanEditResp').value = acao.responsavel||'';
+      document.getElementById('kanbanEditArea').value = acao.area||'';
+      document.getElementById('kanbanEditPrazo').value = acao.prazo||'';
+      document.getElementById('kanbanEditPri').value = acao.prioridade||'Media';
+      document.getElementById('kanbanEditOrigem').value = acao.origem||'';
+      document.getElementById('kanbanEditObs').value = acao.observacoes||'';
+      modal.style.display = 'flex';
+    });
+  });
+  const kanbanEditCancel = document.getElementById('kanbanEditCancel');
+  if(kanbanEditCancel) kanbanEditCancel.addEventListener('click', ()=>{ document.getElementById('kanbanEditModal').style.display='none'; });
+  const kanbanEditSave = document.getElementById('kanbanEditSave');
+  if(kanbanEditSave) kanbanEditSave.addEventListener('click', ()=>{
+    const id = document.getElementById('kanbanEditId').value;
+    const acao = DB.acoes.find(a=>a.id===id);
+    if(!acao) return;
+    acao.titulo = document.getElementById('kanbanEditTitulo').value;
+    acao.responsavel = document.getElementById('kanbanEditResp').value;
+    acao.area = document.getElementById('kanbanEditArea').value;
+    acao.prazo = document.getElementById('kanbanEditPrazo').value;
+    acao.prioridade = document.getElementById('kanbanEditPri').value;
+    acao.origem = document.getElementById('kanbanEditOrigem').value;
+    acao.observacoes = document.getElementById('kanbanEditObs').value;
+    persist('acoes');
+    document.getElementById('kanbanEditModal').style.display='none';
+    rerender();
+  });
+  // Close modal on background click
+  const kanbanEditModal = document.getElementById('kanbanEditModal');
+  if(kanbanEditModal) kanbanEditModal.addEventListener('click', e=>{ if(e.target===kanbanEditModal) kanbanEditModal.style.display='none'; });
 }
 
 /* =========================================================
@@ -5231,6 +5326,7 @@ function renderColaboradoresPage(){
           <option value="">Todas as tags</option>
           ${DB.tags.map(t=>'<option value="'+esc(t)+'" '+(t===fTag?'selected':'')+'>'+esc(t)+'</option>').join('')}
         </select>`:''}
+        <button class="btn btn-outline" id="btnDeleteAllColabs" style="width:auto;background:#fdecec;color:#ff4343;border-color:#fcc;display:flex;align-items:center;gap:6px;">&#128465; Apagar tudo</button>
         <button class="btn" id="btnAddColab" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.plus} Adicionar</button>
         <button class="btn btn-outline" id="btnPdfColabs" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.file} Baixar PDF</button>
       </div>
@@ -5285,6 +5381,7 @@ function renderColaboradoresPage(){
             <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Última Promoção</th>
             <th style="padding:8px 14px 4px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">Tempo</th>
             <th style="padding:8px 14px 4px;text-align:center;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;">1:1s</th>
+            <th style="padding:8px 14px 4px;text-align:center;font-weight:700;font-size:11px;text-transform:uppercase;color:#888;width:60px;">Excluir</th>
           </tr>
           <tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
             ${[
@@ -5295,7 +5392,7 @@ function renderColaboradoresPage(){
               {col:'cargo',label:'Todos'},
               {col:null},{col:null},
               {col:'regime',label:'Todos'},
-              {col:null},{col:'tempo',label:'Todos'},{col:null}
+              {col:null},{col:'tempo',label:'Todos'},{col:null},{col:null}
             ].map(f=>{
               if(!f.col) return '<th style="padding:2px 14px 8px;"></th>';
               if(f.col==='tempo'){
@@ -5310,7 +5407,7 @@ function renderColaboradoresPage(){
           </tr>
         </thead>
         <tbody>
-          ${filtered.length===0 ? '<tr><td colspan="11" style="padding:40px;text-align:center;color:#aaa;">Nenhum colaborador encontrado.</td></tr>' :
+          ${filtered.length===0 ? '<tr><td colspan="12" style="padding:40px;text-align:center;color:#aaa;">Nenhum colaborador encontrado.</td></tr>' :
           filtered.map((c,i)=>{
             const nome = c.nome||c.Nome||'';
             const lider = c.lider||c['Líder']||c.Lider||'';
@@ -5346,6 +5443,7 @@ function renderColaboradoresPage(){
               <td style="padding:12px 14px;font-size:12px;">${promo && promo.semPromocao ? '<span style="color:#aaa;font-style:italic;">Sem promoção</span>' : promoStr||'<span style="color:#ccc;">—</span>'}</td>
               <td style="padding:12px 14px;font-size:12px;">${promoTempo ? (promo.semPromocao ? '<span style="background:#f3f4f6;color:#666;padding:2px 8px;border-radius:6px;font-size:11px;">admissão há '+promoTempo+'</span>' : '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">há '+promoTempo+'</span>') : '<span style="color:#ccc;">—</span>'}</td>
               <td style="padding:12px 14px;text-align:center;">${count>0?'<span style="background:var(--primary);color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">'+count+'</span>':'<span style="color:#ccc;">—</span>'}</td>
+              <td style="padding:12px 14px;text-align:center;"><button class="colabDelBtn" data-del-nome="${esc(nome)}" style="background:none;border:none;cursor:pointer;color:#ff4343;font-size:14px;padding:4px 8px;" title="Excluir colaborador">&#128465;</button></td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -5374,6 +5472,29 @@ function bindColaboradoresPage(){
   });
   const btnPdf = document.getElementById('btnPdfColabs');
   if(btnPdf) btnPdf.addEventListener('click', ()=>{ exportColaboradoresPDF(UI.colabFilterArea||''); });
+
+  // Delete all colaboradores
+  const btnDelAllColabs = document.getElementById('btnDeleteAllColabs');
+  if(btnDelAllColabs) btnDelAllColabs.addEventListener('click', ()=>{
+    const count = DB.colaboradores.length;
+    if(!count){ alert('Nenhum colaborador para excluir.'); return; }
+    if(confirm('Excluir TODOS os '+count+' colaboradores? Esta acao nao pode ser desfeita.')){
+      DB.colaboradores = [];
+      persist('colaboradores');
+      rerender();
+    }
+  });
+  // Delete individual colaborador
+  document.querySelectorAll('.colabDelBtn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const nome = btn.getAttribute('data-del-nome');
+      if(!confirm('Excluir o colaborador "'+nome+'"?')) return;
+      DB.colaboradores = DB.colaboradores.filter(c=>(c.nome||c.Nome||'')!==nome);
+      persist('colaboradores');
+      rerender();
+    });
+  });
 
   // Add collaborator
   const btnAdd = document.getElementById('btnAddColab');
@@ -7126,9 +7247,10 @@ function renderTagsPage(){
   return `
     <div class="card" style="margin-bottom:20px;">
       <div class="section-title" style="margin-bottom:14px;">Gerenciar Tags</div>
-      <div style="display:flex;gap:10px;margin-bottom:16px;">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
         <input type="text" id="newTagInput" class="input" placeholder="Nome da nova tag..." style="flex:1;max-width:300px;">
         <button class="btn btn-primary" id="btnAddTag" style="width:auto;">+ Adicionar Tag</button>
+        <button class="btn btn-outline" id="btnDeleteAllTags" style="width:auto;background:#fdecec;color:#ff4343;border-color:#fcc;">&#128465; Apagar tudo</button>
       </div>
       <div id="tagsList" style="display:flex;flex-wrap:wrap;gap:10px;">
         ${DB.tags.length===0?'<span style="color:#888;font-size:13px;">Nenhuma tag cadastrada.</span>':''}
@@ -7184,6 +7306,20 @@ function bindTagsPage(){
     c.innerHTML = renderTagsPage(); bindTagsPage();
   });
   if(inp) inp.addEventListener('keydown', e=>{ if(e.key==='Enter') btn.click(); });
+
+  // Delete all tags
+  const btnDelAllTags = document.getElementById('btnDeleteAllTags');
+  if(btnDelAllTags) btnDelAllTags.addEventListener('click', ()=>{
+    if(!DB.tags.length){ alert('Nenhuma tag para excluir.'); return; }
+    if(confirm('Excluir TODAS as '+DB.tags.length+' tags? As associacoes com colaboradores tambem serao removidas.')){
+      DB.tags = [];
+      DB.colabTags = {};
+      persist('tags');
+      persist('colabTags');
+      const c = document.getElementById('content');
+      c.innerHTML = renderTagsPage(); bindTagsPage();
+    }
+  });
 
   document.querySelectorAll('.btn-remove-tag').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -7271,6 +7407,7 @@ function renderSolicitacoes(){
     </div>
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
       <select id="solFilterStatus" class="select" style="min-width:130px;"><option value="">Todos os status</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="rejeitado">Rejeitado</option></select>
+      <button class="btn btn-outline" id="btnDeleteAllSol" style="width:auto;background:#fdecec;color:#ff4343;border-color:#fcc;">&#128465; Apagar tudo</button>
     </div>
     <div id="solList">
       ${filtered.map(s=>{
@@ -7286,6 +7423,7 @@ function renderSolicitacoes(){
               <span style="font-size:12px;color:#888;">Líder: ${esc(s.liderNome||'')}</span>
               <span style="font-size:12px;color:#888;">${s.dataSolicitacao?new Date(s.dataSolicitacao).toLocaleDateString('pt-BR'):''}</span>
               <span style="padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;color:#fff;background:${statusColors[s.status]||'#888'};">${statusLabels[s.status]||s.status}</span>
+              <button class="sol-del-btn" data-sol-del-id="${s.id}" style="background:none;border:none;cursor:pointer;color:#ff4343;font-size:14px;padding:4px 8px;" title="Excluir solicitacao">&#128465;</button>
             </div>
           </div>
           <div class="sol-details" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
@@ -7345,6 +7483,32 @@ function bindSolicitacoes(){
       if(!motivo.trim()){ alert('Informe o motivo da rejeição.'); return; }
       const s = DB.solicitacoes.find(x=>x.id===id);
       if(s){ s.status='rejeitado'; s.motivoResposta=motivo; s.dataResposta=new Date().toISOString(); persist('solicitacoes'); }
+      const c = document.getElementById('content');
+      c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
+    });
+  });
+
+  // Delete all solicitacoes
+  const btnDelAllSol = document.getElementById('btnDeleteAllSol');
+  if(btnDelAllSol) btnDelAllSol.addEventListener('click', ()=>{
+    const count = DB.solicitacoes.length;
+    if(!count){ alert('Nenhuma solicitacao para excluir.'); return; }
+    if(confirm('Excluir TODAS as '+count+' solicitacoes? Esta acao nao pode ser desfeita.')){
+      DB.solicitacoes = [];
+      persist('solicitacoes');
+      const c = document.getElementById('content');
+      c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
+    }
+  });
+
+  // Delete individual solicitacao
+  document.querySelectorAll('.sol-del-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = Number(btn.getAttribute('data-sol-del-id'));
+      if(!confirm('Excluir esta solicitacao?')) return;
+      DB.solicitacoes = DB.solicitacoes.filter(s=>s.id!==id);
+      persist('solicitacoes');
       const c = document.getElementById('content');
       c.innerHTML = renderSolicitacoes(); bindSolicitacoes();
     });
