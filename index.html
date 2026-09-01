@@ -1851,7 +1851,8 @@ const LIDER_NAV = [
   {key:'lider-promo', label:'Promoções', icon:'promo'},
   {key:'lider-desl', label:'Desligamentos', icon:'desl'},
   {key:'lider-forms', label:'Formulários', icon:'forms'},
-  {key:'lider-solicitacoes', label:'Solicitações', icon:'file'}
+  {key:'lider-solicitacoes', label:'Solicitações', icon:'file'},
+  {key:'lider-relatorio', label:'Relatório', icon:'dashboard'}
 ];
 
 function renderLiderShell(){
@@ -1870,7 +1871,8 @@ function renderLiderShell(){
     'lider-promo':['Promoções','Movimentações da equipe'],
     'lider-desl':['Desligamentos','Desligamentos da equipe'],
     'lider-colab-detail':['Colaborador','Detalhes do colaborador'],
-    'lider-forms':['Formulários','Solicitações de movimentação']
+    'lider-forms':['Formulários','Solicitações de movimentação'],
+    'lider-relatorio':['Relatório','Relatório completo da equipe — ativos, desligados, acompanhamentos, 1:1s']
   };
   const t = titles[liderPage]||['Portal do Líder',''];
 
@@ -2029,6 +2031,233 @@ function bindLiderShell(){
   else if(liderPage==='lider-colab-detail') renderLiderColabDetail(ct);
   else if(liderPage==='lider-forms') renderLiderForms(ct);
   else if(liderPage==='lider-solicitacoes') renderLiderSolicitacoes(ct);
+  else if(liderPage==='lider-relatorio') renderLiderRelatorio(ct);
+}
+
+function renderLiderRelatorio(ct){
+  const team = getLiderTeam();
+  const teamNames = getLiderTeamNames();
+  const nome = SESSION.liderNome;
+
+  // Data
+  const ativos = team.filter(c=>(c.status||'Ativo')==='Ativo');
+  const inativos = team.filter(c=>(c.status||'Ativo')!=='Ativo');
+  const deslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')));
+  const acomp = DB.acompanhamentos.filter(r=> teamNames.includes(normalizeStr(r.colaborador||r.Colaborador||'')));
+  const oneones = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+  const pdis = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+  const promos = DB.promocoes.filter(p=> teamNames.includes(normalizeStr(p.nome||p.Nome||'')) && isPromoSalarial(p));
+  const banco = (DB.bancoHorasImport||[]).filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+
+  // Sort acompanhamentos by date desc
+  acomp.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  oneones.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+
+  const today = new Date();
+  const fmtD = d => { if(!d) return '—'; const dt = d instanceof Date ? d : new Date(d); return isNaN(dt)?'—':dt.toLocaleDateString('pt-BR'); };
+
+  let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+    <div><h2 style="margin:0;">Relatório Completo da Equipe</h2><p style="margin:4px 0 0;color:#888;font-size:13px;">Gerado em ${today.toLocaleDateString('pt-BR')} · Líder: ${esc(nome)}</p></div>
+    <button class="btn btn-primary" id="btnPrintRelatorio" style="width:auto;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Imprimir
+    </button>
+  </div>`;
+
+  // ===== 1. COLABORADORES ATIVOS =====
+  html += `<div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Colaboradores Ativos (${ativos.length})</div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 10px;text-align:left;">Nome</th>
+        <th style="padding:8px 10px;text-align:left;">Cargo</th>
+        <th style="padding:8px 10px;text-align:left;">Área</th>
+        <th style="padding:8px 10px;text-align:left;">Regime</th>
+        <th style="padding:8px 10px;text-align:left;">Admissão</th>
+        <th style="padding:8px 10px;text-align:right;">Salário</th>
+        <th style="padding:8px 10px;text-align:left;">Líder</th>
+      </tr></thead><tbody>`;
+  ativos.sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach((c,i) => {
+    html += `<tr style="border-bottom:1px solid #f0f0f0;${i%2?'background:#fafbfc;':''}">
+      <td style="padding:8px 10px;font-weight:600;">${esc(c.nome||c.Nome||'')}</td>
+      <td style="padding:8px 10px;">${esc(c.cargo||c.Cargo||'')}</td>
+      <td style="padding:8px 10px;">${esc(c.area||c.departamento||'')}</td>
+      <td style="padding:8px 10px;">${esc(c.regime||c.Regime||'')}</td>
+      <td style="padding:8px 10px;">${fmtD(c.admissao)}</td>
+      <td style="padding:8px 10px;text-align:right;">${c.faixaSalarial||'—'}</td>
+      <td style="padding:8px 10px;">${esc(c.lider||c.Lider||'')}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div></div>`;
+
+  // ===== 2. DESLIGAMENTOS =====
+  html += `<div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Desligamentos (${deslig.length})</div>`;
+  if(deslig.length){
+    html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 10px;text-align:left;">Nome</th>
+        <th style="padding:8px 10px;text-align:left;">Cargo</th>
+        <th style="padding:8px 10px;text-align:left;">Tipo</th>
+        <th style="padding:8px 10px;text-align:left;">Motivo</th>
+        <th style="padding:8px 10px;text-align:left;">Último Dia</th>
+        <th style="padding:8px 10px;text-align:left;">Tempo de Casa</th>
+      </tr></thead><tbody>`;
+    deslig.forEach((d,i) => {
+      html += `<tr style="border-bottom:1px solid #f0f0f0;${i%2?'background:#fafbfc;':''}">
+        <td style="padding:8px 10px;font-weight:600;">${esc(d.nome||d.Nome||'')}</td>
+        <td style="padding:8px 10px;">${esc(d.cargo||'')}</td>
+        <td style="padding:8px 10px;">${esc(d.tipo||'')}</td>
+        <td style="padding:8px 10px;">${esc(d.motivo||'')}</td>
+        <td style="padding:8px 10px;">${fmtD(d.ultimoDia)}</td>
+        <td style="padding:8px 10px;">${esc(d.tempoDeCasa||'')}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhum desligamento registrado</div>';
+  html += '</div>';
+
+  // ===== 3. ACOMPANHAMENTOS (7/15/45/90 dias) =====
+  html += `<div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Acompanhamentos — Avaliações de Experiência (${acomp.length})</div>`;
+  if(acomp.length){
+    const tipoOrder = {'7 dias':1,'15 dias':2,'30 dias':3,'45 dias':4,'60 dias':5,'90 dias':6};
+    const acompSorted = acomp.slice().sort((a,b)=>{
+      const na = normalizeStr(a.colaborador||''), nb = normalizeStr(b.colaborador||'');
+      if(na!==nb) return na.localeCompare(nb);
+      return (tipoOrder[a.tipo]||99)-(tipoOrder[b.tipo]||99);
+    });
+    html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 10px;text-align:left;">Colaborador</th>
+        <th style="padding:8px 10px;text-align:left;">Tipo</th>
+        <th style="padding:8px 10px;text-align:left;">Data</th>
+        <th style="padding:8px 10px;text-align:left;">Responsável</th>
+        <th style="padding:8px 10px;text-align:left;">Status</th>
+        <th style="padding:8px 10px;text-align:left;">Observações</th>
+      </tr></thead><tbody>`;
+    acompSorted.forEach((a,i) => {
+      const statusColor = (a.status||'').toLowerCase().includes('conclu')?'#22c55e':(a.status||'').toLowerCase().includes('pend')?'#f59e0b':'#888';
+      html += `<tr style="border-bottom:1px solid #f0f0f0;${i%2?'background:#fafbfc;':''}">
+        <td style="padding:8px 10px;font-weight:600;">${esc(a.colaborador||a.Colaborador||'')}</td>
+        <td style="padding:8px 10px;"><span style="background:#e0f2f1;color:#00695c;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">${esc(a.tipo||'')}</span></td>
+        <td style="padding:8px 10px;">${esc(a.data||'')}</td>
+        <td style="padding:8px 10px;">${esc(a.responsavel||'')}</td>
+        <td style="padding:8px 10px;color:${statusColor};font-weight:600;">${esc(a.status||'')}</td>
+        <td style="padding:8px 10px;max-width:250px;overflow:hidden;text-overflow:ellipsis;">${esc(a.observacoes||'')}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhum acompanhamento registrado</div>';
+  html += '</div>';
+
+  // ===== 4. REGISTROS 1:1 =====
+  html += `<div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Registros de 1:1 (${oneones.length})</div>`;
+  if(oneones.length){
+    html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 10px;text-align:left;">Colaborador</th>
+        <th style="padding:8px 10px;text-align:left;">Data</th>
+        <th style="padding:8px 10px;text-align:left;">Tipo</th>
+        <th style="padding:8px 10px;text-align:left;">Humor</th>
+        <th style="padding:8px 10px;text-align:left;">Resumo</th>
+        <th style="padding:8px 10px;text-align:left;">Ações</th>
+      </tr></thead><tbody>`;
+    oneones.forEach((o,i) => {
+      html += `<tr style="border-bottom:1px solid #f0f0f0;${i%2?'background:#fafbfc;':''}">
+        <td style="padding:8px 10px;font-weight:600;">${esc(o.nome||o.Nome||'')}</td>
+        <td style="padding:8px 10px;">${esc(o.data||'')}</td>
+        <td style="padding:8px 10px;">${esc(o.tipo||'')}</td>
+        <td style="padding:8px 10px;">${esc(o.humor||'')}</td>
+        <td style="padding:8px 10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;">${esc(o.resumo||'')}</td>
+        <td style="padding:8px 10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;">${esc(o.acoes||'')}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhum registro de 1:1</div>';
+  html += '</div>';
+
+  // ===== 5. PDIs =====
+  html += `<div class="card" style="margin-bottom:20px;">
+    <div class="section-title">PDIs — Planos de Desenvolvimento (${pdis.length})</div>`;
+  if(pdis.length){
+    html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 10px;text-align:left;">Colaborador</th>
+        <th style="padding:8px 10px;text-align:left;">Status</th>
+        <th style="padding:8px 10px;text-align:left;">Aprovado</th>
+        <th style="padding:8px 10px;text-align:center;">Não Iniciada</th>
+        <th style="padding:8px 10px;text-align:center;">Em Progresso</th>
+        <th style="padding:8px 10px;text-align:center;">Finalizada</th>
+        <th style="padding:8px 10px;text-align:left;">Atualizado em</th>
+      </tr></thead><tbody>`;
+    pdis.forEach((p,i) => {
+      html += `<tr style="border-bottom:1px solid #f0f0f0;${i%2?'background:#fafbfc;':''}">
+        <td style="padding:8px 10px;font-weight:600;">${esc(p.nome||p.Nome||'')}</td>
+        <td style="padding:8px 10px;">${esc(p.status||'')}</td>
+        <td style="padding:8px 10px;">${esc(p.aprovado||'')}</td>
+        <td style="padding:8px 10px;text-align:center;">${p.naoIniciada||0}</td>
+        <td style="padding:8px 10px;text-align:center;">${p.emProgresso||0}</td>
+        <td style="padding:8px 10px;text-align:center;">${p.finalizada||0}</td>
+        <td style="padding:8px 10px;">${esc(p.atualizadoEm||'')}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhum PDI registrado</div>';
+  html += '</div>';
+
+  // ===== 6. PROMOÇÕES =====
+  html += `<div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Promoções (${promos.length})</div>`;
+  if(promos.length){
+    html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 10px;text-align:left;">Nome</th>
+        <th style="padding:8px 10px;text-align:left;">Cargo Anterior</th>
+        <th style="padding:8px 10px;text-align:left;">Cargo Novo</th>
+        <th style="padding:8px 10px;text-align:left;">Mês</th>
+        <th style="padding:8px 10px;text-align:left;">Gestor</th>
+      </tr></thead><tbody>`;
+    promos.forEach((p,i) => {
+      html += `<tr style="border-bottom:1px solid #f0f0f0;${i%2?'background:#fafbfc;':''}">
+        <td style="padding:8px 10px;font-weight:600;">${esc(p.nome||'')}</td>
+        <td style="padding:8px 10px;">${esc(p.cargoAtual||'')}</td>
+        <td style="padding:8px 10px;">${esc(p.cargoAprovado||'')}</td>
+        <td style="padding:8px 10px;">${fmtD(p.mesDate)}</td>
+        <td style="padding:8px 10px;">${esc(p.gestor||'')}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhuma promoção registrada</div>';
+  html += '</div>';
+
+  // ===== 7. BANCO DE HORAS =====
+  html += `<div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Banco de Horas (${banco.length})</div>`;
+  if(banco.length){
+    html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 10px;text-align:left;">Colaborador</th>
+        <th style="padding:8px 10px;text-align:left;">Horas</th>
+        <th style="padding:8px 10px;text-align:left;">Cargo</th>
+        <th style="padding:8px 10px;text-align:left;">Observação</th>
+      </tr></thead><tbody>`;
+    banco.forEach((b,i) => {
+      html += `<tr style="border-bottom:1px solid #f0f0f0;${i%2?'background:#fafbfc;':''}">
+        <td style="padding:8px 10px;font-weight:600;">${esc(b.nome||b.Nome||'')}</td>
+        <td style="padding:8px 10px;">${esc(b.horas||'')}</td>
+        <td style="padding:8px 10px;">${esc(b.cargo||'')}</td>
+        <td style="padding:8px 10px;">${esc(b.observacao||'')}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  } else html += '<div style="color:#aaa;font-size:13px;">Nenhum registro de banco de horas</div>';
+  html += '</div>';
+
+  ct.innerHTML = html;
+
+  document.getElementById('btnPrintRelatorio').addEventListener('click', ()=>{ window.print(); });
 }
 
 function renderLiderDashboard(ct){
