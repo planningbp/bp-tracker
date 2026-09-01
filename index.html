@@ -683,10 +683,11 @@ let DB = {
     return saved || {_perBp:true, templateId:'', publicKey:''};
   })()
 };
+const FB_SYNC_KEYS = ['solicitacoes','colaboradores','promocoes','desligamentos','pdis','oneOnOnes','bancoHorasImport','acompanhamentos','scores','enps'];
 function persist(part){
   saveJSON(LS[part], DB[part]);
-  if(part==='solicitacoes' && typeof fbDB!=='undefined' && fbDB){
-    fbDB.ref('solicitacoes').set(DB.solicitacoes).catch(()=>{});
+  if(FB_SYNC_KEYS.includes(part) && typeof fbDB!=='undefined' && fbDB){
+    fbDB.ref(part).set(DB[part]).catch(()=>{});
   }
 }
 
@@ -705,20 +706,49 @@ try {
   if(FIREBASE_CONFIG.apiKey !== 'COLE_AQUI' && typeof firebase !== 'undefined'){
     firebase.initializeApp(FIREBASE_CONFIG);
     fbDB = firebase.database();
-    fbDB.ref('solicitacoes').on('value', snap=>{
-      const data = snap.val();
-      if(Array.isArray(data)){
-        DB.solicitacoes = data;
-        saveJSON(LS.solicitacoes, DB.solicitacoes);
-        if(UI.page==='solicitacoes'){
-          const c = document.getElementById('content');
-          if(c){ c.innerHTML = renderSolicitacoes(); bindSolicitacoes(); }
-        }
-        if(SESSION && SESSION.role==='lider'){
-          const ct = document.getElementById('content');
-          if(ct && ct.querySelector('#formSol')){ renderLiderForms(ct); }
-        }
+    /* Sync leader passwords from Firebase */
+    fbDB.ref('liderPasswords').on('value', function(snap){
+      var data = snap.val();
+      if(data && typeof data === 'object'){
+        LIDER_PASSWORDS = data;
+        saveJSON(LS.liderPasswords, LIDER_PASSWORDS);
       }
+    });
+    /* Sync all shared data keys from Firebase */
+    const FB_DATE_FIELDS = {
+      colaboradores: ['nascimento','admissao','efetivacao','pejotizacao'],
+      desligamentos: ['mesDate','dtAdmissao','ultimoDia'],
+      promocoes: ['mesDate']
+    };
+    FB_SYNC_KEYS.forEach(function(key){
+      fbDB.ref(key).on('value', function(snap){
+        var data = snap.val();
+        if(!data) return;
+        if(!Array.isArray(data)) data = Object.values(data);
+        DB[key] = data;
+        // Revive date fields
+        if(FB_DATE_FIELDS[key]) revive(DB[key], FB_DATE_FIELDS[key]);
+        saveJSON(LS[key], DB[key]);
+        // Re-render current page if relevant
+        if(UI.page===key || UI.page==='dashboard' || UI.page==='lideres'){
+          var c = document.getElementById('content');
+          if(c && typeof render === 'function') render();
+        }
+        if(key==='solicitacoes'){
+          if(UI.page==='solicitacoes'){
+            var c2 = document.getElementById('content');
+            if(c2){ c2.innerHTML = renderSolicitacoes(); bindSolicitacoes(); }
+          }
+          if(SESSION && SESSION.role==='lider'){
+            var ct = document.getElementById('content');
+            if(ct && ct.querySelector('#formSol')){ renderLiderForms(ct); }
+          }
+        }
+        // If colaboradores changed and we're on login, re-render to update leader list
+        if(key==='colaboradores' && !SESSION){
+          render();
+        }
+      });
     });
   }
 } catch(e){ console.warn('Firebase init failed:', e); }
@@ -1527,7 +1557,10 @@ function isCoordinator(liderNome){
 
 // Senhas dos líderes
 let LIDER_PASSWORDS = loadJSON(LS.liderPasswords, {});
-function saveLiderPasswords(){ saveJSON(LS.liderPasswords, LIDER_PASSWORDS); }
+function saveLiderPasswords(){
+  saveJSON(LS.liderPasswords, LIDER_PASSWORDS);
+  if(typeof fbDB!=='undefined' && fbDB) fbDB.ref('liderPasswords').set(LIDER_PASSWORDS).catch(function(){});
+}
 
 // Session helpers
 function isLiderSession(){ return SESSION && SESSION.type==='lider'; }
@@ -7196,6 +7229,17 @@ function renderSettings(){
     </tbody></table>
   </div>
   <div class="card" style="margin-top:20px;">
+    <div class="section-title" style="margin-bottom:6px;">Sincronização Firebase</div>
+    <p style="font-size:12.5px;color:var(--text-light);margin:0 0 16px;">Envie todos os dados para o Firebase para que líderes e outros BPs possam acessar em qualquer navegador. Use sempre que importar ou alterar dados.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" style="width:auto;" id="btnSyncFirebase">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        Sincronizar com Firebase
+      </button>
+      <span id="firebaseSyncStatus" style="font-size:12.5px;"></span>
+    </div>
+  </div>
+  <div class="card" style="margin-top:20px;">
     <div class="section-title" style="margin-bottom:6px;">Backup de Dados</div>
     <p style="font-size:12.5px;color:var(--text-light);margin:0 0 16px;">Exporte todos os seus dados como arquivo de backup. Use para restaurar quando trocar o arquivo HTML ou limpar o navegador.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -7238,6 +7282,28 @@ function renderSettings(){
   </div>`;
 }
 function bindSettings(){
+  // Firebase sync button
+  const btnSync = document.getElementById('btnSyncFirebase');
+  if(btnSync) btnSync.addEventListener('click', function(){
+    var status = document.getElementById('firebaseSyncStatus');
+    if(!fbDB){ if(status) status.innerHTML='<span style="color:#ef4444;">Firebase não configurado.</span>'; return; }
+    var promises = [];
+    FB_SYNC_KEYS.forEach(function(key){
+      if(DB[key] && DB[key].length > 0){
+        promises.push(fbDB.ref(key).set(DB[key]));
+      }
+    });
+    // Also sync meetings and liderPasswords
+    if(DB.meetings && DB.meetings.length > 0) promises.push(fbDB.ref('meetings').set(DB.meetings));
+    var liderPw = loadJSON(LS.liderPasswords||'planning_lider_passwords', null);
+    if(liderPw) promises.push(fbDB.ref('liderPasswords').set(liderPw));
+    Promise.all(promises).then(function(){
+      if(status) status.innerHTML='<span style="color:#22c55e;">Todos os dados sincronizados com sucesso!</span>';
+    }).catch(function(e){
+      if(status) status.innerHTML='<span style="color:#ef4444;">Erro ao sincronizar: '+e.message+'</span>';
+    });
+  });
+
   const btnExport = document.getElementById('btnExportBackup');
   if(btnExport) btnExport.addEventListener('click', ()=>{
     const backup = {};
