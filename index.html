@@ -684,9 +684,10 @@ let DB = {
   })()
 };
 const FB_SYNC_KEYS = ['solicitacoes','colaboradores','promocoes','desligamentos','pdis','oneOnOnes','bancoHorasImport','acompanhamentos','scores','enps'];
+var _fbReceiving = false;
 function persist(part){
   saveJSON(LS[part], DB[part]);
-  if(FB_SYNC_KEYS.includes(part) && typeof fbDB!=='undefined' && fbDB){
+  if(!_fbReceiving && FB_SYNC_KEYS.includes(part) && typeof fbDB!=='undefined' && fbDB){
     fbDB.ref(part).set(DB[part]).catch(()=>{});
   }
 }
@@ -725,10 +726,12 @@ try {
         var data = snap.val();
         if(!data) return;
         if(!Array.isArray(data)) data = Object.values(data);
+        _fbReceiving = true;
         DB[key] = data;
         // Revive date fields
         if(FB_DATE_FIELDS[key]) revive(DB[key], FB_DATE_FIELDS[key]);
         saveJSON(LS[key], DB[key]);
+        _fbReceiving = false;
         // Re-render current page if relevant
         if(UI.page===key || UI.page==='dashboard' || UI.page==='lideres'){
           var c = document.getElementById('content');
@@ -760,8 +763,9 @@ function revive(arr, dateFields){
 revive(DB.colaboradores, ['nascimento','admissao','efetivacao','pejotizacao']);
 revive(DB.desligamentos, ['mesDate','dtAdmissao','ultimoDia']);
 
-// Auto-seed: if no colaboradores in localStorage, load from embedded data
-if(DB.colaboradores.length === 0 && typeof SEED_COLABORADORES !== 'undefined' && SEED_COLABORADORES.length > 0){
+// Auto-seed: if no colaboradores in localStorage AND Firebase is NOT connected, load from embedded data
+// When Firebase is active, data comes from there — seed would overwrite real data
+if(!fbDB && DB.colaboradores.length === 0 && typeof SEED_COLABORADORES !== 'undefined' && SEED_COLABORADORES.length > 0){
   DB.colaboradores = SEED_COLABORADORES.map(c => {
     const rec = Object.assign({}, c);
     ['nascimento','admissao','efetivacao','pejotizacao'].forEach(f => {
