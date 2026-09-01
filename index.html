@@ -7147,9 +7147,7 @@ function bindOrganograma(){
 if(!UI.equidadeArea) UI.equidadeArea='';
 
 function parseSalary(val){
-  if(!val&&val!==0) return 0;
-  const n=parseFloat(String(val).replace(/[^\d.,]/g,'').replace(',','.'));
-  return isNaN(n)?0:n;
+  return parseBRL(val);
 }
 
 function renderEquidade(){
