@@ -773,8 +773,17 @@ function reviveDate(val){
     if(!isNaN(d2.getTime())) return d2;
   }
   if(typeof val==='number'){
-    var d3 = new Date(val);
-    if(!isNaN(d3.getTime())) return d3;
+    // Excel serial number (typically 30000-60000 range)
+    if(val > 25569 && val < 100000){
+      var utcDays = Math.floor(val - 25569);
+      var utcVal = utcDays * 86400 * 1000;
+      var d3 = new Date(utcVal);
+      var tzOff = d3.getTimezoneOffset()*60000;
+      return new Date(d3.getTime()+tzOff);
+    }
+    // Unix timestamp (ms)
+    var d4 = new Date(val);
+    if(!isNaN(d4.getTime())) return d4;
   }
   return null;
 }
