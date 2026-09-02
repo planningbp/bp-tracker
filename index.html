@@ -512,9 +512,24 @@ function currentPeriodGuess(){
 }
 
 function parseBRL(v){
+  if(typeof v==='number') return v;
   const s = String(v||'0').replace(/[^\d.,]/g,'');
-  // Brazilian format: 7.300,00 → remove dots, replace comma with dot
+  // Brazilian format with comma decimal: 7.300,00 → 7300.00
   if(s.includes(',')){ return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0; }
+  // Multiple dots: e.g. "9.000.00" or "5.014.02" — last dot is decimal if followed by 1-2 digits at end
+  const dots = s.split('.');
+  if(dots.length>=3){
+    // Last segment is decimal part, rest are thousands
+    const dec = dots.pop();
+    return parseFloat(dots.join('')+'.'+dec) || 0;
+  }
+  // Single dot: "5014.02" or "9000.00" — could be decimal or thousands
+  // If exactly 3 digits after dot AND value > reasonable salary, it's thousands separator
+  if(dots.length===2 && dots[1].length===3){
+    // e.g. "5.014" → likely 5014 (thousands separator, no decimal)
+    return parseFloat(dots.join('')) || 0;
+  }
+  // Otherwise treat dot as decimal: "5014.02" → 5014.02
   return parseFloat(s) || 0;
 }
 function getSalario(c){ return parseBRL(c.faixaSalarial||c.faixa_salarial||c['Faixa Salarial']||c.salario||'0'); }
