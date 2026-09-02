@@ -688,7 +688,8 @@ var _fbReceiving = false;
 function persist(part){
   saveJSON(LS[part], DB[part]);
   if(!_fbReceiving && FB_SYNC_KEYS.includes(part) && typeof fbDB!=='undefined' && fbDB){
-    fbDB.ref(part).set(DB[part]).catch(()=>{});
+    // JSON round-trip to convert Date objects to ISO strings (Firebase can't serialize Date)
+    fbDB.ref(part).set(JSON.parse(JSON.stringify(DB[part]))).catch(()=>{});
   }
 }
 
@@ -4521,21 +4522,47 @@ function renderMeetingDetail(){
   return `
   <div class="no-print" style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px;">
     <button class="btn btn-outline" id="btnBackList">Voltar</button>
+    <button class="btn btn-outline" id="btnToggleTopics" style="width:auto;">&#9776; Tópicos</button>
     <button class="btn btn-outline" id="btnPrintDetail" style="width:auto;">${ICONS.print} Imprimir</button>
     <button class="btn btn-primary" style="width:auto;" id="btnEditDetail">Editar</button>
   </div>
-  <div class="detail-summary">
+  <div id="topicsPanel" class="card no-print" style="display:none;margin-bottom:16px;padding:16px;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Selecione os tópicos do relatório</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="resumo" checked> Resumo Executivo</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="kpis" checked> KPIs (cards)</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="quadro" checked> Quadro de Pessoal</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="admissoes" checked> Admissões</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="desligamentos" checked> Desligamentos</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="acompanhamentos" checked> Acompanhamentos</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="promocoes" checked> Promoções</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="pdis" checked> PDIs</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="clima" checked> Clima (eNPS/lNPS)</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="riscos" checked> Riscos e Pendências</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="ferias" checked> Férias Vencidas</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="bancohoras" checked> Banco de Horas</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="horasextras" checked> Horas Extras</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="pendenciasponto" checked> Pendências de Ponto</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="plano" checked> Plano de Ação</label>
+      <label class="topic-chk" style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-topic="acoes" checked> Ações do Período</label>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;">
+      <button class="btn btn-outline btn-sm" id="btnTopicsAll" style="width:auto;">Marcar todos</button>
+      <button class="btn btn-outline btn-sm" id="btnTopicsNone" style="width:auto;">Desmarcar todos</button>
+    </div>
+  </div>
+  <div class="detail-summary" data-report-topic="resumo">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;" class="only-print">${logoImg(40)}<span style="font-size:12px;color:#888;">BP Gestão · Relatório de Reunião</span></div>
     <h2>Resumo Executivo — ${m.area} · ${m.period}</h2>
     <p>${summary}</p>
   </div>
-  <div class="grid grid-4" style="margin-bottom:20px;">
+  <div class="grid grid-4" style="margin-bottom:20px;" data-report-topic="kpis">
     <div class="card kpi-card"><div class="kpi-value">${fmtNum(m.headcount)}</div><div class="kpi-label">Headcount</div></div>
     <div class="card kpi-card"><div class="kpi-value">${fmtPct(m.turnover)}</div><div class="kpi-label">Turnover</div></div>
     <div class="card kpi-card"><div class="kpi-value">${m.enps}</div><div class="kpi-label">eNPS</div></div>
     <div class="card kpi-card"><div class="kpi-value">${statusBadge(meetingStatus(m))}</div><div class="kpi-label">Status</div></div>
   </div>
-  <div class="grid grid-3" style="margin-bottom:20px;">
+  <div class="grid grid-3" style="margin-bottom:20px;" data-report-topic="quadro">
     <div class="card"><div class="section-title">Quadro de Pessoal</div>
       <table><tbody>
         <tr><td>Admissões</td><td><strong>${m.admissoesCount||0}</strong></td></tr>
@@ -4562,18 +4589,18 @@ function renderMeetingDetail(){
       </tbody></table>
     </div>
   </div>
-  ${detailMiniTable('Admissões no período', m.admissoesTable, ['Nome','Cargo','Líder','Departamento','Regime','Data admissão'], ['nome','cargo','lider','departamento','regime','admissao'])}
-  ${detailMiniTable('Desligamentos no período', m.desligamentosTable, ['Nome','Cargo','Líder','Tipo','Motivo','Submotivo','Admissão','Último dia','Tempo de casa'], ['nome','cargo','lider','tipo','motivo','submotivo','dtAdmissao','ultimoDia','tempoDeCasa'])}
-  ${detailMiniTable('Acompanhamentos (7/15/45/90 dias)', m.experienciaTable, ['Nome','Cargo','Admissão','Marco','Data','Status','Observações'], ['nome','cargo','admissao','milestone','milestoneDate','status','observacao'])}
-  ${detailMiniTable('Promoções / Movimentações', m.promocoesTable, ['Nome','Gestor','Aprovador','Cargo anterior','Salário anterior','Cargo novo','Salário novo','Reajuste','%'], ['nome','gestor','aprovador','cargoAnterior','salarioAnterior','cargoNovo','salarioNovo','reajuste','pct'])}
-  ${(()=>{
+  <div data-report-topic="admissoes">${detailMiniTable('Admissões no período', m.admissoesTable, ['Nome','Cargo','Líder','Departamento','Regime','Data admissão'], ['nome','cargo','lider','departamento','regime','admissao'])}</div>
+  <div data-report-topic="desligamentos">${detailMiniTable('Desligamentos no período', m.desligamentosTable, ['Nome','Cargo','Líder','Tipo','Motivo','Submotivo','Admissão','Último dia','Tempo de casa'], ['nome','cargo','lider','tipo','motivo','submotivo','dtAdmissao','ultimoDia','tempoDeCasa'])}</div>
+  <div data-report-topic="acompanhamentos">${detailMiniTable('Acompanhamentos (7/15/45/90 dias)', m.experienciaTable, ['Nome','Cargo','Admissão','Marco','Data','Status','Observações'], ['nome','cargo','admissao','milestone','milestoneDate','status','observacao'])}</div>
+  <div data-report-topic="promocoes">${detailMiniTable('Promoções / Movimentações', m.promocoesTable, ['Nome','Gestor','Aprovador','Cargo anterior','Salário anterior','Cargo novo','Salário novo','Reajuste','%'], ['nome','gestor','aprovador','cargoAnterior','salarioAnterior','cargoNovo','salarioNovo','reajuste','pct'])}</div>
+  <div data-report-topic="promocoes">${(()=>{
     const areaColabs = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamento||'')===normalizeStr(m.area));
     const filtColabs = (!m.gerente || isHead(m.gerente)) ? areaColabs : areaColabs.filter(c=> normalizeStr(c.lider||c['Líder']||c.Lider||'')===normalizeStr(m.gerente));
     const promoRows = filtColabs.map(c=>{const p=getUltimaPromocao(c.nome||c.Nome||'');return p?{nome:c.nome||c.Nome||'',cargo:c.cargo||c.Cargo||'',de:p.cargoAnterior,para:p.cargoNovo,data:p.dataFmt,tempo:p.tempoStr}:null;}).filter(Boolean);
     if(!promoRows.length) return '';
     return '<div class="card" style="margin-bottom:16px;"><div style="font-weight:700;font-size:14px;margin-bottom:10px;color:var(--primary);">Última Promoção dos Colaboradores</div><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Cargo Atual</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">De</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Para</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Data</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Tempo</th></tr></thead><tbody>'+promoRows.map((r,i)=>'<tr style="border-top:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'"><td style="padding:8px 10px;font-weight:600;">'+esc(r.nome)+'</td><td style="padding:8px 10px;">'+esc(r.cargo)+'</td><td style="padding:8px 10px;">'+esc(r.de)+'</td><td style="padding:8px 10px;">'+esc(r.para)+'</td><td style="padding:8px 10px;">'+esc(r.data)+'</td><td style="padding:8px 10px;"><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">há '+r.tempo+'</span></td></tr>').join('')+'</tbody></table></div>';
-  })()}
-  ${(()=>{
+  })()}</div>
+  <div data-report-topic="pdis">${(()=>{
     const fullAreaPdiDetail = !m.gerente || isHead(m.gerente);
     const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(m.area)).filter(p=> fullAreaPdiDetail || normalizeStr(p.lider)===normalizeStr(m.gerente));
     if(!areaPdis.length) return '';
@@ -4614,18 +4641,18 @@ function renderMeetingDetail(){
           }).join('')+'</tbody></table></div></div>';
       }).join('')}
     </div>`;
-  })()}
-  <div class="card" style="margin-bottom:20px;">
+  })()}</div>
+  <div data-report-topic="riscos"><div class="card" style="margin-bottom:20px;">
     <div class="section-title">Riscos e Pendências</div>
     ${m.riscos && m.riscos.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Cargo</th><th>Motivo</th><th>Criticidade</th></tr></thead><tbody>
       ${m.riscos.map(r=>`<tr><td>${esc(r.nome)}</td><td>${esc(r.cargo)}</td><td>${esc(r.motivo)}</td><td>${r.criticidade==='Alta'?'<span class="badge badge-red">Alta</span>':r.criticidade==='Média'?'<span class="badge badge-yellow">Média</span>':'<span class="badge badge-gray">Baixa</span>'}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty-state">Nenhum risco registrado.</div>'}
-  </div>
-  ${detailGroupedTable('Férias vencidas', m.feriasTable, ['Dias vencidos','Observação'], ['diasVencidos','observacao'])}
-  ${detailGroupedTable('Banco de Horas', m.bancoHorasTable, ['Horas','Observação'], ['horas','observacao'])}
-  ${detailGroupedTable('Horas extras', m.horasExtrasTable, ['Horas','Observação'], ['horas','observacao'])}
-  ${detailGroupedTable('Pendências de ponto', m.pendenciasPontoTable, ['Tipo pendência','Observação'], ['tipo','observacao'])}
-  ${(()=>{
+  </div></div>
+  <div data-report-topic="ferias">${detailGroupedTable('Férias vencidas', m.feriasTable, ['Dias vencidos','Observação'], ['diasVencidos','observacao'])}</div>
+  <div data-report-topic="bancohoras">${detailGroupedTable('Banco de Horas', m.bancoHorasTable, ['Horas','Observação'], ['horas','observacao'])}</div>
+  <div data-report-topic="horasextras">${detailGroupedTable('Horas extras', m.horasExtrasTable, ['Horas','Observação'], ['horas','observacao'])}</div>
+  <div data-report-topic="pendenciasponto">${detailGroupedTable('Pendências de ponto', m.pendenciasPontoTable, ['Tipo pendência','Observação'], ['tipo','observacao'])}</div>
+  <div data-report-topic="acoes">${(()=>{
     const acoes = m.acoes||[];
     if(!acoes.length) return '';
     return '<div class="card" style="margin-bottom:20px;"><div class="section-title">Ações do Período ('+acoes.length+')</div>'+
@@ -4641,17 +4668,48 @@ function renderMeetingDetail(){
           (a.descricao? '<p style="font-size:13px;line-height:1.6;white-space:pre-wrap;margin:0;">'+esc(a.descricao)+'</p>' : '')+
           anexosHtml+'</div>';
       }).join('')+'</div>';
-  })()}
-  <div class="card">
+  })()}</div>
+  <div data-report-topic="plano"><div class="card">
     <div class="section-title">Plano de Ação</div>
     <p style="white-space:pre-wrap;font-size:13.5px;line-height:1.6;">${esc(m.planoAcao)||'—'}</p>
     ${m.observacoes? '<div class="section-title" style="margin-top:16px;">Observações</div><p style="white-space:pre-wrap;font-size:13.5px;line-height:1.6;">'+esc(m.observacoes)+'</p>' : ''}
-  </div>`;
+  </div></div>`;
 }
 function bindMeetingDetail(){
   document.getElementById('btnBackList').addEventListener('click', ()=>{ UI.page='meetings'; renderShellAndPage(); });
   document.getElementById('btnPrintDetail').addEventListener('click', ()=> window.print());
   document.getElementById('btnEditDetail').addEventListener('click', ()=> openMeetingForm(UI.detailMeetingId));
+  // Topics panel toggle
+  const btnToggle = document.getElementById('btnToggleTopics');
+  const panel = document.getElementById('topicsPanel');
+  if(btnToggle && panel){
+    btnToggle.addEventListener('click', ()=>{
+      panel.style.display = panel.style.display==='none'?'block':'none';
+    });
+    // Checkbox changes toggle sections
+    function applyTopics(){
+      document.querySelectorAll('[data-topic]').forEach(chk=>{
+        const topic = chk.getAttribute('data-topic');
+        const show = chk.checked;
+        document.querySelectorAll('[data-report-topic="'+topic+'"]').forEach(el=>{
+          el.style.display = show ? '' : 'none';
+        });
+      });
+    }
+    panel.querySelectorAll('[data-topic]').forEach(chk=>{
+      chk.addEventListener('change', applyTopics);
+    });
+    var btnAll = document.getElementById('btnTopicsAll');
+    var btnNone = document.getElementById('btnTopicsNone');
+    if(btnAll) btnAll.addEventListener('click', ()=>{
+      panel.querySelectorAll('[data-topic]').forEach(chk=>{ chk.checked=true; });
+      applyTopics();
+    });
+    if(btnNone) btnNone.addEventListener('click', ()=>{
+      panel.querySelectorAll('[data-topic]').forEach(chk=>{ chk.checked=false; });
+      applyTopics();
+    });
+  }
 }
 
 /* =========================================================
@@ -7521,11 +7579,11 @@ function bindSettings(){
     var promises = [];
     FB_SYNC_KEYS.forEach(function(key){
       if(DB[key] && DB[key].length > 0){
-        promises.push(fbDB.ref(key).set(DB[key]));
+        promises.push(fbDB.ref(key).set(JSON.parse(JSON.stringify(DB[key]))));
       }
     });
     // Also sync meetings and liderPasswords
-    if(DB.meetings && DB.meetings.length > 0) promises.push(fbDB.ref('meetings').set(DB.meetings));
+    if(DB.meetings && DB.meetings.length > 0) promises.push(fbDB.ref('meetings').set(JSON.parse(JSON.stringify(DB.meetings))));
     var liderPw = loadJSON(LS.liderPasswords||'planning_lider_passwords', null);
     if(liderPw) promises.push(fbDB.ref('liderPasswords').set(liderPw));
     Promise.all(promises).then(function(){
@@ -7894,6 +7952,18 @@ function renderEnpsPage(){
       <div class="field"><label>eNPS (-100 a 100)</label><input type="number" id="enpsFormEnps" class="input" min="-100" max="100" placeholder="0"></div>
       <div class="field"><label>lNPS (-100 a 100) <span style="color:#aaa;font-size:11px;">Opcional</span></label><input type="number" id="enpsFormLnps" class="input" min="-100" max="100" placeholder=""></div>
     </div>
+    <div style="margin-bottom:14px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;"><input type="checkbox" id="enpsFormSemNota"> Sem nota (registrar apenas detalhamento)</label>
+    </div>
+    <div style="background:#f9fafb;border-radius:10px;padding:14px;margin-bottom:14px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:10px;">Detalhamento</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:12px;">
+        <div class="field"><label>Promotores</label><input type="number" id="enpsFormPromotores" class="input" min="0" placeholder="0"></div>
+        <div class="field"><label>Neutros</label><input type="number" id="enpsFormNeutros" class="input" min="0" placeholder="0"></div>
+        <div class="field"><label>Detratores</label><input type="number" id="enpsFormDetratores" class="input" min="0" placeholder="0"></div>
+      </div>
+      <div class="field"><label>Comentários</label><textarea id="enpsFormComentarios" class="input" rows="3" placeholder="Observações, feedbacks recebidos..."></textarea></div>
+    </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
       <button class="btn btn-outline" id="enpsFormCancel" style="width:auto;">Cancelar</button>
       <button class="btn btn-primary" id="enpsFormSave" style="width:auto;">Salvar</button>
@@ -7910,22 +7980,31 @@ function renderEnpsPage(){
         ${tab==='geral'?'<th style="padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Tipo</th>':''}
         <th style="padding:10px 12px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th>
         <th style="padding:10px 12px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Detalhamento</th>
         <th style="padding:10px 12px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">Ações</th>
       </tr></thead><tbody>`;
 
   if(records.length===0){
-    html += '<tr><td colspan="'+(tab==='geral'?6:5)+'" style="padding:30px;text-align:center;color:#aaa;">Nenhum registro encontrado.</td></tr>';
+    html += '<tr><td colspan="'+(tab==='geral'?8:7)+'" style="padding:30px;text-align:center;color:#aaa;">Nenhum registro encontrado.</td></tr>';
   } else {
     records.forEach((r,i)=>{
-      const ec = enpsColor(r.enps);
-      const lc = enpsColor(r.lnps);
+      const ec = r.semNota ? '#aaa' : enpsColor(r.enps);
+      const lc = r.semNota ? '#aaa' : enpsColor(r.lnps);
       const tipoLabel = r.tipo==='lider'?'Líder':r.tipo==='departamento'?'Departamento':'Empresa';
+      const enpsDisplay = r.semNota ? '<span style="color:#aaa;font-style:italic;font-size:11px;">Sem nota</span>' : '<span style="font-weight:700;color:'+ec+';">'+r.enps+'</span>';
+      const lnpsDisplay = r.semNota ? '<span style="color:#aaa;font-style:italic;font-size:11px;">Sem nota</span>' : (r.lnps!=null?'<span style="font-weight:700;color:'+lc+';">'+r.lnps+'</span>':'—');
+      let detParts = [];
+      if(r.promotores) detParts.push('<span style="color:#22c55e;">&#9650; '+r.promotores+' prom.</span>');
+      if(r.neutros) detParts.push('<span style="color:#f59e0b;">&#9679; '+r.neutros+' neut.</span>');
+      if(r.detratores) detParts.push('<span style="color:#ef4444;">&#9660; '+r.detratores+' detr.</span>');
+      const detHtml = detParts.length ? detParts.join(' ') + (r.comentarios ? '<div style="color:#666;font-size:11px;margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(r.comentarios)+'">'+esc(r.comentarios)+'</div>' : '') : (r.comentarios ? '<div style="color:#666;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(r.comentarios)+'">'+esc(r.comentarios)+'</div>' : '—');
       html += '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'">'
         + '<td style="padding:10px 12px;">'+esc(r.periodo||'')+'</td>'
         + '<td style="padding:10px 12px;font-weight:600;">'+esc(r.referencia||'')+'</td>'
         + (tab==='geral'?'<td style="padding:10px 12px;"><span style="font-size:11px;padding:2px 8px;border-radius:8px;background:#f3f4f6;">'+tipoLabel+'</span></td>':'')
-        + '<td style="padding:10px 12px;text-align:center;"><span style="font-weight:700;color:'+ec+';">'+r.enps+'</span></td>'
-        + '<td style="padding:10px 12px;text-align:center;">'+(r.lnps!=null?'<span style="font-weight:700;color:'+lc+';">'+r.lnps+'</span>':'—')+'</td>'
+        + '<td style="padding:10px 12px;text-align:center;">'+enpsDisplay+'</td>'
+        + '<td style="padding:10px 12px;text-align:center;">'+lnpsDisplay+'</td>'
+        + '<td style="padding:10px 12px;font-size:12px;">'+detHtml+'</td>'
         + '<td style="padding:10px 12px;text-align:center;white-space:nowrap;">'
           + '<button class="btn btn-outline btn-sm enps-edit" data-enps-id="'+esc(r.id)+'" style="width:auto;margin-right:4px;">Editar</button>'
           + '<button class="btn btn-outline btn-sm enps-delete" data-enps-id="'+esc(r.id)+'" style="width:auto;background:#fdecec;color:#ff4343;border-color:#fcc;">'+ICONS.trash+'</button>'
@@ -7942,7 +8021,7 @@ function renderEnpsPage(){
 
   // Ranking for "Por Líder" tab
   if(tab==='lider'){
-    const liderRecords = (DB.enps||[]).filter(r=>r.tipo==='lider');
+    const liderRecords = (DB.enps||[]).filter(r=>r.tipo==='lider' && !r.semNota && r.enps!=null);
     const latestByLider = {};
     liderRecords.forEach(r=>{
       const key = normalizeStr(r.referencia);
@@ -8000,28 +8079,54 @@ function bindEnpsPage(){
     rerender();
   });
 
+  // Sem nota toggle — disable score fields
+  const semNotaChk = document.getElementById('enpsFormSemNota');
+  if(semNotaChk){
+    const toggleScoreFields = ()=>{
+      const disabled = semNotaChk.checked;
+      ['enpsFormEnps','enpsFormLnps'].forEach(id=>{
+        const el = document.getElementById(id);
+        if(el){ el.disabled = disabled; el.style.opacity = disabled?'0.4':'1'; }
+      });
+    };
+    semNotaChk.addEventListener('change', toggleScoreFields);
+  }
+
   // Form save
   const btnSave = document.getElementById('enpsFormSave');
   if(btnSave) btnSave.addEventListener('click', ()=>{
     const periodo = (document.getElementById('enpsFormPeriodo').value||'').trim();
     const tipo = tab==='geral'?'lider':tab;
     const ref = (document.getElementById('enpsFormRef').value||'').trim();
-    const enpsVal = parseInt(document.getElementById('enpsFormEnps').value);
+    const semNota = document.getElementById('enpsFormSemNota').checked;
+    const enpsRaw = document.getElementById('enpsFormEnps').value.trim();
+    const enpsVal = enpsRaw!=='' ? parseInt(enpsRaw) : null;
     const lnpsEl = document.getElementById('enpsFormLnps');
     const lnpsVal = lnpsEl.value.trim()!=='' ? parseInt(lnpsEl.value) : null;
+    const promotores = parseInt(document.getElementById('enpsFormPromotores').value)||0;
+    const neutros = parseInt(document.getElementById('enpsFormNeutros').value)||0;
+    const detratores = parseInt(document.getElementById('enpsFormDetratores').value)||0;
+    const comentarios = (document.getElementById('enpsFormComentarios').value||'').trim();
 
     if(!periodo){ alert('Informe o período.'); return; }
     if(!ref){ alert('Informe a referência.'); return; }
-    if(isNaN(enpsVal)||enpsVal<-100||enpsVal>100){ alert('eNPS deve ser entre -100 e 100.'); return; }
-    if(lnpsVal!==null&&(isNaN(lnpsVal)||lnpsVal<-100||lnpsVal>100)){ alert('lNPS deve ser entre -100 e 100.'); return; }
+    if(!semNota){
+      if(enpsVal===null||isNaN(enpsVal)||enpsVal<-100||enpsVal>100){ alert('eNPS deve ser entre -100 e 100.'); return; }
+      if(lnpsVal!==null&&(isNaN(lnpsVal)||lnpsVal<-100||lnpsVal>100)){ alert('lNPS deve ser entre -100 e 100.'); return; }
+    }
 
     DB.enps.push({
       id: uid(),
       periodo: periodo,
       tipo: tipo,
       referencia: ref,
-      enps: enpsVal,
-      lnps: lnpsVal,
+      enps: semNota ? null : enpsVal,
+      lnps: semNota ? null : lnpsVal,
+      semNota: semNota||false,
+      promotores: promotores,
+      neutros: neutros,
+      detratores: detratores,
+      comentarios: comentarios,
       criadoEm: new Date().toISOString()
     });
     persist('enps');
@@ -8057,13 +8162,23 @@ function bindEnpsPage(){
       if(!rec) return;
       const modal = document.createElement('div');
       modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
-      modal.innerHTML = `<div style="background:#fff;border-radius:14px;padding:24px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+      modal.innerHTML = `<div style="background:#fff;border-radius:14px;padding:24px;max-width:540px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto;">
         <div style="font-weight:700;font-size:16px;margin-bottom:16px;">Editar registro eNPS</div>
         <div style="display:grid;gap:12px;margin-bottom:16px;">
           <div class="field"><label>Período</label><input type="text" id="editEnpsPeriodo" class="input" value="${esc(rec.periodo||'')}"></div>
           <div class="field"><label>Referência</label><input type="text" id="editEnpsRef" class="input" value="${esc(rec.referencia||'')}"></div>
-          <div class="field"><label>eNPS (-100 a 100)</label><input type="number" id="editEnpsEnps" class="input" min="-100" max="100" value="${rec.enps}"></div>
-          <div class="field"><label>lNPS (-100 a 100)</label><input type="number" id="editEnpsLnps" class="input" min="-100" max="100" value="${rec.lnps!=null?rec.lnps:''}"></div>
+          <div class="field"><label>eNPS (-100 a 100)</label><input type="number" id="editEnpsEnps" class="input" min="-100" max="100" value="${rec.semNota?'':rec.enps}"></div>
+          <div class="field"><label>lNPS (-100 a 100)</label><input type="number" id="editEnpsLnps" class="input" min="-100" max="100" value="${rec.semNota?'':(rec.lnps!=null?rec.lnps:'')}"></div>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;"><input type="checkbox" id="editEnpsSemNota" ${rec.semNota?'checked':''}> Sem nota</label>
+        </div>
+        <div style="background:#f9fafb;border-radius:10px;padding:14px;margin-bottom:16px;">
+          <div style="font-weight:600;font-size:13px;margin-bottom:10px;">Detalhamento</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
+            <div class="field"><label>Promotores</label><input type="number" id="editEnpsPromotores" class="input" min="0" value="${rec.promotores||0}"></div>
+            <div class="field"><label>Neutros</label><input type="number" id="editEnpsNeutros" class="input" min="0" value="${rec.neutros||0}"></div>
+            <div class="field"><label>Detratores</label><input type="number" id="editEnpsDetratores" class="input" min="0" value="${rec.detratores||0}"></div>
+          </div>
+          <div class="field"><label>Comentários</label><textarea id="editEnpsComentarios" class="input" rows="3">${esc(rec.comentarios||'')}</textarea></div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
           <button class="btn btn-outline" id="editEnpsCancel" style="width:auto;">Cancelar</button>
@@ -8076,16 +8191,25 @@ function bindEnpsPage(){
       document.getElementById('editEnpsSave').addEventListener('click', ()=>{
         const p = document.getElementById('editEnpsPeriodo').value.trim();
         const r2 = document.getElementById('editEnpsRef').value.trim();
-        const e2 = parseInt(document.getElementById('editEnpsEnps').value);
+        const semNota2 = document.getElementById('editEnpsSemNota').checked;
+        const e2raw = document.getElementById('editEnpsEnps').value.trim();
+        const e2 = e2raw!=='' ? parseInt(e2raw) : null;
         const l2el = document.getElementById('editEnpsLnps');
         const l2 = l2el.value.trim()!=='' ? parseInt(l2el.value) : null;
         if(!p||!r2){ alert('Preencha período e referência.'); return; }
-        if(isNaN(e2)||e2<-100||e2>100){ alert('eNPS deve ser entre -100 e 100.'); return; }
-        if(l2!==null&&(isNaN(l2)||l2<-100||l2>100)){ alert('lNPS deve ser entre -100 e 100.'); return; }
+        if(!semNota2){
+          if(e2===null||isNaN(e2)||e2<-100||e2>100){ alert('eNPS deve ser entre -100 e 100.'); return; }
+          if(l2!==null&&(isNaN(l2)||l2<-100||l2>100)){ alert('lNPS deve ser entre -100 e 100.'); return; }
+        }
         rec.periodo = p;
         rec.referencia = r2;
-        rec.enps = e2;
-        rec.lnps = l2;
+        rec.semNota = semNota2||false;
+        rec.enps = semNota2 ? null : e2;
+        rec.lnps = semNota2 ? null : l2;
+        rec.promotores = parseInt(document.getElementById('editEnpsPromotores').value)||0;
+        rec.neutros = parseInt(document.getElementById('editEnpsNeutros').value)||0;
+        rec.detratores = parseInt(document.getElementById('editEnpsDetratores').value)||0;
+        rec.comentarios = (document.getElementById('editEnpsComentarios').value||'').trim();
         persist('enps');
         modal.remove();
         rerender();
@@ -8098,6 +8222,7 @@ function bindEnpsPage(){
   const ctx = document.getElementById('enpsMainChart');
   if(ctx){
     const chartRecords = (DB.enps||[]).filter(r=>{
+      if(r.semNota || r.enps==null) return false;
       if(tab==='geral') return true;
       return r.tipo===tab;
     });
