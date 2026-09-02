@@ -993,16 +993,42 @@ function parseColaboradores(rows){
 }
 function parseDesligamentos(rows){
   const out=[];
+  if(!rows.length) return out;
+  const hdr = rows[0].map(h=> normalizeStr(String(h||'')));
+  function col(keywords){
+    return hdr.findIndex(h=> h && keywords.some(k=> h.includes(normalizeStr(k))));
+  }
+  const iMes=col(['mes','mês']);
+  const iNome=col(['nome']);
+  const iCargo=col(['cargo']);
+  const iRegime=col(['regime']);
+  const iDept=col(['departamento','area','área']);
+  const iLider=col(['lider','líder']);
+  const iCoord=col(['coordenacao','coordenação']);
+  const iEmpresa=col(['empresa']);
+  const iAdm=col(['admissao','admissão','dt admiss']);
+  const iUltimo=col(['ultimo dia','último dia','ultimo','último','desligamento']);
+  const iTempo=col(['tempo de casa']);
+  const iTipo=col(['tipo']);
+  const iMotivo=col(['motivo']);
+  const iSubmotivo=col(['submotivo']);
+  function g(r,i){ return i>=0 ? r[i] : null; }
+  // If nome col not found, try fallback to fixed positions (old format)
+  const useNome = iNome>=0 ? iNome : 1;
   for(let i=1;i<rows.length;i++){
-    const r = rows[i]; if(!r || !r[1]) continue;
+    const r = rows[i]; if(!r || !r[useNome]) continue;
+    const deptRaw = g(r,iDept);
+    const mesRaw = g(r,iMes);
+    const ultimoRaw = g(r,iUltimo);
     out.push({
       id: uid(),
-      mesRaw: r[0], mesDate: parseExcelDate(r[0]),
-      nome: r[1], cargo: r[2], regime: r[3],
-      departamentoRaw: r[4], area: matchArea(r[4]),
-      lider: r[5], coordenacao: r[6], empresa: r[7],
-      dtAdmissao: parseExcelDate(r[8]), ultimoDia: parseExcelDate(r[9]),
-      tempoDeCasa: r[10], tipo: (r[11]||'').toString().trim(), motivo: (r[12]||'').toString().trim(), submotivo: r[13]
+      mesRaw: mesRaw, mesDate: parseExcelDate(mesRaw),
+      nome: r[useNome], cargo: g(r,iCargo), regime: g(r,iRegime),
+      departamentoRaw: deptRaw, area: matchArea(deptRaw) || deptRaw,
+      lider: g(r,iLider), coordenacao: g(r,iCoord), empresa: g(r,iEmpresa),
+      dtAdmissao: parseExcelDate(g(r,iAdm)), ultimoDia: parseExcelDate(ultimoRaw),
+      tempoDeCasa: g(r,iTempo), tipo: (g(r,iTipo)||'').toString().trim(),
+      motivo: (g(r,iMotivo)||'').toString().trim(), submotivo: g(r,iSubmotivo)
     });
   }
   return out;
@@ -2893,10 +2919,21 @@ function renderDashboard(){
 
   // Date filtered subsets
   function inRange(raw){ if(!raw) return false; const d = reviveDate(raw); return d && d>=dateFrom && d<=dateTo; }
+  function desligDate(d){ return d.ultimoDia || d.mesDate || (d.mesRaw ? reviveDate(d.mesRaw) : null); }
   const admNoPeriod = myColabs;
   const admissoes = myColabs.filter(c=> inRange(c.admissao||c['Data de admissão']||c['data de admissao']));
-  const desligPeriod = myDeslig.filter(d=> inRange(d.ultimoDia||d.mesDate));
+  const desligPeriod = myDeslig.filter(d=> inRange(desligDate(d)));
   const promosPeriod = myPromos.filter(p=> inRange(p.mesDate));
+  // Debug desligamentos (remove later)
+  console.log('[BP Debug] Total deslig DB:', DB.desligamentos.length, '| myDeslig (area match):', myDeslig.length, '| desligPeriod (date match):', desligPeriod.length);
+  if(DB.desligamentos.length>0 && myDeslig.length===0){
+    const sample = DB.desligamentos.slice(0,3).map(d=>({area:d.area, deptRaw:d.departamentoRaw, norm:normalizeStr(d.area||d.departamentoRaw||'')}));
+    console.log('[BP Debug] Deslig areas:', JSON.stringify(sample), '| bpAreas:', JSON.stringify(bpAreas));
+  }
+  if(myDeslig.length>0 && desligPeriod.length===0){
+    const sample = myDeslig.slice(0,3).map(d=>({ultimoDia:d.ultimoDia, mesDate:d.mesDate, mesRaw:d.mesRaw, resolved:desligDate(d)}));
+    console.log('[BP Debug] Deslig dates:', JSON.stringify(sample));
+  }
 
   const totalHC = myColabs.length;
   const totalAdm = admissoes.length;
