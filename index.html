@@ -757,8 +757,29 @@ try {
   }
 } catch(e){ console.warn('Firebase init failed:', e); }
 
+function reviveDate(val){
+  if(!val) return null;
+  if(val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  if(typeof val==='string'){
+    // Try dd/mm/yyyy or dd/mm/yy
+    var m = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if(m){
+      var yr = m[3].length===2 ? 2000+parseInt(m[3]) : parseInt(m[3]);
+      var d = new Date(yr, parseInt(m[2])-1, parseInt(m[1]));
+      if(!isNaN(d.getTime())) return d;
+    }
+    // Try ISO or other standard format
+    var d2 = new Date(val);
+    if(!isNaN(d2.getTime())) return d2;
+  }
+  if(typeof val==='number'){
+    var d3 = new Date(val);
+    if(!isNaN(d3.getTime())) return d3;
+  }
+  return null;
+}
 function revive(arr, dateFields){
-  arr.forEach(o=>{ dateFields.forEach(f=>{ if(o[f]) o[f]=new Date(o[f]); }); });
+  arr.forEach(o=>{ dateFields.forEach(f=>{ if(o[f]) o[f]=reviveDate(o[f]); }); });
   return arr;
 }
 revive(DB.colaboradores, ['nascimento','admissao','efetivacao','pejotizacao']);
@@ -4780,8 +4801,8 @@ function getAcompanhamentoRecords(){
   colabs.forEach(c=>{
     const admRaw = c.admissao || c['Data de admissão'] || c['data de admissao'] || c['data_admissao'];
     if(!admRaw) return;
-    const adm = admRaw instanceof Date ? admRaw : new Date(admRaw);
-    if(isNaN(adm.getTime())) return;
+    const adm = reviveDate(admRaw);
+    if(!adm) return;
     milestones.forEach(days=>{
       const dueDate = new Date(adm.getTime() + days*86400000);
       const diffDays = Math.round((dueDate - today) / 86400000);
