@@ -1044,13 +1044,22 @@ function parseDesligamentos(rows){
     const deptRaw = g(r,iDept);
     const mesRaw = g(r,iMes);
     const ultimoRaw = g(r,iUltimo);
+    const ultimoDia = parseExcelDate(ultimoRaw);
+    // mesRaw can be just a month number (1-12); derive full date from ultimoDia's year
+    var mesDate;
+    if(typeof mesRaw==='number' && mesRaw>=1 && mesRaw<=12){
+      var yr = ultimoDia ? ultimoDia.getFullYear() : new Date().getFullYear();
+      mesDate = new Date(yr, mesRaw-1, 1);
+    } else {
+      mesDate = parseExcelDate(mesRaw);
+    }
     out.push({
       id: uid(),
-      mesRaw: mesRaw, mesDate: parseExcelDate(mesRaw),
+      mesRaw: mesRaw, mesDate: mesDate,
       nome: r[useNome], cargo: g(r,iCargo), regime: g(r,iRegime),
       departamentoRaw: deptRaw, area: matchArea(deptRaw) || deptRaw,
       lider: g(r,iLider), coordenacao: g(r,iCoord), empresa: g(r,iEmpresa),
-      dtAdmissao: parseExcelDate(g(r,iAdm)), ultimoDia: parseExcelDate(ultimoRaw),
+      dtAdmissao: parseExcelDate(g(r,iAdm)), ultimoDia: ultimoDia,
       tempoDeCasa: g(r,iTempo), tipo: (g(r,iTipo)||'').toString().trim(),
       motivo: (g(r,iMotivo)||'').toString().trim(), submotivo: g(r,iSubmotivo)
     });
