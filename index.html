@@ -447,6 +447,42 @@ const CONFIG = {
     "Jan/Fev 2026","Mar/Abr 2026","Mai/Jun 2026","Jul/Ago 2026","Set/Out 2026","Nov/Dez 2026"]
 };
 const MONTHNUM = {jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
+const MONTHNAMES_FULL = {janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
+/* Parse a "month" field that can be: number 1-12, month name (jan/janeiro/ago/agosto),
+   "MM/YYYY", "mes/ano", Excel serial date, or full date string.
+   refDate is used to infer the year when only a month number/name is given. */
+function parseMonthField(val, refDate){
+  if(!val && val!==0) return null;
+  if(val instanceof Date && !isNaN(val.getTime())) return val;
+  // Number 1-12: just a month
+  if(typeof val==='number' && val>=1 && val<=12){
+    var yr = refDate instanceof Date ? refDate.getFullYear() : new Date().getFullYear();
+    return new Date(yr, val-1, 1);
+  }
+  // String handling
+  if(typeof val==='string'){
+    var s = val.trim();
+    // "MM/YYYY" or "M/YYYY"
+    var mmy = s.match(/^(\d{1,2})[\/\-](\d{4})$/);
+    if(mmy) return new Date(parseInt(mmy[2]), parseInt(mmy[1])-1, 1);
+    // Month name alone or "mes/ano": "agosto", "ago", "ago/2026", "janeiro/2026"
+    var mname = s.match(/^([a-zçãéáíóõêô]+)\s*[\/\-]?\s*(\d{4})?$/i);
+    if(mname){
+      var key3 = normalizeStr(mname[1]).slice(0,3);
+      var mo = MONTHNUM[key3];
+      if(!mo){
+        var keyFull = normalizeStr(mname[1]);
+        mo = MONTHNAMES_FULL[keyFull];
+      }
+      if(mo){
+        var y = mname[2] ? parseInt(mname[2]) : (refDate instanceof Date ? refDate.getFullYear() : new Date().getFullYear());
+        return new Date(y, mo-1, 1);
+      }
+    }
+  }
+  // Fallback to parseExcelDate for serial numbers and full date strings
+  return parseExcelDate(val);
+}
 
 /* =========================================================
    UTIL
@@ -1045,14 +1081,7 @@ function parseDesligamentos(rows){
     const mesRaw = g(r,iMes);
     const ultimoRaw = g(r,iUltimo);
     const ultimoDia = parseExcelDate(ultimoRaw);
-    // mesRaw can be just a month number (1-12); derive full date from ultimoDia's year
-    var mesDate;
-    if(typeof mesRaw==='number' && mesRaw>=1 && mesRaw<=12){
-      var yr = ultimoDia ? ultimoDia.getFullYear() : new Date().getFullYear();
-      mesDate = new Date(yr, mesRaw-1, 1);
-    } else {
-      mesDate = parseExcelDate(mesRaw);
-    }
+    var mesDate = parseMonthField(mesRaw, ultimoDia);
     out.push({
       id: uid(),
       mesRaw: mesRaw, mesDate: mesDate,
@@ -1074,7 +1103,7 @@ function parsePromocoes(rows){
     if(typeof pct === 'string'){ pct = parseFloat(pct.replace('%','').replace(',','.'))/(pct.includes('%')?100:1); }
     out.push({
       id: uid(),
-      mesRaw: r[0], mesDate: parseExcelDate(r[0]),
+      mesRaw: r[0], mesDate: parseMonthField(r[0], null),
       nome: r[1], departamentoRaw: r[2], area: matchArea(r[2]),
       gestor: r[3], aprovador: r[4], cargoAtual: r[5], salarioAtual: r[6],
       cargoAprovado: r[7], valorAprovado: r[8], reajuste: r[9], pct: pct
@@ -1222,14 +1251,19 @@ function fmtDateBR(d){
   return dt.toLocaleDateString('pt-BR');
 }
 function fmtMonthBR(d){
-  if(!d) return '';
+  if(!d && d!==0) return '';
+  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  // Handle month number directly
+  if(typeof d==='number' && d>=1 && d<=12) return meses[d-1];
   const dt = d instanceof Date ? d : new Date(d);
   if(isNaN(dt)){
     const s = String(d);
     if(/^\d{4}-\d{2}/.test(s)) return s.slice(0,7);
+    // Try month name
+    var key = normalizeStr(s).slice(0,3);
+    if(MONTHNUM[key]) return meses[MONTHNUM[key]-1];
     return s;
   }
-  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   return meses[dt.getMonth()]+'/'+dt.getFullYear();
 }
 function computeCrudFields(pageKey, data){
