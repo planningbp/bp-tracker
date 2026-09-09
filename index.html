@@ -1114,16 +1114,31 @@ function parsePromocoes(rows){
 
 /* Check if a promotion record has a salary change (only these count as real promotions) */
 function isPromoSalarial(p){
-  // If reajuste or pct is non-zero, it's a salary change
-  if(p.pct && !isNaN(p.pct) && p.pct !== 0) return true;
+  // Must have actual salary increase (novo > anterior)
+  if(p.pct && !isNaN(p.pct) && p.pct > 0) return true;
   var rej = parseBRL(p.reajuste);
-  if(rej && rej !== 0) return true;
-  // Compare salarioAtual vs valorAprovado
+  if(rej > 0) return true;
   var antes = parseBRL(p.salarioAtual);
   var depois = parseBRL(p.valorAprovado);
-  if(antes > 0 && depois > 0 && antes !== depois) return true;
-  // If only valorAprovado is filled (no salarioAtual to compare), check if it's non-zero
-  if(depois > 0 && antes === 0) return true;
+  // If salarioAtual is empty, try to find previous salary
+  if(!antes && p.nome){
+    var nk = normalizeStr(p.nome);
+    // Look for earlier promos
+    var prevPromos = (DB.promocoes||[]).filter(function(pp){
+      return pp!==p && normalizeStr(pp.nome)===nk && parseBRL(pp.valorAprovado)>0;
+    }).filter(function(pp){
+      var pd = pp.mesDate||pp.mesRaw, rd = p.mesDate||p.mesRaw;
+      if(!pd||!rd) return false;
+      return String(pd) < String(rd);
+    });
+    if(prevPromos.length) antes = parseBRL(prevPromos[prevPromos.length-1].valorAprovado);
+    // Fallback: collaborator's salarioAdmissao
+    if(!antes){
+      var colab = (DB.colaboradores||[]).find(function(c){ return normalizeStr(c.nome||c.Nome||'')===nk; });
+      if(colab) antes = parseBRL(colab.salarioAdmissao||0);
+    }
+  }
+  if(antes > 0 && depois > 0 && depois > antes) return true;
   return false;
 }
 
@@ -1333,6 +1348,8 @@ function renderCrudPage(pageKey){
   const colFilters = UI.crudFilters[pageKey];
 
   let filtered = data;
+  // Promoções: only show records with actual salary increase
+  if(pageKey==='promocoes') filtered = filtered.filter(r=> isPromoSalarial(r));
   if(fSearch) filtered = filtered.filter(r=> cfg.cols.some(c=> ((r[c.key]||'').toString().toLowerCase()).includes(fSearch)));
   // Apply per-column filters
   Object.keys(colFilters).forEach(ck=>{
