@@ -8491,7 +8491,7 @@ function bindEnpsPage(){
             if(!pr.length) return null;
             return Math.round(pr.reduce((s,r)=>s+r.enps,0)/pr.length);
           });
-          return {label:'eNPS '+tipoLabels[t], data:avgByPeriod, borderColor:tipoColors[t], backgroundColor:tipoColors[t]+'22', borderWidth:2.5, pointRadius:5, pointHoverRadius:7, pointBackgroundColor:tipoColors[t], pointBorderColor:'#fff', pointBorderWidth:2, tension:0.3, fill:false, spanGaps:true};
+          return {label:'eNPS '+tipoLabels[t], data:avgByPeriod, borderColor:tipoColors[t], backgroundColor:tipoColors[t]+'22', borderWidth:2.5, borderDash:[6,3], pointRadius:6, pointHoverRadius:8, pointBackgroundColor:tipoColors[t], pointBorderColor:'#fff', pointBorderWidth:2, tension:0.3, fill:false, spanGaps:true};
         });
         window._enpsChart = new Chart(ctx, {type:'line', data:{labels:allPeriods, datasets}, options:enpsChartOpts});
       } else {
@@ -8505,7 +8505,7 @@ function bindEnpsPage(){
             return rec ? rec.enps : null;
           });
           const c = colors[i%colors.length];
-          return {label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:2.5, pointRadius:5, pointHoverRadius:7, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0.3, fill:false, spanGaps:true};
+          return {label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:2.5, borderDash:[6,3], pointRadius:6, pointHoverRadius:8, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0.3, fill:false, spanGaps:true};
         });
         window._enpsChart = new Chart(ctx, {type:'line', data:{labels:allPeriods, datasets}, options:enpsChartOpts});
       }
