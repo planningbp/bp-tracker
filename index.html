@@ -8201,10 +8201,16 @@ function renderEnpsPage(){
   }
   html += '</tbody></table></div></div>';
 
-  // Evolution chart
-  html += `<div class="card" style="margin-bottom:20px;padding:20px;">
-    <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Evolução eNPS</div>
-    <div style="height:380px;"><canvas id="enpsMainChart"></canvas></div>
+  // Evolution charts - eNPS and lNPS side by side
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+    <div class="card" style="padding:20px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:14px;color:#22c55e;">Evolução eNPS</div>
+      <div style="height:320px;"><canvas id="enpsChartLeft"></canvas></div>
+    </div>
+    <div class="card" style="padding:20px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:14px;color:#962DFF;">Evolução lNPS</div>
+      <div style="height:320px;"><canvas id="lnpsChartRight"></canvas></div>
+    </div>
   </div>`;
 
   // Ranking for "Por Líder" tab
@@ -8440,78 +8446,79 @@ function bindEnpsPage(){
     });
   });
 
-  // Chart rendering
-  if(window._enpsChart){ window._enpsChart.destroy(); window._enpsChart = null; }
-  const ctx = document.getElementById('enpsMainChart');
-  if(ctx){
-    const chartRecords = (DB.enps||[]).filter(r=>{
-      if(r.semNotaEnps || r.semNota || r.enps==null) return false;
+  // Chart rendering — two separate charts: eNPS (left) and lNPS (right)
+  if(window._enpsChartL){ window._enpsChartL.destroy(); window._enpsChartL = null; }
+  if(window._enpsChartR){ window._enpsChartR.destroy(); window._enpsChartR = null; }
+  const ctxL = document.getElementById('enpsChartLeft');
+  const ctxR = document.getElementById('lnpsChartRight');
+  if(ctxL && ctxR){
+    const allEnpsRecs = (DB.enps||[]).filter(r=>{
       if(tab==='geral') return true;
       return r.tipo===tab;
     });
-    const enpsChartOpts = {
-      responsive:true, maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{position:'bottom',labels:{boxWidth:12,padding:14,font:{size:11},usePointStyle:true}},
-        tooltip:{backgroundColor:'rgba(0,0,0,0.8)',titleFont:{size:12},bodyFont:{size:12},padding:10,cornerRadius:8}
-      },
-      scales:{
-        y:{min:-100, max:100,
-          grid:{color:'#e0e0e0',lineWidth:1,drawBorder:true},
-          border:{color:'#ccc',width:1},
-          ticks:{stepSize:20,font:{size:11},color:'#666',padding:8}
+    const enpsRecs = allEnpsRecs.filter(r=>!(r.semNotaEnps||r.semNota) && r.enps!=null);
+    const lnpsRecs = allEnpsRecs.filter(r=>!(r.semNotaLnps) && r.lnps!=null);
+    function makeChartOpts(title){
+      return {
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'nearest',intersect:false},
+        plugins:{
+          legend:{position:'bottom',labels:{boxWidth:12,padding:10,font:{size:10},usePointStyle:true}},
+          tooltip:{backgroundColor:'rgba(0,0,0,0.85)',titleFont:{size:12},bodyFont:{size:12},padding:10,cornerRadius:8}
         },
-        x:{
-          grid:{color:'#eee',lineWidth:1,drawBorder:true},
-          border:{color:'#ccc',width:1},
-          ticks:{font:{size:11},color:'#666',padding:8}
+        scales:{
+          y:{min:-100, max:100,
+            grid:{color:'#e5e5e5',lineWidth:1},
+            border:{color:'#ccc',width:1},
+            ticks:{stepSize:25,font:{size:10},color:'#666',padding:6}
+          },
+          x:{
+            grid:{color:'#f0f0f0',lineWidth:1},
+            border:{color:'#ccc',width:1},
+            ticks:{font:{size:10},color:'#666',padding:6}
+          }
         }
-      }
-    };
-    if(chartRecords.length){
+      };
+    }
+    const colors = ['#22c55e','#962DFF','#00C48C','#f59e0b','#ff4343','#6366f1','#ec4899','#14b8a6','#f97316','#8b5cf6','#0ea5e9','#84cc16'];
+    function buildDatasets(recs, scoreKey){
       if(tab==='geral'){
         const tipos = ['lider','departamento','empresa'];
         const tipoLabels = {lider:'Líder',departamento:'Departamento',empresa:'Empresa'};
         const tipoColors = {lider:'#22c55e',departamento:'#962DFF',empresa:'#00C48C'};
-        const allPeriods = [...new Set(chartRecords.map(r=>r.periodo||''))].sort();
+        const allPeriods = [...new Set(recs.map(r=>r.periodo||''))].sort();
         const datasets = tipos.map(t=>{
-          const recs = chartRecords.filter(r=>r.tipo===t);
-          const avgByPeriod = allPeriods.map(p=>{
-            const pr = recs.filter(r=>r.periodo===p);
-            if(!pr.length) return null;
-            return Math.round(pr.reduce((s,r)=>s+r.enps,0)/pr.length);
-          });
-          return {label:'eNPS '+tipoLabels[t], data:avgByPeriod, borderColor:tipoColors[t], backgroundColor:tipoColors[t]+'22', borderWidth:3, pointRadius:7, pointHoverRadius:10, pointBackgroundColor:tipoColors[t], pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
-        });
-        window._enpsChart = new Chart(ctx, {type:'line', data:{labels:allPeriods, datasets}, options:enpsChartOpts});
-      } else {
-        const refs = [...new Set(chartRecords.map(r=>r.referencia||''))];
-        const allPeriods = [...new Set(chartRecords.map(r=>r.periodo||''))].sort();
-        const colors = ['#22c55e','#962DFF','#00C48C','#f59e0b','#ff4343','#6366f1','#ec4899','#14b8a6','#f97316','#8b5cf6'];
-        // Average line across all references per period
-        const avgData = allPeriods.map(p=>{
-          const pr = chartRecords.filter(r=>r.periodo===p);
-          return pr.length ? Math.round(pr.reduce((s,r)=>s+r.enps,0)/pr.length) : null;
-        });
-        const datasets = [{
-          label:'Média Geral', data:avgData, borderColor:'#333', backgroundColor:'#33333322',
-          borderWidth:4, borderDash:[10,5], pointRadius:8, pointHoverRadius:12,
-          pointBackgroundColor:'#333', pointBorderColor:'#fff', pointBorderWidth:3,
-          tension:0, fill:false, spanGaps:true, order:0
-        }];
-        refs.forEach((ref,i)=>{
-          const recs = chartRecords.filter(r=>r.referencia===ref);
+          const tr = recs.filter(r=>r.tipo===t);
           const data = allPeriods.map(p=>{
-            const rec = recs.find(r=>r.periodo===p);
-            return rec ? rec.enps : null;
+            const pr = tr.filter(r=>r.periodo===p);
+            if(!pr.length) return null;
+            return Math.round(pr.reduce((s,r)=>s+r[scoreKey],0)/pr.length);
           });
-          const hasMultiple = data.filter(v=>v!==null).length >= 2;
-          const c = colors[i%colors.length];
-          datasets.push({label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:hasMultiple?3:0, pointRadius:7, pointHoverRadius:10, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true, order:1});
+          return {label:tipoLabels[t], data, borderColor:tipoColors[t], backgroundColor:tipoColors[t]+'22', borderWidth:3, pointRadius:6, pointHoverRadius:9, pointBackgroundColor:tipoColors[t], pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
         });
-        window._enpsChart = new Chart(ctx, {type:'line', data:{labels:allPeriods, datasets}, options:enpsChartOpts});
+        return {labels:allPeriods, datasets};
+      } else {
+        const refs = [...new Set(recs.map(r=>r.referencia||''))];
+        const allPeriods = [...new Set(recs.map(r=>r.periodo||''))].sort();
+        const datasets = refs.map((ref,i)=>{
+          const rr = recs.filter(r=>r.referencia===ref);
+          const data = allPeriods.map(p=>{
+            const rec = rr.find(r=>r.periodo===p);
+            return rec ? rec[scoreKey] : null;
+          });
+          const c = colors[i%colors.length];
+          return {label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:3, pointRadius:6, pointHoverRadius:9, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
+        });
+        return {labels:allPeriods, datasets};
       }
+    }
+    if(enpsRecs.length){
+      const d = buildDatasets(enpsRecs, 'enps');
+      window._enpsChartL = new Chart(ctxL, {type:'line', data:d, options:makeChartOpts('eNPS')});
+    }
+    if(lnpsRecs.length){
+      const d = buildDatasets(lnpsRecs, 'lnps');
+      window._enpsChartR = new Chart(ctxR, {type:'line', data:d, options:makeChartOpts('lNPS')});
     }
   }
 }
