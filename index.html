@@ -8481,6 +8481,10 @@ function bindEnpsPage(){
       };
     }
     const colors = ['#22c55e','#962DFF','#00C48C','#f59e0b','#ff4343','#6366f1','#ec4899','#14b8a6','#f97316','#8b5cf6','#0ea5e9','#84cc16'];
+    // Build unified color map so same reference gets same color in both charts
+    const allRefsUnified = [...new Set(allEnpsRecs.map(r=>r.referencia||''))];
+    const refColorMap = {};
+    allRefsUnified.forEach((ref,i)=>{ refColorMap[ref] = colors[i%colors.length]; });
     function buildDatasets(recs, scoreKey){
       if(tab==='geral'){
         const tipos = ['lider','departamento','empresa'];
@@ -8500,13 +8504,13 @@ function bindEnpsPage(){
       } else {
         const refs = [...new Set(recs.map(r=>r.referencia||''))];
         const allPeriods = [...new Set(recs.map(r=>r.periodo||''))].sort();
-        const datasets = refs.map((ref,i)=>{
+        const datasets = refs.map((ref)=>{
           const rr = recs.filter(r=>r.referencia===ref);
           const data = allPeriods.map(p=>{
             const rec = rr.find(r=>r.periodo===p);
             return rec ? rec[scoreKey] : null;
           });
-          const c = colors[i%colors.length];
+          const c = refColorMap[ref] || colors[0];
           return {label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:3, pointRadius:6, pointHoverRadius:9, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
         });
         return {labels:allPeriods, datasets};
