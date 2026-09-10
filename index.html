@@ -8489,14 +8489,26 @@ function bindEnpsPage(){
         const refs = [...new Set(chartRecords.map(r=>r.referencia||''))];
         const allPeriods = [...new Set(chartRecords.map(r=>r.periodo||''))].sort();
         const colors = ['#22c55e','#962DFF','#00C48C','#f59e0b','#ff4343','#6366f1','#ec4899','#14b8a6','#f97316','#8b5cf6'];
-        const datasets = refs.map((ref,i)=>{
+        // Average line across all references per period
+        const avgData = allPeriods.map(p=>{
+          const pr = chartRecords.filter(r=>r.periodo===p);
+          return pr.length ? Math.round(pr.reduce((s,r)=>s+r.enps,0)/pr.length) : null;
+        });
+        const datasets = [{
+          label:'Média Geral', data:avgData, borderColor:'#333', backgroundColor:'#33333322',
+          borderWidth:4, borderDash:[10,5], pointRadius:8, pointHoverRadius:12,
+          pointBackgroundColor:'#333', pointBorderColor:'#fff', pointBorderWidth:3,
+          tension:0, fill:false, spanGaps:true, order:0
+        }];
+        refs.forEach((ref,i)=>{
           const recs = chartRecords.filter(r=>r.referencia===ref);
           const data = allPeriods.map(p=>{
             const rec = recs.find(r=>r.periodo===p);
             return rec ? rec.enps : null;
           });
+          const hasMultiple = data.filter(v=>v!==null).length >= 2;
           const c = colors[i%colors.length];
-          return {label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:3, pointRadius:7, pointHoverRadius:10, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
+          datasets.push({label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:hasMultiple?3:0, pointRadius:7, pointHoverRadius:10, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true, order:1});
         });
         window._enpsChart = new Chart(ctx, {type:'line', data:{labels:allPeriods, datasets}, options:enpsChartOpts});
       }
