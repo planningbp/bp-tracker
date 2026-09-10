@@ -4988,15 +4988,11 @@ function renderAcompanhamentos(){
   const areas = [...new Set(records.map(r=>r.area))].sort();
   const lideres = [...new Set(records.map(r=>r.lider).filter(Boolean))].sort();
 
-  // Build month options from dueDate and realizado values
+  // Build month options from dueDate only
   const monthSet = new Set();
   records.forEach(r=>{
     if(r.dueDate instanceof Date && !isNaN(r.dueDate)){
       monthSet.add(r.dueDate.getFullYear()+'-'+String(r.dueDate.getMonth()+1).padStart(2,'0'));
-    }
-    if(r.realizado){
-      const rd = new Date(r.realizado+'T00:00:00');
-      if(!isNaN(rd)) monthSet.add(rd.getFullYear()+'-'+String(rd.getMonth()+1).padStart(2,'0'));
     }
   });
   const monthOptions = [...monthSet].sort();
@@ -5011,21 +5007,12 @@ function renderAcompanhamentos(){
   if(fArea) filtered = filtered.filter(r=>r.area===fArea);
   if(fLider) filtered = filtered.filter(r=>r.lider===fLider);
 
-  // Month filter: if set, show ALL records for that month (due date OR realizado date)
+  // Month filter: filter by due date month only
   if(fMonth){
     filtered = filtered.filter(r=>{
-      // Match by due date
       if(r.dueDate instanceof Date && !isNaN(r.dueDate)){
         const key = r.dueDate.getFullYear()+'-'+String(r.dueDate.getMonth()+1).padStart(2,'0');
-        if(key === fMonth) return true;
-      }
-      // Match by realizado date (done in that month)
-      if(r.realizado){
-        const rd = new Date(r.realizado+'T00:00:00');
-        if(!isNaN(rd)){
-          const rKey = rd.getFullYear()+'-'+String(rd.getMonth()+1).padStart(2,'0');
-          if(rKey === fMonth) return true;
-        }
+        return key === fMonth;
       }
       return false;
     });
