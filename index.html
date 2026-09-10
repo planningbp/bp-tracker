@@ -4759,8 +4759,8 @@ function renderMeetingDetail(){
     </div>
     <div class="card"><div class="section-title">Clima e Riscos</div>
       <table><tbody>
-        <tr><td>eNPS</td><td><strong>${m.semNota?'<span style="color:#888;font-style:italic;">Sem nota</span>':m.enps}</strong></td></tr>
-        <tr><td>lNPS</td><td><strong>${m.semNota?'<span style="color:#888;font-style:italic;">Sem nota</span>':m.lnps}</strong></td></tr>
+        <tr><td>eNPS</td><td><strong>${(m.semNotaEnps||m.semNota)?'<span style="color:#888;font-style:italic;">Sem nota</span>':m.enps}</strong></td></tr>
+        <tr><td>lNPS</td><td><strong>${(m.semNotaLnps||m.semNota)?'<span style="color:#888;font-style:italic;">Sem nota</span>':(m.lnps!=null?m.lnps:'—')}</strong></td></tr>
         <tr><td>Férias vencidas</td><td><strong>${(m.feriasTable||[]).length}</strong></td></tr>
         <tr><td>Banco de horas</td><td><strong>${(m.bancoHorasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
         <tr><td>Horas extras</td><td><strong>${(m.horasExtrasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
@@ -8114,20 +8114,32 @@ function renderEnpsPage(){
       <div class="field"><label>Referência</label>
         ${tab==='empresa'||tab==='geral'?'<input type="text" id="enpsFormRef" class="input" value="Geral" '+(tab==='empresa'?'readonly':'')+'>':'<select id="enpsFormRef" class="select"><option value="">Selecione...</option>'+refOptions+'</select>'}
       </div>
-      <div class="field"><label>eNPS (-100 a 100)</label><input type="number" id="enpsFormEnps" class="input" min="-100" max="100" placeholder="0"></div>
-      <div class="field"><label>lNPS (-100 a 100) <span style="color:#aaa;font-size:11px;">Opcional</span></label><input type="number" id="enpsFormLnps" class="input" min="-100" max="100" placeholder=""></div>
     </div>
-    <div style="margin-bottom:14px;">
-      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;"><input type="checkbox" id="enpsFormSemNota"> Sem nota (registrar apenas detalhamento)</label>
-    </div>
-    <div style="background:#f9fafb;border-radius:10px;padding:14px;margin-bottom:14px;">
-      <div style="font-weight:600;font-size:13px;margin-bottom:10px;">Detalhamento</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:12px;">
-        <div class="field"><label>Promotores</label><input type="number" id="enpsFormPromotores" class="input" min="0" placeholder="0"></div>
-        <div class="field"><label>Neutros</label><input type="number" id="enpsFormNeutros" class="input" min="0" placeholder="0"></div>
-        <div class="field"><label>Detratores</label><input type="number" id="enpsFormDetratores" class="input" min="0" placeholder="0"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;">
+      <div style="background:#f0fdf4;border-radius:10px;padding:14px;border:1px solid #bbf7d0;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:#16a34a;">eNPS</div>
+        <div class="field" style="margin-bottom:10px;"><label>Nota (-100 a 100)</label><input type="number" id="enpsFormEnps" class="input" min="-100" max="100" placeholder="0"></div>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;margin-bottom:10px;"><input type="checkbox" id="enpsFormSemNotaEnps"> Sem nota eNPS</label>
+        <div style="font-weight:600;font-size:12px;margin:8px 0 6px;color:#666;">Detalhamento eNPS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="field"><label style="font-size:11px;">Promotores</label><input type="number" id="enpsFormPromotores" class="input" min="0" placeholder="0"></div>
+          <div class="field"><label style="font-size:11px;">Neutros</label><input type="number" id="enpsFormNeutros" class="input" min="0" placeholder="0"></div>
+          <div class="field"><label style="font-size:11px;">Detratores</label><input type="number" id="enpsFormDetratores" class="input" min="0" placeholder="0"></div>
+        </div>
+        <div class="field"><label style="font-size:11px;">Comentários eNPS</label><textarea id="enpsFormComentariosEnps" class="input" rows="2" placeholder="Observações eNPS..."></textarea></div>
       </div>
-      <div class="field"><label>Comentários</label><textarea id="enpsFormComentarios" class="input" rows="3" placeholder="Observações, feedbacks recebidos..."></textarea></div>
+      <div style="background:#eff6ff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:#2563eb;">lNPS</div>
+        <div class="field" style="margin-bottom:10px;"><label>Nota (-100 a 100) <span style="color:#aaa;font-size:11px;">Opcional</span></label><input type="number" id="enpsFormLnps" class="input" min="-100" max="100" placeholder=""></div>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;margin-bottom:10px;"><input type="checkbox" id="enpsFormSemNotaLnps"> Sem nota lNPS</label>
+        <div style="font-weight:600;font-size:12px;margin:8px 0 6px;color:#666;">Detalhamento lNPS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="field"><label style="font-size:11px;">Promotores</label><input type="number" id="enpsFormLnpsPromotores" class="input" min="0" placeholder="0"></div>
+          <div class="field"><label style="font-size:11px;">Neutros</label><input type="number" id="enpsFormLnpsNeutros" class="input" min="0" placeholder="0"></div>
+          <div class="field"><label style="font-size:11px;">Detratores</label><input type="number" id="enpsFormLnpsDetratores" class="input" min="0" placeholder="0"></div>
+        </div>
+        <div class="field"><label style="font-size:11px;">Comentários lNPS</label><textarea id="enpsFormComentariosLnps" class="input" rows="2" placeholder="Observações lNPS..."></textarea></div>
+      </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
       <button class="btn btn-outline" id="enpsFormCancel" style="width:auto;">Cancelar</button>
@@ -8153,16 +8165,36 @@ function renderEnpsPage(){
     html += '<tr><td colspan="'+(tab==='geral'?8:7)+'" style="padding:30px;text-align:center;color:#aaa;">Nenhum registro encontrado.</td></tr>';
   } else {
     records.forEach((r,i)=>{
-      const ec = r.semNota ? '#aaa' : enpsColor(r.enps);
-      const lc = r.semNota ? '#aaa' : enpsColor(r.lnps);
+      const snE = r.semNotaEnps||r.semNota||false;
+      const snL = r.semNotaLnps||r.semNota||false;
+      const ec = snE ? '#aaa' : enpsColor(r.enps);
+      const lc = snL ? '#aaa' : enpsColor(r.lnps);
       const tipoLabel = r.tipo==='lider'?'Líder':r.tipo==='departamento'?'Departamento':'Empresa';
-      const enpsDisplay = r.semNota ? '<span style="color:#aaa;font-style:italic;font-size:11px;">Sem nota</span>' : '<span style="font-weight:700;color:'+ec+';">'+r.enps+'</span>';
-      const lnpsDisplay = r.semNota ? '<span style="color:#aaa;font-style:italic;font-size:11px;">Sem nota</span>' : (r.lnps!=null?'<span style="font-weight:700;color:'+lc+';">'+r.lnps+'</span>':'—');
+      const enpsDisplay = snE ? '<span style="color:#aaa;font-style:italic;font-size:11px;">Sem nota</span>' : '<span style="font-weight:700;color:'+ec+';">'+r.enps+'</span>';
+      const lnpsDisplay = snL ? '<span style="color:#aaa;font-style:italic;font-size:11px;">Sem nota</span>' : (r.lnps!=null?'<span style="font-weight:700;color:'+lc+';">'+r.lnps+'</span>':'—');
+      // Build detalhamento: separate eNPS and lNPS
       let detParts = [];
-      if(r.promotores) detParts.push('<span style="color:#22c55e;">&#9650; '+r.promotores+' prom.</span>');
-      if(r.neutros) detParts.push('<span style="color:#f59e0b;">&#9679; '+r.neutros+' neut.</span>');
-      if(r.detratores) detParts.push('<span style="color:#ef4444;">&#9660; '+r.detratores+' detr.</span>');
-      const detHtml = detParts.length ? detParts.join(' ') + (r.comentarios ? '<div style="color:#666;font-size:11px;margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(r.comentarios)+'">'+esc(r.comentarios)+'</div>' : '') : (r.comentarios ? '<div style="color:#666;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(r.comentarios)+'">'+esc(r.comentarios)+'</div>' : '—');
+      const eProm = r.promotores||0, eNeut = r.neutros||0, eDetr = r.detratores||0;
+      const eComment = r.comentariosEnps || r.comentarios || '';
+      if(eProm||eNeut||eDetr||eComment){
+        let eLine = '<span style="font-size:10px;font-weight:600;color:#16a34a;">eNPS:</span> ';
+        if(eProm) eLine+='<span style="color:#22c55e;">&#9650;'+eProm+'</span> ';
+        if(eNeut) eLine+='<span style="color:#f59e0b;">&#9679;'+eNeut+'</span> ';
+        if(eDetr) eLine+='<span style="color:#ef4444;">&#9660;'+eDetr+'</span>';
+        if(eComment) eLine+=' <span style="color:#666;font-size:10px;" title="'+esc(eComment)+'">'+esc(eComment.length>30?eComment.slice(0,30)+'…':eComment)+'</span>';
+        detParts.push(eLine);
+      }
+      const lProm = r.lnpsPromotores||0, lNeut = r.lnpsNeutros||0, lDetr = r.lnpsDetratores||0;
+      const lComment = r.comentariosLnps || '';
+      if(lProm||lNeut||lDetr||lComment){
+        let lLine = '<span style="font-size:10px;font-weight:600;color:#2563eb;">lNPS:</span> ';
+        if(lProm) lLine+='<span style="color:#22c55e;">&#9650;'+lProm+'</span> ';
+        if(lNeut) lLine+='<span style="color:#f59e0b;">&#9679;'+lNeut+'</span> ';
+        if(lDetr) lLine+='<span style="color:#ef4444;">&#9660;'+lDetr+'</span>';
+        if(lComment) lLine+=' <span style="color:#666;font-size:10px;" title="'+esc(lComment)+'">'+esc(lComment.length>30?lComment.slice(0,30)+'…':lComment)+'</span>';
+        detParts.push(lLine);
+      }
+      const detHtml = detParts.length ? detParts.join('<br>') : '—';
       html += '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'">'
         + '<td style="padding:10px 12px;">'+esc(r.periodo||'')+'</td>'
         + '<td style="padding:10px 12px;font-weight:600;">'+esc(r.referencia||'')+'</td>'
@@ -8186,7 +8218,7 @@ function renderEnpsPage(){
 
   // Ranking for "Por Líder" tab
   if(tab==='lider'){
-    const liderRecords = (DB.enps||[]).filter(r=>r.tipo==='lider' && !r.semNota && r.enps!=null);
+    const liderRecords = (DB.enps||[]).filter(r=>r.tipo==='lider' && !(r.semNotaEnps||r.semNota) && r.enps!=null);
     const latestByLider = {};
     liderRecords.forEach(r=>{
       const key = normalizeStr(r.referencia);
@@ -8244,17 +8276,20 @@ function bindEnpsPage(){
     rerender();
   });
 
-  // Sem nota toggle — disable score fields
-  const semNotaChk = document.getElementById('enpsFormSemNota');
-  if(semNotaChk){
-    const toggleScoreFields = ()=>{
-      const disabled = semNotaChk.checked;
-      ['enpsFormEnps','enpsFormLnps'].forEach(id=>{
-        const el = document.getElementById(id);
-        if(el){ el.disabled = disabled; el.style.opacity = disabled?'0.4':'1'; }
-      });
-    };
-    semNotaChk.addEventListener('change', toggleScoreFields);
+  // Sem nota toggles — disable respective score fields
+  const semNotaEnpsChk = document.getElementById('enpsFormSemNotaEnps');
+  if(semNotaEnpsChk){
+    semNotaEnpsChk.addEventListener('change', ()=>{
+      const enpsField = document.getElementById('enpsFormEnps');
+      if(enpsField) enpsField.disabled = semNotaEnpsChk.checked;
+    });
+  }
+  const semNotaLnpsChk = document.getElementById('enpsFormSemNotaLnps');
+  if(semNotaLnpsChk){
+    semNotaLnpsChk.addEventListener('change', ()=>{
+      const lnpsField = document.getElementById('enpsFormLnps');
+      if(lnpsField) lnpsField.disabled = semNotaLnpsChk.checked;
+    });
   }
 
   // Form save
@@ -8263,21 +8298,20 @@ function bindEnpsPage(){
     const periodo = (document.getElementById('enpsFormPeriodo').value||'').trim();
     const tipo = tab==='geral'?'lider':tab;
     const ref = (document.getElementById('enpsFormRef').value||'').trim();
-    const semNota = document.getElementById('enpsFormSemNota').checked;
+    const semNotaEnps = document.getElementById('enpsFormSemNotaEnps').checked;
+    const semNotaLnps = document.getElementById('enpsFormSemNotaLnps').checked;
     const enpsRaw = document.getElementById('enpsFormEnps').value.trim();
     const enpsVal = enpsRaw!=='' ? parseInt(enpsRaw) : null;
     const lnpsEl = document.getElementById('enpsFormLnps');
     const lnpsVal = lnpsEl.value.trim()!=='' ? parseInt(lnpsEl.value) : null;
-    const promotores = parseInt(document.getElementById('enpsFormPromotores').value)||0;
-    const neutros = parseInt(document.getElementById('enpsFormNeutros').value)||0;
-    const detratores = parseInt(document.getElementById('enpsFormDetratores').value)||0;
-    const comentarios = (document.getElementById('enpsFormComentarios').value||'').trim();
 
     if(!periodo){ alert('Informe o período.'); return; }
     if(!ref){ alert('Informe a referência.'); return; }
-    if(!semNota){
+    if(!semNotaEnps){
       if(enpsVal===null||isNaN(enpsVal)||enpsVal<-100||enpsVal>100){ alert('eNPS deve ser entre -100 e 100.'); return; }
-      if(lnpsVal!==null&&(isNaN(lnpsVal)||lnpsVal<-100||lnpsVal>100)){ alert('lNPS deve ser entre -100 e 100.'); return; }
+    }
+    if(!semNotaLnps && lnpsVal!==null){
+      if(isNaN(lnpsVal)||lnpsVal<-100||lnpsVal>100){ alert('lNPS deve ser entre -100 e 100.'); return; }
     }
 
     DB.enps.push({
@@ -8285,13 +8319,20 @@ function bindEnpsPage(){
       periodo: periodo,
       tipo: tipo,
       referencia: ref,
-      enps: semNota ? null : enpsVal,
-      lnps: semNota ? null : lnpsVal,
-      semNota: semNota||false,
-      promotores: promotores,
-      neutros: neutros,
-      detratores: detratores,
-      comentarios: comentarios,
+      enps: semNotaEnps ? null : enpsVal,
+      lnps: semNotaLnps ? null : lnpsVal,
+      semNotaEnps: semNotaEnps||false,
+      semNotaLnps: semNotaLnps||false,
+      semNota: (semNotaEnps && semNotaLnps)||false,
+      promotores: parseInt(document.getElementById('enpsFormPromotores').value)||0,
+      neutros: parseInt(document.getElementById('enpsFormNeutros').value)||0,
+      detratores: parseInt(document.getElementById('enpsFormDetratores').value)||0,
+      comentariosEnps: (document.getElementById('enpsFormComentariosEnps').value||'').trim(),
+      lnpsPromotores: parseInt(document.getElementById('enpsFormLnpsPromotores').value)||0,
+      lnpsNeutros: parseInt(document.getElementById('enpsFormLnpsNeutros').value)||0,
+      lnpsDetratores: parseInt(document.getElementById('enpsFormLnpsDetratores').value)||0,
+      comentariosLnps: (document.getElementById('enpsFormComentariosLnps').value||'').trim(),
+      comentarios: '', // backward compat
       criadoEm: new Date().toISOString()
     });
     persist('enps');
@@ -8327,23 +8368,39 @@ function bindEnpsPage(){
       if(!rec) return;
       const modal = document.createElement('div');
       modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
-      modal.innerHTML = `<div style="background:#fff;border-radius:14px;padding:24px;max-width:540px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto;">
-        <div style="font-weight:700;font-size:16px;margin-bottom:16px;">Editar registro eNPS</div>
-        <div style="display:grid;gap:12px;margin-bottom:16px;">
+      const _snE = rec.semNotaEnps||rec.semNota||false;
+      const _snL = rec.semNotaLnps||rec.semNota||false;
+      modal.innerHTML = `<div style="background:#fff;border-radius:14px;padding:24px;max-width:640px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto;">
+        <div style="font-weight:700;font-size:16px;margin-bottom:16px;">Editar registro eNPS / lNPS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
           <div class="field"><label>Período</label><input type="text" id="editEnpsPeriodo" class="input" value="${esc(rec.periodo||'')}"></div>
           <div class="field"><label>Referência</label><input type="text" id="editEnpsRef" class="input" value="${esc(rec.referencia||'')}"></div>
-          <div class="field"><label>eNPS (-100 a 100)</label><input type="number" id="editEnpsEnps" class="input" min="-100" max="100" value="${rec.semNota?'':rec.enps}"></div>
-          <div class="field"><label>lNPS (-100 a 100)</label><input type="number" id="editEnpsLnps" class="input" min="-100" max="100" value="${rec.semNota?'':(rec.lnps!=null?rec.lnps:'')}"></div>
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;"><input type="checkbox" id="editEnpsSemNota" ${rec.semNota?'checked':''}> Sem nota</label>
         </div>
-        <div style="background:#f9fafb;border-radius:10px;padding:14px;margin-bottom:16px;">
-          <div style="font-weight:600;font-size:13px;margin-bottom:10px;">Detalhamento</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
-            <div class="field"><label>Promotores</label><input type="number" id="editEnpsPromotores" class="input" min="0" value="${rec.promotores||0}"></div>
-            <div class="field"><label>Neutros</label><input type="number" id="editEnpsNeutros" class="input" min="0" value="${rec.neutros||0}"></div>
-            <div class="field"><label>Detratores</label><input type="number" id="editEnpsDetratores" class="input" min="0" value="${rec.detratores||0}"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div style="background:#f0fdf4;border-radius:10px;padding:14px;border:1px solid #bbf7d0;">
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#16a34a;">eNPS</div>
+            <div class="field" style="margin-bottom:8px;"><label>Nota</label><input type="number" id="editEnpsEnps" class="input" min="-100" max="100" value="${_snE?'':rec.enps}"></div>
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;margin-bottom:8px;"><input type="checkbox" id="editEnpsSemNotaEnps" ${_snE?'checked':''}> Sem nota eNPS</label>
+            <div style="font-weight:600;font-size:11px;margin:6px 0 4px;color:#666;">Detalhamento eNPS</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;">
+              <div class="field"><label style="font-size:11px;">Prom.</label><input type="number" id="editEnpsPromotores" class="input" min="0" value="${rec.promotores||0}"></div>
+              <div class="field"><label style="font-size:11px;">Neut.</label><input type="number" id="editEnpsNeutros" class="input" min="0" value="${rec.neutros||0}"></div>
+              <div class="field"><label style="font-size:11px;">Detr.</label><input type="number" id="editEnpsDetratores" class="input" min="0" value="${rec.detratores||0}"></div>
+            </div>
+            <div class="field"><label style="font-size:11px;">Comentários</label><textarea id="editEnpsComentariosEnps" class="input" rows="2">${esc(rec.comentariosEnps||rec.comentarios||'')}</textarea></div>
           </div>
-          <div class="field"><label>Comentários</label><textarea id="editEnpsComentarios" class="input" rows="3">${esc(rec.comentarios||'')}</textarea></div>
+          <div style="background:#eff6ff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;">
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#2563eb;">lNPS</div>
+            <div class="field" style="margin-bottom:8px;"><label>Nota</label><input type="number" id="editEnpsLnps" class="input" min="-100" max="100" value="${_snL?'':(rec.lnps!=null?rec.lnps:'')}"></div>
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;margin-bottom:8px;"><input type="checkbox" id="editEnpsSemNotaLnps" ${_snL?'checked':''}> Sem nota lNPS</label>
+            <div style="font-weight:600;font-size:11px;margin:6px 0 4px;color:#666;">Detalhamento lNPS</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;">
+              <div class="field"><label style="font-size:11px;">Prom.</label><input type="number" id="editEnpsLnpsPromotores" class="input" min="0" value="${rec.lnpsPromotores||0}"></div>
+              <div class="field"><label style="font-size:11px;">Neut.</label><input type="number" id="editEnpsLnpsNeutros" class="input" min="0" value="${rec.lnpsNeutros||0}"></div>
+              <div class="field"><label style="font-size:11px;">Detr.</label><input type="number" id="editEnpsLnpsDetratores" class="input" min="0" value="${rec.lnpsDetratores||0}"></div>
+            </div>
+            <div class="field"><label style="font-size:11px;">Comentários</label><textarea id="editEnpsComentariosLnps" class="input" rows="2">${esc(rec.comentariosLnps||'')}</textarea></div>
+          </div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
           <button class="btn btn-outline" id="editEnpsCancel" style="width:auto;">Cancelar</button>
@@ -8356,25 +8413,35 @@ function bindEnpsPage(){
       document.getElementById('editEnpsSave').addEventListener('click', ()=>{
         const p = document.getElementById('editEnpsPeriodo').value.trim();
         const r2 = document.getElementById('editEnpsRef').value.trim();
-        const semNota2 = document.getElementById('editEnpsSemNota').checked;
+        const snE2 = document.getElementById('editEnpsSemNotaEnps').checked;
+        const snL2 = document.getElementById('editEnpsSemNotaLnps').checked;
         const e2raw = document.getElementById('editEnpsEnps').value.trim();
         const e2 = e2raw!=='' ? parseInt(e2raw) : null;
         const l2el = document.getElementById('editEnpsLnps');
         const l2 = l2el.value.trim()!=='' ? parseInt(l2el.value) : null;
         if(!p||!r2){ alert('Preencha período e referência.'); return; }
-        if(!semNota2){
+        if(!snE2){
           if(e2===null||isNaN(e2)||e2<-100||e2>100){ alert('eNPS deve ser entre -100 e 100.'); return; }
-          if(l2!==null&&(isNaN(l2)||l2<-100||l2>100)){ alert('lNPS deve ser entre -100 e 100.'); return; }
+        }
+        if(!snL2 && l2!==null){
+          if(isNaN(l2)||l2<-100||l2>100){ alert('lNPS deve ser entre -100 e 100.'); return; }
         }
         rec.periodo = p;
         rec.referencia = r2;
-        rec.semNota = semNota2||false;
-        rec.enps = semNota2 ? null : e2;
-        rec.lnps = semNota2 ? null : l2;
+        rec.semNotaEnps = snE2||false;
+        rec.semNotaLnps = snL2||false;
+        rec.semNota = (snE2 && snL2)||false;
+        rec.enps = snE2 ? null : e2;
+        rec.lnps = snL2 ? null : l2;
         rec.promotores = parseInt(document.getElementById('editEnpsPromotores').value)||0;
         rec.neutros = parseInt(document.getElementById('editEnpsNeutros').value)||0;
         rec.detratores = parseInt(document.getElementById('editEnpsDetratores').value)||0;
-        rec.comentarios = (document.getElementById('editEnpsComentarios').value||'').trim();
+        rec.comentariosEnps = (document.getElementById('editEnpsComentariosEnps').value||'').trim();
+        rec.lnpsPromotores = parseInt(document.getElementById('editEnpsLnpsPromotores').value)||0;
+        rec.lnpsNeutros = parseInt(document.getElementById('editEnpsLnpsNeutros').value)||0;
+        rec.lnpsDetratores = parseInt(document.getElementById('editEnpsLnpsDetratores').value)||0;
+        rec.comentariosLnps = (document.getElementById('editEnpsComentariosLnps').value||'').trim();
+        rec.comentarios = '';
         persist('enps');
         modal.remove();
         rerender();
