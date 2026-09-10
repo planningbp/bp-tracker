@@ -2676,7 +2676,7 @@ function renderLiderDashboard(ct){
   const elE = document.getElementById('chartLiderEnps');
   if(elE) CHARTS.chartLiderEnps = new Chart(elE, {
     type:'line',
-    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#962DFF', backgroundColor:'rgba(150,45,255,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#962DFF', backgroundColor:'rgba(150,45,255,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
   });
 
@@ -2684,7 +2684,7 @@ function renderLiderDashboard(ct){
   const elL = document.getElementById('chartLiderLnps');
   if(elL) CHARTS.chartLiderLnps = new Chart(elL, {
     type:'line',
-    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
   });
 
@@ -3035,16 +3035,7 @@ function renderDashboard(){
   const admissoes = myColabs.filter(c=> inRange(c.admissao||c['Data de admissão']||c['data de admissao']));
   const desligPeriod = myDeslig.filter(d=> inRange(desligDate(d)));
   const promosPeriod = myPromos.filter(p=> inRange(p.mesDate));
-  // Debug desligamentos (remove later)
-  console.log('[BP Debug] Total deslig DB:', DB.desligamentos.length, '| myDeslig (area match):', myDeslig.length, '| desligPeriod (date match):', desligPeriod.length);
-  if(DB.desligamentos.length>0 && myDeslig.length===0){
-    const sample = DB.desligamentos.slice(0,3).map(d=>({area:d.area, deptRaw:d.departamentoRaw, norm:normalizeStr(d.area||d.departamentoRaw||'')}));
-    console.log('[BP Debug] Deslig areas:', JSON.stringify(sample), '| bpAreas:', JSON.stringify(bpAreas));
-  }
-  if(myDeslig.length>0 && desligPeriod.length===0){
-    const sample = myDeslig.slice(0,3).map(d=>({ultimoDia:d.ultimoDia, mesDate:d.mesDate, mesRaw:d.mesRaw, resolved:desligDate(d)}));
-    console.log('[BP Debug] Deslig dates:', JSON.stringify(sample));
-  }
+
 
   const totalHC = myColabs.length;
   const totalAdm = admissoes.length;
@@ -3489,7 +3480,7 @@ function bindDashboard(){
   const elEnps = document.getElementById('chartDashEnps');
   if(elEnps) CHARTS.chartDashEnps = new Chart(elEnps, {
     type:'line',
-    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#962DFF', backgroundColor:'rgba(150,45,255,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#962DFF', backgroundColor:'rgba(150,45,255,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
   });
 
@@ -3497,7 +3488,7 @@ function bindDashboard(){
   const elLnps = document.getElementById('chartDashLnps');
   if(elLnps) CHARTS.chartDashLnps = new Chart(elLnps, {
     type:'line',
-    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', fill:true, tension:.3, spanGaps:true}]},
+    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
   });
 
@@ -6017,8 +6008,8 @@ function bindLideresPage(){
       data:{
         labels: records.map(r=>r.periodo),
         datasets:[
-          {label:'eNPS', data:records.map(r=>r.enps), borderColor:'#22c55e', backgroundColor:'#22c55e22', tension:0.3, fill:true},
-          {label:'lNPS', data:records.map(r=>r.lnps), borderColor:'#962DFF', backgroundColor:'#962DFF22', tension:0.3, fill:true}
+          {label:'eNPS', data:records.map(r=>r.enps), borderColor:'#22c55e', backgroundColor:'#22c55e22', borderWidth:3, pointRadius:6, tension:0, fill:true, spanGaps:true},
+          {label:'lNPS', data:records.map(r=>r.lnps), borderColor:'#962DFF', backgroundColor:'#962DFF22', borderWidth:3, pointRadius:6, tension:0, fill:true, spanGaps:true}
         ]
       },
       options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}}, scales:{y:{min:-100,max:100,grid:{color:'#f0f0f0'}}}}
@@ -8213,7 +8204,7 @@ function renderEnpsPage(){
   // Evolution chart
   html += `<div class="card" style="margin-bottom:20px;padding:20px;">
     <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Evolução eNPS</div>
-    <div style="height:300px;"><canvas id="enpsMainChart"></canvas></div>
+    <div style="height:380px;"><canvas id="enpsMainChart"></canvas></div>
   </div>`;
 
   // Ranking for "Por Líder" tab
@@ -8491,7 +8482,7 @@ function bindEnpsPage(){
             if(!pr.length) return null;
             return Math.round(pr.reduce((s,r)=>s+r.enps,0)/pr.length);
           });
-          return {label:'eNPS '+tipoLabels[t], data:avgByPeriod, borderColor:tipoColors[t], backgroundColor:tipoColors[t]+'22', borderWidth:2.5, borderDash:[6,3], pointRadius:6, pointHoverRadius:8, pointBackgroundColor:tipoColors[t], pointBorderColor:'#fff', pointBorderWidth:2, tension:0.3, fill:false, spanGaps:true};
+          return {label:'eNPS '+tipoLabels[t], data:avgByPeriod, borderColor:tipoColors[t], backgroundColor:tipoColors[t]+'22', borderWidth:3, pointRadius:7, pointHoverRadius:10, pointBackgroundColor:tipoColors[t], pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
         });
         window._enpsChart = new Chart(ctx, {type:'line', data:{labels:allPeriods, datasets}, options:enpsChartOpts});
       } else {
@@ -8505,7 +8496,7 @@ function bindEnpsPage(){
             return rec ? rec.enps : null;
           });
           const c = colors[i%colors.length];
-          return {label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:2.5, borderDash:[6,3], pointRadius:6, pointHoverRadius:8, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0.3, fill:false, spanGaps:true};
+          return {label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:3, pointRadius:7, pointHoverRadius:10, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
         });
         window._enpsChart = new Chart(ctx, {type:'line', data:{labels:allPeriods, datasets}, options:enpsChartOpts});
       }
