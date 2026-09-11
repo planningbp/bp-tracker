@@ -11,6 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
@@ -1216,6 +1218,86 @@ function parseBancoHorasImport(rows){
   return out;
 }
 
+function parseBancoHorasPDF(text){
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const out = [];
+  // Detect department/period from header lines
+  let departamento = '';
+  let periodo = '';
+  for(const l of lines){
+    if(/^departamento\s*:/i.test(l)) departamento = l.replace(/^departamento\s*:\s*/i,'').trim();
+    if(/^per[ií]odo\s*:/i.test(l)) periodo = l.replace(/^per[ií]odo\s*:\s*/i,'').trim();
+  }
+  // Find header row containing NOME and BSALDO
+  let headerIdx = -1;
+  let colPositions = null;
+  const headerKw = ['NOME','BSALDO'];
+  for(let i=0;i<lines.length;i++){
+    const up = lines[i].toUpperCase();
+    if(up.includes('NOME') && up.includes('BSALDO')){
+      headerIdx = i;
+      // Detect column order from header
+      const cols = lines[i].split(/\s{2,}|\t/);
+      colPositions = {};
+      cols.forEach((c,ci)=>{
+        const ck = c.trim().toUpperCase();
+        if(ck.includes('NOME')) colPositions.nome = ci;
+        if(ck.includes('BSALDO')) colPositions.bsaldo = ci;
+      });
+      break;
+    }
+  }
+  if(headerIdx<0 || !colPositions || colPositions.nome===undefined || colPositions.bsaldo===undefined){
+    // Fallback: try line-by-line regex for "name   ...   HH:MM" pattern
+    const timeRe = /(-?\d{1,4}:\d{2})/g;
+    for(const l of lines){
+      if(/sub.?tota|^tota/i.test(l)) continue;
+      const matches = [...l.matchAll(timeRe)];
+      if(matches.length>=1){
+        // Last time-like value is BSALDO
+        const bsaldo = matches[matches.length-1][1];
+        // Name is everything before the first number block
+        const nameEnd = l.search(/\d/);
+        if(nameEnd>2){
+          const nome = l.substring(0,nameEnd).replace(/^\d+\s*/,'').trim();
+          if(nome && nome.length>2 && !/sub.?tota|^tota/i.test(nome)){
+            const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(nome));
+            out.push({
+              id:uid(), nome, horas:bsaldo, observacao:'',
+              cargo: colab?(colab.cargo||colab.Cargo||''):'',
+              lider: colab?(colab.lider||colab['Líder']||colab.Lider||''):'',
+              area: colab?(colab.area||colab.departamento||colab.departamentoRaw||''):departamento
+            });
+          }
+        }
+      }
+    }
+    return out;
+  }
+  // Parse data rows after header
+  for(let i=headerIdx+1;i<lines.length;i++){
+    const l = lines[i];
+    if(/sub.?tota|^tota/i.test(l)) continue;
+    if(/^departamento\s*:/i.test(l) || /^per[ií]odo\s*:/i.test(l)) continue;
+    // Split by 2+ spaces or tab
+    const parts = l.split(/\s{2,}|\t/).map(p=>p.trim()).filter(Boolean);
+    if(parts.length < Math.max(colPositions.nome, colPositions.bsaldo)+1) continue;
+    const nome = parts[colPositions.nome].replace(/^\d+\s*/,'').trim();
+    const bsaldo = parts[colPositions.bsaldo];
+    if(!nome || nome.length<3) continue;
+    // Skip if it looks like another header
+    if(nome.toUpperCase()==='NOME') continue;
+    const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(nome));
+    out.push({
+      id:uid(), nome, horas:bsaldo, observacao:'',
+      cargo: colab?(colab.cargo||colab.Cargo||''):'',
+      lider: colab?(colab.lider||colab['Líder']||colab.Lider||''):'',
+      area: colab?(colab.area||colab.departamento||colab.departamentoRaw||''):departamento
+    });
+  }
+  return out;
+}
+
 /* =========================================================
    GENERIC CRUD PAGE BUILDER
 ========================================================= */
@@ -1398,7 +1480,7 @@ function renderCrudPage(pageKey){
         ${activeFilterCount>0?'<button class="btn btn-outline" id="crudClearFilters_'+pageKey+'" style="width:auto;color:#ff4343;border-color:#ff4343;font-size:12px;">Limpar filtros ('+activeFilterCount+')</button>':''}
         <button class="btn btn-outline" id="crudDeleteAll_${pageKey}" style="width:auto;background:#fdecec;color:#ff4343;border-color:#fcc;display:flex;align-items:center;gap:6px;">&#128465; Apagar tudo</button>
         <button class="btn" id="crudAdd_${pageKey}" style="width:auto;display:flex;align-items:center;gap:6px;">${ICONS.plus} Adicionar</button>
-        ${cfg.parser ? '<label class="btn btn-outline" style="width:auto;display:flex;align-items:center;gap:6px;cursor:pointer;">'+ICONS.import+' Importar<input type="file" id="crudImport_'+pageKey+'" accept=".xlsx,.xls,.csv" style="display:none;"></label>' : ''}
+        ${cfg.parser ? '<label class="btn btn-outline" style="width:auto;display:flex;align-items:center;gap:6px;cursor:pointer;">'+ICONS.import+' Importar<input type="file" id="crudImport_'+pageKey+'" accept=".xlsx,.xls,.csv,.pdf" style="display:none;"></label>' : ''}
       </div>
     </div>
 
@@ -1519,17 +1601,11 @@ function bindCrudPage(pageKey){
   const impInp = document.getElementById('crudImport_'+pageKey);
   if(impInp && cfg.parser) impInp.addEventListener('change', e=>{
     const file = e.target.files[0]; if(!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const data = new Uint8Array(ev.target.result);
-      const wb = XLSX.read(data, {type:'array', cellDates:true});
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:''});
-      const parserFn = window[cfg.parser] || eval(cfg.parser);
-      const parsed = parserFn(rows);
-      // Merge logic
+    const isPDF = file.name.toLowerCase().endsWith('.pdf');
+
+    function mergeAndSave(parsed){
       const existing = DB[cfg.dbKey]||[];
       const keyFn = r => normalizeStr(r.nome||'')+'|'+(r.mesRaw||r.data||'');
-      const existingKeys = new Set(existing.map(keyFn));
       let added=0, updated=0;
       parsed.forEach(p=>{
         const k = keyFn(p);
@@ -1541,8 +1617,51 @@ function bindCrudPage(pageKey){
       persist(cfg.dbKey);
       alert('Importação concluída: '+added+' novos, '+updated+' atualizados.');
       rerender();
-    };
-    reader.readAsArrayBuffer(file);
+    }
+
+    if(isPDF && window.pdfjsLib){
+      const reader = new FileReader();
+      reader.onload = async ev => {
+        try{
+          const typedArr = new Uint8Array(ev.target.result);
+          const pdf = await pdfjsLib.getDocument({data:typedArr}).promise;
+          let fullText = '';
+          for(let p=1; p<=pdf.numPages; p++){
+            const page = await pdf.getPage(p);
+            const tc = await page.getTextContent();
+            const pageLines = {};
+            tc.items.forEach(item=>{
+              const y = Math.round(item.transform[5]);
+              if(!pageLines[y]) pageLines[y]='';
+              pageLines[y] += item.str + '  ';
+            });
+            const sortedYs = Object.keys(pageLines).map(Number).sort((a,b)=>b-a);
+            sortedYs.forEach(y=>{ fullText += pageLines[y].trim()+'\n'; });
+          }
+          const pdfParser = cfg.parser==='parseBancoHorasImport' ? 'parseBancoHorasPDF' : cfg.parser+'PDF';
+          const parserFn = window[pdfParser] || window.parseBancoHorasPDF;
+          if(!parserFn){ alert('Parser PDF não encontrado para esta base.'); return; }
+          const parsed = parserFn(fullText);
+          if(!parsed.length){ alert('Nenhum registro encontrado no PDF. Verifique o formato.'); return; }
+          mergeAndSave(parsed);
+        }catch(err){
+          console.error('Erro ao ler PDF:', err);
+          alert('Erro ao processar PDF: '+err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const data = new Uint8Array(ev.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:true});
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:''});
+        const parserFn = window[cfg.parser] || eval(cfg.parser);
+        const parsed = parserFn(rows);
+        mergeAndSave(parsed);
+      };
+      reader.readAsArrayBuffer(file);
+    }
   });
 
   // Delete
