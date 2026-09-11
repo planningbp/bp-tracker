@@ -4308,11 +4308,19 @@ function renderMeetingForm(){
               const p=getUltimaPromocao(c.nome||c.Nome||'');
               const nome=c.nome||c.Nome||'';
               const cargo=c.cargo||c.Cargo||'';
-              if(!p || p.semPromocao) return {nome,cargo,de:'—',para:'—',data:'Sem promoção',tempo:'—',meses:999};
+              if(!p || p.semPromocao){
+                const admRaw=c.admissao||c['Data de admissão']||c['data de admissao']||c['data_admissao'];
+                const adm=admRaw?reviveDate(admRaw):null;
+                if(!adm) return null;
+                const mesesCasa=Math.floor((new Date()-adm)/86400000)/30;
+                if(mesesCasa<6) return null;
+                const tempoStr=mesesCasa>=12?Math.floor(mesesCasa/12)+' ano'+(Math.floor(mesesCasa/12)>1?'s':'')+' e '+Math.round(mesesCasa%12)+' meses':Math.round(mesesCasa)+' meses';
+                return {nome,cargo,de:'—',para:'—',data:'Sem promoção',tempo:tempoStr+' de casa',meses:mesesCasa};
+              }
               const diffDays=Math.floor((new Date()-p.data)/86400000);
               const meses=diffDays/30;
               return {nome,cargo,de:p.cargoAnterior,para:p.cargoNovo,data:p.dataFmt,tempo:p.tempoStr,meses};
-            }).filter(r=>r.meses>=6);
+            }).filter(r=>r&&r.meses>=6);
             promoRows.sort((a,b)=>b.meses-a.meses);
             if(!promoRows.length) return '';
             return '<div style="margin-top:12px;"><div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--primary);">Sem Promoção há +6 meses</div><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;"><thead><tr style="background:#f9fafb;"><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Cargo Atual</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">De</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Para</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Data</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Tempo</th></tr></thead><tbody>'+promoRows.map((r,i)=>'<tr style="border-top:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'"><td style="padding:8px 10px;font-weight:600;">'+esc(r.nome)+'</td><td style="padding:8px 10px;">'+esc(r.cargo)+'</td><td style="padding:8px 10px;">'+esc(r.de)+'</td><td style="padding:8px 10px;">'+esc(r.para)+'</td><td style="padding:8px 10px;">'+esc(r.data)+'</td><td style="padding:8px 10px;"><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">há '+r.tempo+'</span></td></tr>').join('')+'</tbody></table></div>';
@@ -4782,11 +4790,19 @@ function renderMeetingDetail(){
       const p=getUltimaPromocao(c.nome||c.Nome||'');
       const nome=c.nome||c.Nome||'';
       const cargo=c.cargo||c.Cargo||'';
-      if(!p || p.semPromocao) return {nome,cargo,de:'—',para:'—',data:'Sem promoção',tempo:'—',meses:999};
+      if(!p || p.semPromocao){
+        const admRaw=c.admissao||c['Data de admissão']||c['data de admissao']||c['data_admissao'];
+        const adm=admRaw?reviveDate(admRaw):null;
+        if(!adm) return null;
+        const mesesCasa=Math.floor((new Date()-adm)/86400000)/30;
+        if(mesesCasa<6) return null;
+        const tempoStr=mesesCasa>=12?Math.floor(mesesCasa/12)+' ano'+(Math.floor(mesesCasa/12)>1?'s':'')+' e '+Math.round(mesesCasa%12)+' meses':Math.round(mesesCasa)+' meses';
+        return {nome,cargo,de:'—',para:'—',data:'Sem promoção',tempo:tempoStr+' de casa',meses:mesesCasa};
+      }
       const diffDays=Math.floor((new Date()-p.data)/86400000);
       const meses=diffDays/30;
       return {nome,cargo,de:p.cargoAnterior,para:p.cargoNovo,data:p.dataFmt,tempo:p.tempoStr,meses};
-    }).filter(r=>r.meses>=6);
+    }).filter(r=>r&&r.meses>=6);
     promoRows.sort((a,b)=>b.meses-a.meses);
     if(!promoRows.length) return '';
     return '<div class="card" style="margin-bottom:16px;"><div style="font-weight:700;font-size:14px;margin-bottom:10px;color:var(--primary);">Sem Promoção há +6 meses</div><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Cargo Atual</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">De</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Para</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Data</th><th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Tempo</th></tr></thead><tbody>'+promoRows.map((r,i)=>'<tr style="border-top:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'"><td style="padding:8px 10px;font-weight:600;">'+esc(r.nome)+'</td><td style="padding:8px 10px;">'+esc(r.cargo)+'</td><td style="padding:8px 10px;">'+esc(r.de)+'</td><td style="padding:8px 10px;">'+esc(r.para)+'</td><td style="padding:8px 10px;">'+esc(r.data)+'</td><td style="padding:8px 10px;"><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">há '+r.tempo+'</span></td></tr>').join('')+'</tbody></table></div>';
