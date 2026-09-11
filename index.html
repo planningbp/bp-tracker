@@ -1221,75 +1221,43 @@ function parseBancoHorasImport(rows){
 function parseBancoHorasPDF(text){
   const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
   const out = [];
-  // Detect department/period from header lines
   let departamento = '';
-  let periodo = '';
   for(const l of lines){
     if(/^departamento\s*:/i.test(l)) departamento = l.replace(/^departamento\s*:\s*/i,'').trim();
-    if(/^per[ií]odo\s*:/i.test(l)) periodo = l.replace(/^per[ií]odo\s*:\s*/i,'').trim();
   }
-  // Find header row containing NOME and BSALDO
-  let headerIdx = -1;
-  let colPositions = null;
-  const headerKw = ['NOME','BSALDO'];
-  for(let i=0;i<lines.length;i++){
-    const up = lines[i].toUpperCase();
-    if(up.includes('NOME') && up.includes('BSALDO')){
-      headerIdx = i;
-      // Detect column order from header
-      const cols = lines[i].split(/\s{2,}|\t/);
-      colPositions = {};
-      cols.forEach((c,ci)=>{
-        const ck = c.trim().toUpperCase();
-        if(ck.includes('NOME')) colPositions.nome = ci;
-        if(ck.includes('BSALDO')) colPositions.bsaldo = ci;
+  // Each data row has: optional Nº FOLHA (digits), NOME (letters/spaces), then time values like 176:00 00:00 +12:59
+  // BSALDO is always the LAST time-like value on the line
+  // NOME is the text portion between the leading number and the first time value
+  const timeRe = /[+-]?\d{1,4}:\d{2}/g;
+  for(const l of lines){
+    // Skip headers, totals, metadata
+    if(/sub.?tota|^tota|^n[º°]\s*folha|^nome\b|^departamento|^per[ií]odo|^extrato|^secullum|^pagina|^p[aá]gina/i.test(l)) continue;
+    if(!/\d{1,4}:\d{2}/.test(l)) continue; // must have at least one time value
+    const timeMatches = [...l.matchAll(timeRe)];
+    if(timeMatches.length < 1) continue;
+    const bsaldo = timeMatches[timeMatches.length-1][0]; // last time = BSALDO
+    // Everything before the first time match is the "prefix" containing Nº FOLHA + NOME
+    const firstTimePos = timeMatches[0].index;
+    const prefix = l.substring(0, firstTimePos).trim();
+    if(!prefix) continue;
+    // Remove leading digits (Nº FOLHA) from prefix to get NOME
+    const nome = prefix.replace(/^\d+\s+/,'').trim();
+    if(!nome || nome.length < 3) continue;
+    // Skip if nome is all digits or looks like a number
+    if(/^\d+$/.test(nome)) continue;
+    const nomeN = normalizeStr(nome);
+    // Exact match first, then partial (PDF may have abbreviated names)
+    let colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===nomeN);
+    if(!colab){
+      // Try if PDF name is contained in colab name or vice-versa
+      colab = DB.colaboradores.find(c=>{
+        const cn = normalizeStr(c.nome||c.Nome||'');
+        return cn && (cn.includes(nomeN) || nomeN.includes(cn));
       });
-      break;
     }
-  }
-  if(headerIdx<0 || !colPositions || colPositions.nome===undefined || colPositions.bsaldo===undefined){
-    // Fallback: try line-by-line regex for "name   ...   HH:MM" pattern
-    const timeRe = /(-?\d{1,4}:\d{2})/g;
-    for(const l of lines){
-      if(/sub.?tota|^tota/i.test(l)) continue;
-      const matches = [...l.matchAll(timeRe)];
-      if(matches.length>=1){
-        // Last time-like value is BSALDO
-        const bsaldo = matches[matches.length-1][1];
-        // Name is everything before the first number block
-        const nameEnd = l.search(/\d/);
-        if(nameEnd>2){
-          const nome = l.substring(0,nameEnd).replace(/^\d+\s*/,'').trim();
-          if(nome && nome.length>2 && !/sub.?tota|^tota/i.test(nome)){
-            const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(nome));
-            out.push({
-              id:uid(), nome, horas:bsaldo, observacao:'',
-              cargo: colab?(colab.cargo||colab.Cargo||''):'',
-              lider: colab?(colab.lider||colab['Líder']||colab.Lider||''):'',
-              area: colab?(colab.area||colab.departamento||colab.departamentoRaw||''):departamento
-            });
-          }
-        }
-      }
-    }
-    return out;
-  }
-  // Parse data rows after header
-  for(let i=headerIdx+1;i<lines.length;i++){
-    const l = lines[i];
-    if(/sub.?tota|^tota/i.test(l)) continue;
-    if(/^departamento\s*:/i.test(l) || /^per[ií]odo\s*:/i.test(l)) continue;
-    // Split by 2+ spaces or tab
-    const parts = l.split(/\s{2,}|\t/).map(p=>p.trim()).filter(Boolean);
-    if(parts.length < Math.max(colPositions.nome, colPositions.bsaldo)+1) continue;
-    const nome = parts[colPositions.nome].replace(/^\d+\s*/,'').trim();
-    const bsaldo = parts[colPositions.bsaldo];
-    if(!nome || nome.length<3) continue;
-    // Skip if it looks like another header
-    if(nome.toUpperCase()==='NOME') continue;
-    const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(nome));
     out.push({
-      id:uid(), nome, horas:bsaldo, observacao:'',
+      id:uid(), nome: colab?(colab.nome||colab.Nome||nome):nome,
+      horas: bsaldo,
       cargo: colab?(colab.cargo||colab.Cargo||''):'',
       lider: colab?(colab.lider||colab['Líder']||colab.Lider||''):'',
       area: colab?(colab.area||colab.departamento||colab.departamentoRaw||''):departamento
@@ -1342,8 +1310,7 @@ const CRUD_PAGES = {
     parser:'parseBancoHorasImport', pageTitle:['Banco de Horas','Gestão de banco de horas — importar, adicionar, editar e remover'],
     cols:[
       {key:'nome',label:'Nome',type:'text'},{key:'horas',label:'Horas',type:'text'},
-      {key:'cargo',label:'Cargo',type:'text'},{key:'lider',label:'Líder',type:'text'},
-      {key:'area',label:'Área',type:'text'},{key:'observacao',label:'Observação',type:'text'}
+      {key:'cargo',label:'Cargo',type:'text',computed:true},{key:'lider',label:'Líder',type:'text',computed:true}
     ]
   },
   oneOnOnes: {
