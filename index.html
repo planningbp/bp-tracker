@@ -4259,8 +4259,42 @@ function openMeetingForm(id){
   UI.page = 'form';
   renderShellAndPage();
 }
+function applyEnpsAutoCalc(fd){
+  if(!DB.enps || !DB.enps.length) return;
+  const areaN = normalizeStr(fd.area||'');
+  const gerenteN = normalizeStr(fd.gerente||'');
+  const period = fd.period||'';
+  // 1) By leader + period
+  let rec = gerenteN ? DB.enps.find(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN && r.periodo===period) : null;
+  // 2) By department + period
+  if(!rec && areaN) rec = DB.enps.find(r=> r.tipo==='departamento' && normalizeStr(r.referencia)===areaN && r.periodo===period);
+  // 3) By area partial match + period
+  if(!rec && areaN) rec = DB.enps.find(r=> (r.tipo==='departamento'||r.tipo==='lider') && r.periodo===period && normalizeStr(r.referencia).includes(areaN));
+  // 4) Latest for leader regardless of period
+  if(!rec && gerenteN){
+    const lRecs = DB.enps.filter(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+    if(lRecs.length) rec = lRecs[0];
+  }
+  // 5) Latest for area regardless of period
+  if(!rec && areaN){
+    const aRecs = DB.enps.filter(r=> r.tipo==='departamento' && normalizeStr(r.referencia)===areaN).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+    if(aRecs.length) rec = aRecs[0];
+  }
+  // 6) If still nothing, get latest empresa record
+  if(!rec){
+    const eRecs = DB.enps.filter(r=> r.tipo==='empresa').sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+    if(eRecs.length) rec = eRecs[0];
+  }
+  if(rec){
+    if(rec.enps!=null) fd.enps = rec.enps;
+    if(rec.lnps!=null) fd.lnps = rec.lnps;
+    if(rec.semNotaEnps || rec.semNota) fd.semNota = true;
+  }
+}
 function applyAutoCalc(){
   const fd = UI.formData;
+  // Pull eNPS/lNPS even without area/period fully set
+  applyEnpsAutoCalc(fd);
   const auto = computeAutoData(fd.area, fd.period, fd.gerente, fd.dataInicio, fd.dataFim);
   if(!auto) return;
   fd.headcount = auto.headcount;
@@ -4275,33 +4309,11 @@ function applyAutoCalc(){
     return {nome:e.nome, cargo:e.cargo, admissao:fmtDate(e.admissao), milestone:e.milestone+' dias', milestoneDate:fmtDate(e.milestoneDate), status: saved ? saved.status : 'Pendente', observacao: saved ? saved.observacao||'' : ''};
   });
   fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, gestor:p.gestor||'', aprovador:p.aprovador||'', cargoAnterior:p.cargoAtual||'', salarioAnterior:p.salarioAtual||'', cargoNovo:p.cargoAprovado||'', salarioNovo:p.valorAprovado||'', reajuste:p.reajuste||'', pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
-  // Pull eNPS/lNPS from scores or DB.enps
+  // Pull eNPS/lNPS from scores (when area is available)
   const scoreMatch = DB.scores.find(s=> (s.tipo||'area')==='area' && normalizeStr(s.area)===normalizeStr(fd.area) && s.period===fd.period);
   if(scoreMatch){
     fd.enps = scoreMatch.enps;
     fd.lnps = scoreMatch.lnps;
-  }
-  if((!scoreMatch || (!fd.enps && !fd.lnps)) && DB.enps && DB.enps.length){
-    // Try to find latest eNPS record matching the area/leader/period
-    const areaN = normalizeStr(fd.area);
-    const gerenteN = normalizeStr(fd.gerente||'');
-    // Match by leader name first, then by department/area
-    let enpsRec = DB.enps.find(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN && r.periodo===fd.period);
-    if(!enpsRec) enpsRec = DB.enps.find(r=> r.tipo==='departamento' && normalizeStr(r.referencia)===areaN && r.periodo===fd.period);
-    if(!enpsRec){
-      // Try matching area name inside referencia
-      enpsRec = DB.enps.find(r=> (r.tipo==='departamento'||r.tipo==='lider') && r.periodo===fd.period && normalizeStr(r.referencia).includes(areaN));
-    }
-    if(!enpsRec){
-      // Get latest record for the leader regardless of period
-      const liderRecs = DB.enps.filter(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
-      if(liderRecs.length) enpsRec = liderRecs[0];
-    }
-    if(enpsRec){
-      if(enpsRec.enps!=null) fd.enps = enpsRec.enps;
-      if(enpsRec.lnps!=null) fd.lnps = enpsRec.lnps;
-      if(enpsRec.semNotaEnps || enpsRec.semNota) fd.semNota = true;
-    }
   }
   // Auto-populate banco de horas from imported data
   if(DB.bancoHorasImport.length){
