@@ -1143,16 +1143,34 @@ function isPromoSalarial(p){
 }
 
 function parsePDIs(rows){
+  // Flexible: detect columns by header names
+  const header = (rows[0]||[]).map(h=>normalizeStr((h||'').toString()));
+  const colIdx = (keywords) => header.findIndex(h=> keywords.some(k=>h.includes(k)));
+  const iNome = colIdx(['nome','colaborador']);
+  const iStatus = colIdx(['status']);
+  const iLider = colIdx(['lider','líder']);
+  const iAprovado = colIdx(['aprovado']);
+  const iTotal = colIdx(['total','areas de desenvolvimento','áreas de desenvolvimento']);
+  const iAtualizado = colIdx(['atualizado']);
+  const iNaoIniciada = colIdx(['nao iniciada','não iniciada']);
+  const iEmProgresso = colIdx(['em progresso','andamento']);
+  const iFinalizada = colIdx(['finalizada','concluida','concluída']);
   const out=[];
   for(let i=1;i<rows.length;i++){
-    const r = rows[i]; if(!r || !r[0]) continue;
-    // Match area from colaboradores
-    const colabMatch = DB.colaboradores.find(c=> normalizeStr(c.nome)===normalizeStr(r[0]));
+    const r = rows[i]; if(!r) continue;
+    const nome = (r[iNome>=0?iNome:0]||'').toString().trim();
+    if(!nome) continue;
+    const colabMatch = DB.colaboradores.find(c=> normalizeStr(c.nome)===normalizeStr(nome));
     out.push({
-      id: uid(), nome: r[0], status: r[1]||'', lider: r[2]||'',
-      aprovado: r[3]||'', totalAreas: Number(r[4])||0,
-      atualizadoEm: r[5]||'', naoIniciada: Number(r[6])||0,
-      emProgresso: Number(r[7])||0, finalizada: Number(r[8])||0,
+      id: uid(), nome,
+      status: iStatus>=0 ? (r[iStatus]||'').toString().trim() : '',
+      lider: iLider>=0 ? (r[iLider]||'').toString().trim() : (colabMatch ? (colabMatch.lider||colabMatch['Líder']||colabMatch.Lider||'') : ''),
+      aprovado: iAprovado>=0 ? (r[iAprovado]||'').toString().trim() : '',
+      totalAreas: Number(r[iTotal>=0?iTotal:1])||0,
+      atualizadoEm: iAtualizado>=0 ? (r[iAtualizado]||'').toString().trim() : '',
+      naoIniciada: Number(r[iNaoIniciada>=0?iNaoIniciada:2])||0,
+      emProgresso: Number(r[iEmProgresso>=0?iEmProgresso:3])||0,
+      finalizada: Number(r[iFinalizada>=0?iFinalizada:4])||0,
       area: colabMatch ? (colabMatch.area||colabMatch.departamentoRaw||'') : ''
     });
   }
