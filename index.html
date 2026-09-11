@@ -1231,7 +1231,7 @@ function parseBancoHorasPDF(text){
   const timeRe = /[+-]?\d{1,4}:\d{2}/g;
   for(const l of lines){
     // Skip headers, totals, metadata
-    if(/sub.?tota|^tota|^n[º°]\s*folha|^nome\b|^departamento|^per[ií]odo|^extrato|^secullum|^pagina|^p[aá]gina/i.test(l)) continue;
+    if(/sub.?tota|^tota|^n[º°]\s*folha|^nome\b|^departamento|^per[ií]odo|^extrato|^secullum|^pagina|^p[aá]gina|emitido\s*em|^\d{2}\/\d{2}\/\d{4}/i.test(l)) continue;
     if(!/\d{1,4}:\d{2}/.test(l)) continue; // must have at least one time value
     const timeMatches = [...l.matchAll(timeRe)];
     if(timeMatches.length < 1) continue;
