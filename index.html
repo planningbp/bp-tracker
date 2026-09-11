@@ -2026,9 +2026,9 @@ const LIDER_NAV = [
 function renderLiderShell(){
   const nome = SESSION.liderNome;
   const initials = nome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-  const isH = isHead(nome);
-  const isC = isCoordinator(nome);
-  const role = isH ? 'Head' : isC ? 'Coordenador(a)' : 'Líder';
+  const liderColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===normalizeStr(nome));
+  const liderCargo = liderColab ? (liderColab.cargo||liderColab.Cargo||'') : '';
+  const role = liderCargo ? liderCargo.toUpperCase() : (isHead(nome) ? 'HEAD' : isCoordinator(nome) ? 'COORDENADOR(A)' : 'LÍDER');
   const team = getLiderTeam();
   const titles = {
     'lider-dashboard':['Minha Equipe','Visão geral dos seus liderados'],
@@ -5672,10 +5672,6 @@ function renderLideresPage(){
   }
 
   function liderCard(liderNome){
-    const isH = isHead(liderNome);
-    const isC = isCoordinator(liderNome);
-    const role = isH ? 'Head' : isC ? 'Coordenador(a)' : 'Líder';
-    const roleColor = isH ? '#000000' : isC ? '#962DFF' : '#14C8FA';
     const team = getTeamTree(liderNome);
     const directs = getDirectReports(liderNome);
     const initials = liderNome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
@@ -5684,7 +5680,11 @@ function renderLideresPage(){
     // Find leader's own info
     const liderColab = colabs.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
     const liderArea = liderColab ? (liderColab.area||liderColab.departamento||'') : '';
-    const liderCargo = liderColab ? (liderColab.cargo||'') : '';
+    const liderCargo = liderColab ? (liderColab.cargo||liderColab.Cargo||'') : '';
+    // Use actual cargo for badge; fallback to hierarchy-based role
+    const cargoNorm = normalizeStr(liderCargo);
+    const role = liderCargo ? liderCargo.toUpperCase() : (isHead(liderNome) ? 'HEAD' : isCoordinator(liderNome) ? 'COORDENADOR(A)' : 'LÍDER');
+    const roleColor = /head|diretor|socio|sócio/i.test(cargoNorm) ? '#000000' : /gerente/i.test(cargoNorm) ? '#22c55e' : /coordenador/i.test(cargoNorm) ? '#962DFF' : /supervisor/i.test(cargoNorm) ? '#f59e0b' : '#14C8FA';
 
     // Stats from team
     const teamNames = team.map(c=>normalizeStr(c.nome||c.Nome||''));
