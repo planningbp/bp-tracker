@@ -2955,6 +2955,7 @@ function bindShell(){
 }
 
 function renderPageContent(){
+  clearMyColabsCache();
   const c = document.getElementById('content');
   const actions = document.getElementById('topbarActions');
   actions.innerHTML='';
@@ -3008,17 +3009,19 @@ function renderDashboard(){
   const fArea = UI.dashArea || '';
   const fLider = UI.dashLider || '';
 
-  // Get base data
-  let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
-  let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
-  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && isPromoSalarial(p));
+  // Get base data — use hierarchy-aware filtering
+  const expandedAreas = getMyExpandedAreas();
+  const myColabNames = getMyColabNames();
+  let myColabs = getMyColaboradores();
+  let myDeslig = DB.desligamentos.filter(d=> expandedAreas.has(normalizeStr(d.area||d.departamentoRaw||'')) || myColabNames.has(normalizeStr(d.nome||'')));
+  let myPromos = DB.promocoes.filter(p=> (expandedAreas.has(normalizeStr(p.area||'')) || myColabNames.has(normalizeStr(p.nome||''))) && isPromoSalarial(p));
   let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
 
   // Apply area filter
   if(fArea){
-    myColabs = myColabs.filter(c=>(c.area||c.departamento||'')===fArea);
-    myDeslig = myDeslig.filter(d=>(d.area||'')===fArea);
-    myPromos = myPromos.filter(p=>(p.area||'')===fArea);
+    myColabs = myColabs.filter(c=>normalizeStr(c.area||c.departamento||'')===normalizeStr(fArea));
+    myDeslig = myDeslig.filter(d=>normalizeStr(d.area||'')===normalizeStr(fArea));
+    myPromos = myPromos.filter(p=>normalizeStr(p.area||'')===normalizeStr(fArea));
     myMeetings = myMeetings.filter(m=> normalizeStr(m.area||'')===normalizeStr(fArea));
   }
   // Apply leader filter
@@ -3042,17 +3045,17 @@ function renderDashboard(){
   const totalDesl = desligPeriod.length;
   const turnover = totalHC > 0 ? Math.round(totalDesl/totalHC*10000)/100 : 0;
   const totalPromos = promosPeriod.length;
-  const totalPDIs = DB.pdis.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && (p.status||'')!=='Concluído').length;
+  const totalPDIs = DB.pdis.filter(p=> expandedAreas.has(normalizeStr(p.area||'')) && (p.status||'')!=='Concluído').length;
   const totalSolPendentes = DB.solicitacoes.filter(s=>s.status==='pendente').length;
 
   // eNPS/lNPS from scores
-  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
+  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : expandedAreas.has(normalizeStr(s.area||'')));
   const avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0);
   const avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0);
 
-  // Dropdown options
-  const allAreasList = bp.areas.slice().sort();
-  const allLideres = [...new Set(DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||''))).map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))].sort();
+  // Dropdown options — include expanded areas from hierarchy
+  const allAreasList = [...expandedAreas].map(a=>{ const c=myColabs.find(c2=>normalizeStr(c2.area||c2.departamento||'')===a); return c?(c.area||c.departamento||a):a; }).sort();
+  const allLideres = [...new Set(myColabs.map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))].sort();
 
   // Meeting status for status section
   const period = UI.filters.dashPeriod || currentPeriodGuess();
@@ -3412,19 +3415,20 @@ function bindDashboard(){
   if(elArea) elArea.addEventListener('change', ()=>{ UI.dashArea=elArea.value; rerender(); });
   if(elLider) elLider.addEventListener('change', ()=>{ UI.dashLider=elLider.value; rerender(); });
 
-  // Gather data for charts (same logic as render)
+  // Gather data for charts (same logic as render — hierarchy-aware)
   const bp = currentBP();
-  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+  const expandedAreas2 = getMyExpandedAreas();
+  const myColabNames2 = getMyColabNames();
   const fArea = UI.dashArea || '';
   const fLider = UI.dashLider || '';
-  let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
-  let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
-  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && isPromoSalarial(p));
+  let myColabs = getMyColaboradores();
+  let myDeslig = DB.desligamentos.filter(d=> expandedAreas2.has(normalizeStr(d.area||d.departamentoRaw||'')) || myColabNames2.has(normalizeStr(d.nome||'')));
+  let myPromos = DB.promocoes.filter(p=> (expandedAreas2.has(normalizeStr(p.area||'')) || myColabNames2.has(normalizeStr(p.nome||''))) && isPromoSalarial(p));
   let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
   if(fArea){
-    myColabs = myColabs.filter(c=>(c.area||c.departamento||'')===fArea);
-    myDeslig = myDeslig.filter(d=>(d.area||'')===fArea);
-    myPromos = myPromos.filter(p=>(p.area||'')===fArea);
+    myColabs = myColabs.filter(c=>normalizeStr(c.area||c.departamento||'')===normalizeStr(fArea));
+    myDeslig = myDeslig.filter(d=>normalizeStr(d.area||'')===normalizeStr(fArea));
+    myPromos = myPromos.filter(p=>normalizeStr(p.area||'')===normalizeStr(fArea));
     myMeetings = myMeetings.filter(m=> normalizeStr(m.area||'')===normalizeStr(fArea));
   }
   if(fLider){
@@ -3435,7 +3439,7 @@ function bindDashboard(){
 
   const months = buildMonthLabels(12);
   const labels = months.map(m=>m.label);
-  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : bpAreas.includes(normalizeStr(s.area||'')));
+  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : expandedAreas2.has(normalizeStr(s.area||'')));
   const periods = CONFIG.periods;
 
   // Admissões vs Desligamentos
@@ -5174,12 +5178,9 @@ function renderAcompanhamentos(){
       </div>
 
       ${(()=>{
-        const bp = currentBP();
-        const bpAreas = bp.areas.map(a=>normalizeStr(a));
+        const myNames = getMyColabNames();
         const myOnes = DB.oneOnOnes.filter(o=>{
-          const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(o.nome));
-          if(!colab) return true;
-          return bpAreas.includes(normalizeStr(colab.area||colab.departamento||''));
+          return myNames.has(normalizeStr(o.nome));
         });
         myOnes.sort((a,b)=> (b.data||'').localeCompare(a.data||''));
         if(myOnes.length===0) return '<div style="text-align:center;padding:40px;color:#aaa;font-size:14px;border:1px dashed #ddd;border-radius:12px;">Nenhum 1:1 registrado ainda.</div>';
@@ -6020,13 +6021,55 @@ function bindLideresPage(){
 /* =========================================================
    COLABORADORES PAGE
 ========================================================= */
+// Cache for getMyColaboradores — cleared on rerender
+var _myColabsCache = null;
+var _myColabNamesCache = null;
+var _myExpandedAreasCache = null;
+function clearMyColabsCache(){ _myColabsCache=null; _myColabNamesCache=null; _myExpandedAreasCache=null; }
+
 function getMyColaboradores(){
+  if(_myColabsCache) return _myColabsCache;
   const bp = currentBP();
   const bpAreas = bp.areas.map(a=>normalizeStr(a));
-  return DB.colaboradores.filter(c => {
+  // 1) All collaborators whose area matches BP areas
+  const byArea = DB.colaboradores.filter(c => {
     const cArea = normalizeStr(c.area||c.departamento||'');
     return !cArea || bpAreas.includes(cArea);
   });
+  // 2) Find leaders that belong to BP areas
+  const areaLeaders = new Set();
+  byArea.forEach(c=>{
+    const nome = normalizeStr(c.nome||c.Nome||'');
+    if(nome && isCargoLideranca(c.cargo||c.Cargo||'')) areaLeaders.add(nome);
+    const l = normalizeStr(c.lider||c['Líder']||c.Lider||'');
+    if(l) areaLeaders.add(l);
+  });
+  // 3) Include anyone in those leaders' trees (catches cross-area subordinates)
+  const allNames = new Set(byArea.map(c=>normalizeStr(c.nome||c.Nome||'')));
+  areaLeaders.forEach(ldr=>{
+    getTeamTree(ldr).forEach(c=>{
+      const nk = normalizeStr(c.nome||c.Nome||'');
+      if(!allNames.has(nk)){ allNames.add(nk); }
+    });
+  });
+  _myColabsCache = DB.colaboradores.filter(c=> allNames.has(normalizeStr(c.nome||c.Nome||'')));
+  _myColabNamesCache = allNames;
+  // Expanded areas: BP areas + all areas from matched colabs
+  const expandedAreas = new Set(bpAreas);
+  _myColabsCache.forEach(c=>{
+    const a = normalizeStr(c.area||c.departamento||'');
+    if(a) expandedAreas.add(a);
+  });
+  _myExpandedAreasCache = expandedAreas;
+  return _myColabsCache;
+}
+function getMyColabNames(){
+  if(!_myColabNamesCache) getMyColaboradores();
+  return _myColabNamesCache;
+}
+function getMyExpandedAreas(){
+  if(!_myExpandedAreasCache) getMyColaboradores();
+  return _myExpandedAreasCache;
 }
 
 if(!UI.colabColFilters) UI.colabColFilters = {};
@@ -6865,14 +6908,16 @@ function countByMonth(items, dateField, months){
 function getIndicadoresData(filterArea){
   const bp = currentBP();
   const bpAreas = bp.areas.map(a=>normalizeStr(a));
-  let myColabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
-  let myDeslig = DB.desligamentos.filter(d=> bpAreas.includes(normalizeStr(d.area||d.departamentoRaw||'')));
-  let myPromos = DB.promocoes.filter(p=> bpAreas.includes(normalizeStr(p.area||'')) && isPromoSalarial(p));
+  const ea = getMyExpandedAreas();
+  const cn = getMyColabNames();
+  let myColabs = getMyColaboradores();
+  let myDeslig = DB.desligamentos.filter(d=> ea.has(normalizeStr(d.area||d.departamentoRaw||'')) || cn.has(normalizeStr(d.nome||'')));
+  let myPromos = DB.promocoes.filter(p=> (ea.has(normalizeStr(p.area||'')) || cn.has(normalizeStr(p.nome||''))) && isPromoSalarial(p));
   let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
   if(filterArea){
-    myColabs = myColabs.filter(c=>(c.area||c.departamento||'')===filterArea);
-    myDeslig = myDeslig.filter(d=>(d.area||'')===filterArea);
-    myPromos = myPromos.filter(p=>(p.area||'')===filterArea);
+    myColabs = myColabs.filter(c=>normalizeStr(c.area||c.departamento||'')===normalizeStr(filterArea));
+    myDeslig = myDeslig.filter(d=>normalizeStr(d.area||'')===normalizeStr(filterArea));
+    myPromos = myPromos.filter(p=>normalizeStr(p.area||'')===normalizeStr(filterArea));
     myMeetings = myMeetings.filter(m=> normalizeStr(m.area||'')===normalizeStr(filterArea));
   }
   return {bp, bpAreas, myColabs, myDeslig, myPromos, myMeetings};
@@ -6929,9 +6974,8 @@ function exportColaboradoresPDF(filterArea){
   const {jsPDF} = window.jspdf;
   const doc = new jsPDF({orientation:'landscape'});
   const bp = currentBP();
-  const bpAreas = bp.areas.map(a=>normalizeStr(a));
-  let colabs = DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
-  if(filterArea) colabs = colabs.filter(c=>(c.area||c.departamento||'')===filterArea);
+  let colabs = getMyColaboradores();
+  if(filterArea) colabs = colabs.filter(c=>normalizeStr(c.area||c.departamento||'')===normalizeStr(filterArea));
   colabs.sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
 
   const subtitle = filterArea ? 'Área: '+filterArea+' · '+colabs.length+' colaboradores' : 'Todas as áreas · '+colabs.length+' colaboradores';
