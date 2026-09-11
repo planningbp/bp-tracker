@@ -1596,14 +1596,22 @@ function bindCrudPage(pageKey){
           for(let p=1; p<=pdf.numPages; p++){
             const page = await pdf.getPage(p);
             const tc = await page.getTextContent();
-            const pageLines = {};
-            tc.items.forEach(item=>{
-              const y = Math.round(item.transform[5]);
-              if(!pageLines[y]) pageLines[y]='';
-              pageLines[y] += item.str + '  ';
+            // Group items by Y with tolerance (items within 4px = same row)
+            const items = tc.items.map(item=>({str:item.str, x:item.transform[4], y:item.transform[5]}));
+            items.sort((a,b)=>b.y-a.y || a.x-b.x);
+            const rows = [];
+            let curRow = null;
+            items.forEach(item=>{
+              if(!curRow || Math.abs(item.y - curRow.y) > 4){
+                curRow = {y:item.y, parts:[]};
+                rows.push(curRow);
+              }
+              curRow.parts.push(item);
             });
-            const sortedYs = Object.keys(pageLines).map(Number).sort((a,b)=>b-a);
-            sortedYs.forEach(y=>{ fullText += pageLines[y].trim()+'\n'; });
+            rows.forEach(row=>{
+              row.parts.sort((a,b)=>a.x-b.x);
+              fullText += row.parts.map(p=>p.str).join('  ').trim()+'\n';
+            });
           }
           const pdfParser = cfg.parser==='parseBancoHorasImport' ? 'parseBancoHorasPDF' : cfg.parser+'PDF';
           const parserFn = window[pdfParser] || window.parseBancoHorasPDF;
