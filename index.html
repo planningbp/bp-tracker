@@ -6063,7 +6063,7 @@ function renderColaboradoresPage(){
   // Apply per-column filters
   const filterCols = ['nome','lider','departamento','area','cargo','regime'];
   filterCols.forEach(col=>{
-    if(cf[col]) filtered = filtered.filter(c=> colVal(c,col)===cf[col]);
+    if(cf[col]) filtered = filtered.filter(c=> normalizeStr(colVal(c,col))===normalizeStr(cf[col]));
   });
   // Tempo da última promoção filter
   if(cf.tempo){
@@ -6086,7 +6086,14 @@ function renderColaboradoresPage(){
 
   // Build unique values for dropdowns (from ALL colabs, not filtered)
   function uniqueVals(col){
-    return [...new Set(colabs.map(c=>colVal(c,col)).filter(Boolean))].sort();
+    const seen = {};
+    colabs.forEach(c=>{
+      const v = colVal(c,col);
+      if(!v) return;
+      const k = normalizeStr(v);
+      if(!seen[k]) seen[k] = v;
+    });
+    return Object.values(seen).sort((a,b)=>a.localeCompare(b,'pt-BR'));
   }
 
   const areaColors = AREA_COLORS_MAP;
@@ -7380,24 +7387,27 @@ function renderEquidade(){
 
   function fmt(v){return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
-  // Group by Cargo
+  // Group by Cargo (case-insensitive)
   const byCargo={};
+  const cargoDisplayName={};
   colabs.forEach(c=>{
-    const cargo=c.cargo||'Não informado';
-    if(!byCargo[cargo]) byCargo[cargo]=[];
-    byCargo[cargo].push(parseSalary(c.faixaSalarial||c.salario||c.Salário||0));
+    const cargoRaw=c.cargo||'Não informado';
+    const cargoKey=cargoRaw.toUpperCase().trim();
+    if(!byCargo[cargoKey]){ byCargo[cargoKey]=[]; cargoDisplayName[cargoKey]=cargoRaw; }
+    byCargo[cargoKey].push(parseSalary(c.faixaSalarial||c.salario||c.Salário||0));
   });
 
-  const cargoRows=Object.keys(byCargo).sort().map(cargo=>{
-    const sals=byCargo[cargo].filter(s=>s>0);
-    if(!sals.length) return `<tr><td style="font-weight:600;">${esc(cargo)}</td><td>${byCargo[cargo].length}</td><td colspan="4" style="color:var(--text-light);">Sem dados salariais</td></tr>`;
+  const cargoRows=Object.keys(byCargo).sort().map(cargoKey=>{
+    const cargo=cargoDisplayName[cargoKey]||cargoKey;
+    const sals=byCargo[cargoKey].filter(s=>s>0);
+    if(!sals.length) return `<tr><td style="font-weight:600;">${esc(cargo)}</td><td>${byCargo[cargoKey].length}</td><td colspan="4" style="color:var(--text-light);">Sem dados salariais</td></tr>`;
     const mn=Math.min(...sals),mx=Math.max(...sals),av=sals.reduce((a,b)=>a+b,0)/sals.length;
     const amp=mx-mn;
     const ampPct=av>0?(amp/av*100):0;
     const isHigh=ampPct>40;
     return `<tr>
       <td style="font-weight:600;">${esc(cargo)}</td>
-      <td>${byCargo[cargo].length}</td>
+      <td>${byCargo[cargoKey].length}</td>
       <td>${fmt(mn)}</td>
       <td>${fmt(mx)}</td>
       <td>${fmt(av)}</td>
