@@ -1240,8 +1240,8 @@ function parseBancoHorasPDF(text){
     const firstTimePos = timeMatches[0].index;
     const prefix = l.substring(0, firstTimePos).trim();
     if(!prefix) continue;
-    // Remove leading digits (Nº FOLHA) from prefix to get NOME
-    const nome = prefix.replace(/^\d+\s+/,'').trim();
+    // Remove leading Nº FOLHA (digits, dots, hyphens) from prefix to get NOME
+    const nome = prefix.replace(/^[\d.\-/]+\s+/,'').trim();
     if(!nome || nome.length < 3) continue;
     // Skip if nome is all digits or looks like a number
     if(/^\d+$/.test(nome)) continue;
