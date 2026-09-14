@@ -4939,10 +4939,38 @@ function renderMeetingDetail(){
       <table><tbody>
         <tr><td>eNPS</td><td><strong>${(m.semNotaEnps||m.semNota)?'<span style="color:#888;font-style:italic;">Sem nota</span>':m.enps}</strong></td></tr>
         <tr><td>lNPS</td><td><strong>${(m.semNotaLnps||m.semNota)?'<span style="color:#888;font-style:italic;">Sem nota</span>':(m.lnps!=null?m.lnps:'—')}</strong></td></tr>
-        <tr><td>Férias vencidas</td><td><strong>${(m.feriasTable||[]).length}</strong></td></tr>
         <tr><td>Banco de horas</td><td><strong>${(m.bancoHorasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
-        <tr><td>Horas extras</td><td><strong>${(m.horasExtrasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
       </tbody></table>
+      ${(()=>{
+        // Pull eNPS/lNPS comments from DB.enps for all leaders in hierarchy
+        const gerenteN = normalizeStr(m.gerente||'');
+        const teamTree = gerenteN ? getTeamTree(m.gerente||'') : [];
+        const subLiders = new Set();
+        if(gerenteN) subLiders.add(gerenteN);
+        teamTree.forEach(c=>{
+          const cn = normalizeStr(c.nome||c.Nome||'');
+          if(cn && (isCargoLideranca(c.cargo||c.Cargo||'') || DB.colaboradores.some(cc=>normalizeStr(cc.lider||cc['Líder']||cc.Lider||'')===cn))) subLiders.add(cn);
+        });
+        let comentRecs = (DB.enps||[]).filter(r=> r.tipo==='lider' && subLiders.has(normalizeStr(r.referencia||'')) && ((r.comentariosEnps||r.comentarios||'').trim() || (r.comentariosLnps||'').trim()));
+        // Get latest per leader
+        const latest = {};
+        comentRecs.forEach(r=>{ const k=normalizeStr(r.referencia); if(!latest[k]||(r.periodo||'').localeCompare(latest[k].periodo||'')>0) latest[k]=r; });
+        const recs = Object.values(latest);
+        if(!recs.length) return '';
+        let h = '<div style="margin-top:12px;border-top:1px solid #eee;padding-top:12px;">';
+        h += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#555;">Comentários eNPS/lNPS</div>';
+        recs.forEach(r=>{
+          const eC = (r.comentariosEnps||r.comentarios||'').trim();
+          const lC = (r.comentariosLnps||'').trim();
+          h += '<div style="background:#fafbfc;border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid #f0f0f0;">';
+          h += '<div style="font-weight:600;font-size:12px;margin-bottom:4px;">'+esc(r.referencia||'')+' <span style="color:#888;font-weight:400;">('+esc(r.periodo||'')+')</span></div>';
+          if(eC) h += '<div style="font-size:12px;color:#444;margin-bottom:2px;"><span style="color:#22c55e;font-weight:600;">eNPS:</span> '+esc(eC)+'</div>';
+          if(lC) h += '<div style="font-size:12px;color:#444;"><span style="color:#962DFF;font-weight:600;">lNPS:</span> '+esc(lC)+'</div>';
+          h += '</div>';
+        });
+        h += '</div>';
+        return h;
+      })()}
     </div>
   </div>
   <div data-report-topic="admissoes">${detailMiniTable('Admissões no período', m.admissoesTable, ['Nome','Cargo','Líder','Departamento','Regime','Data admissão'], ['nome','cargo','lider','departamento','regime','admissao'])}</div>
@@ -8466,7 +8494,47 @@ function renderEnpsPage(){
       <div style="height:400px;"><canvas id="lnpsBarChart"></canvas></div>
     </div>
   </div>`;
-  // Evolution line charts per department (collapsible)
+  // Resumos / Comentários por líder
+  {
+    const comentRecs = (DB.enps||[]).filter(r=>{
+      if(tab!=='geral' && r.tipo!==tab) return false;
+      return (r.comentariosEnps||r.comentarios||r.comentariosLnps||'').trim();
+    });
+    // Get latest with comments per reference
+    const latestComents = {};
+    comentRecs.forEach(r=>{
+      const key = normalizeStr(r.referencia||'');
+      if(!latestComents[key] || (r.periodo||'').localeCompare(latestComents[key].periodo||'')>0) latestComents[key] = r;
+    });
+    const recs = Object.values(latestComents).sort((a,b)=>(a.referencia||'').localeCompare(b.referencia||''));
+    if(recs.length){
+      html += `<div class="card" style="padding:20px;margin-bottom:20px;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Resumos e Comentários</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">`;
+      recs.forEach(r=>{
+        const eC = (r.comentariosEnps||r.comentarios||'').trim();
+        const lC = (r.comentariosLnps||'').trim();
+        if(!eC && !lC) return;
+        const eVal = r.enps!=null ? r.enps : '—';
+        const lVal = r.lnps!=null ? r.lnps : '—';
+        html += `<div style="background:#fafbfc;border-radius:10px;padding:14px;border:1px solid #eee;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-weight:600;font-size:13px;">${esc(r.referencia||'')}</span>
+            <span style="font-size:11px;color:#888;">${esc(r.periodo||'')}</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <span style="font-size:11px;padding:2px 8px;border-radius:8px;background:${enpsColor(eVal)}22;color:${enpsColor(eVal)};font-weight:600;">eNPS: ${eVal}</span>
+            <span style="font-size:11px;padding:2px 8px;border-radius:8px;background:${enpsColor(lVal)}22;color:${enpsColor(lVal)};font-weight:600;">lNPS: ${lVal}</span>
+          </div>`;
+        if(eC) html += `<div style="font-size:12px;color:#444;margin-bottom:4px;"><strong style="color:#22c55e;">eNPS:</strong> ${esc(eC)}</div>`;
+        if(lC) html += `<div style="font-size:12px;color:#444;"><strong style="color:#962DFF;">lNPS:</strong> ${esc(lC)}</div>`;
+        html += `</div>`;
+      });
+      html += `</div></div>`;
+    }
+  }
+
+  // Evolution line charts per department
   html += `<div class="card" style="padding:20px;margin-bottom:20px;">
     <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Evolução por Período</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
