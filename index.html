@@ -2322,7 +2322,7 @@ function bindLiderShell(){
   if(liderPage==='lider-dashboard') renderLiderDashboard(ct);
   else if(liderPage==='lider-pdis') renderLiderDataPage(ct, 'pdis', ['nome','titulo','status','prazo','progresso'], ['Colaborador','Título','Status','Prazo','Progresso']);
   else if(liderPage==='lider-1on1s') renderLiderDataPage(ct, 'oneOnOnes', ['nome','data','tipo','resumo'], ['Colaborador','Data','Tipo','Resumo']);
-  else if(liderPage==='lider-banco') renderLiderDataPage(ct, 'bancoHorasImport', ['nome','mes','saldo','observacao'], ['Colaborador','Mês','Saldo','Observação']);
+  else if(liderPage==='lider-banco') renderLiderDataPage(ct, 'bancoHorasImport', ['nome','horas','cargo','lider'], ['Colaborador','Horas','Cargo','Líder']);
   else if(liderPage==='lider-acomp') renderLiderDataPage(ct, 'acompanhamentos', ['colaborador','tipo','data','responsavel','status','observacoes'], ['Colaborador','Tipo','Data','Responsável','Status','Observações']);
   else if(liderPage==='lider-promo') renderLiderDataPage(ct, 'promocoes', ['nome','cargoAtual','cargoAprovado','area','gestor'], ['Colaborador','Cargo Anterior','Cargo Novo','Área','Gestor']);
   else if(liderPage==='lider-desl') renderLiderDataPage(ct, 'desligamentos', ['nome','cargo','tipo','motivo','area'], ['Colaborador','Cargo','Tipo','Motivo','Área']);
@@ -2902,6 +2902,12 @@ function renderLiderDataPage(ct, dbKey, fields, labels){
 
 function renderLiderColabDetail(ct){
   if(!liderDetailColab){ liderPage='lider-dashboard'; render(); return; }
+  // Security: only allow viewing team members
+  const teamNames = getLiderTeamNames();
+  if(!teamNames.includes(normalizeStr(liderDetailColab))){
+    ct.innerHTML='<div class="card" style="padding:40px;text-align:center;color:#aaa;">Acesso negado — colaborador não pertence à sua equipe</div>';
+    return;
+  }
   const colab = DB.colaboradores.find(c=> (c.nome||c.Nome||'')===liderDetailColab);
   if(!colab){ ct.innerHTML='<div class="card" style="padding:40px;text-align:center;color:#aaa;">Colaborador não encontrado</div>'; return; }
 
@@ -8271,7 +8277,9 @@ function renderLiderForms(ct){
     {key:'efetivacao', label:'Efetivação de Estagiário'}
   ];
   const deptOptions = (() => {
-    const s = new Set(DB.colaboradores.map(c=>c.area||c.departamento||'').filter(Boolean));
+    // Only show departments from the leader's team
+    const teamMembers = getLiderTeam();
+    const s = new Set(teamMembers.map(c=>c.area||c.departamento||'').filter(Boolean));
     return [...s].sort().map(d=>'<option value="'+esc(d)+'">'+esc(d)+'</option>').join('');
   })();
   const mesesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
