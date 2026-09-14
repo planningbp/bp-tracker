@@ -4559,9 +4559,84 @@ function renderMeetingForm(){
           </div>
           <div id="enpsFields" style="${fd.semNota?'opacity:0.4;pointer-events:none':''}">
             <div class="field-grid">
-              <div class="field"><label>eNPS</label><input id="f_enps" type="number" value="${fd.enps}"></div>
-              <div class="field"><label>lNPS (liderança)</label><input id="f_lnps" type="number" value="${fd.lnps}"></div>
+              <div class="field"><label>eNPS (média)</label><input id="f_enps" type="number" value="${fd.enps}"></div>
+              <div class="field"><label>lNPS (média liderança)</label><input id="f_lnps" type="number" value="${fd.lnps}"></div>
             </div>
+            ${(()=>{
+              // Show breakdown: head's own, department, all direct+indirect leaders
+              const gerenteN = normalizeStr(fd.gerente||'');
+              if(!gerenteN || !DB.enps || !DB.enps.length) return '';
+              const period = fd.period||'';
+              const areaN = normalizeStr(fd.area||'');
+
+              // Collect all sub-leaders (direct + indirect)
+              const teamTree = getTeamTree(fd.gerente||'');
+              const subLiders = new Set();
+              subLiders.add(gerenteN);
+              teamTree.forEach(c=>{
+                const cn = normalizeStr(c.nome||c.Nome||'');
+                if(cn && (isCargoLideranca(c.cargo||c.Cargo||'') || DB.colaboradores.some(cc=>normalizeStr(cc.lider||cc['Líder']||cc.Lider||'')===cn))) subLiders.add(cn);
+              });
+
+              // Helper to find best record
+              function findRec(tipo, refN){
+                let rec = DB.enps.find(r=> r.tipo===tipo && normalizeStr(r.referencia)===refN && r.periodo===period);
+                if(!rec){
+                  const recs = DB.enps.filter(r=> r.tipo===tipo && normalizeStr(r.referencia)===refN).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+                  if(recs.length) rec = recs[0];
+                }
+                return rec;
+              }
+
+              const rows = [];
+              // 1) Department record
+              if(areaN){
+                const deptRec = findRec('departamento', areaN);
+                if(deptRec) rows.push({...deptRec, _tipo:'depto'});
+              }
+              // 2) All leaders (head + subordinates)
+              subLiders.forEach(ldrN=>{
+                const rec = findRec('lider', ldrN);
+                if(rec) rows.push({...rec, _tipo: ldrN===gerenteN ? 'head' : 'lider'});
+              });
+
+              if(!rows.length) return '';
+
+              function renderRow(r, labelPrefix){
+                const eVal = (r.semNotaEnps||r.semNota) ? '<span style="color:#888;">Sem nota</span>' : (r.enps!=null?r.enps:'—');
+                const lVal = (r.semNotaLnps) ? '<span style="color:#888;">Sem nota</span>' : (r.lnps!=null?r.lnps:'—');
+                const eC = (r.comentariosEnps||r.comentarios||'').trim();
+                const lC = (r.comentariosLnps||'').trim();
+                let comments = '';
+                if(eC) comments += '<span style="color:#22c55e;font-weight:600;">eNPS:</span> '+esc(eC);
+                if(eC && lC) comments += '<br>';
+                if(lC) comments += '<span style="color:#962DFF;font-weight:600;">lNPS:</span> '+esc(lC);
+                if(!comments) comments = '—';
+                const isBold = r._tipo==='depto' || r._tipo==='head';
+                const bg = r._tipo==='depto' ? 'background:#f0fdf4;' : r._tipo==='head' ? 'background:#faf5ff;' : '';
+                let h = '<tr style="border-bottom:1px solid #f0f0f0;'+bg+'">';
+                h += '<td style="padding:8px;font-weight:'+(isBold?'700':'500')+';font-size:12px;">'+labelPrefix+esc(r.referencia||'')+'</td>';
+                h += '<td style="padding:8px;color:#888;font-size:11px;">'+esc(r.periodo||'')+'</td>';
+                h += '<td style="padding:8px;text-align:center;font-weight:700;color:'+(typeof eVal==='number'?enpsColor(eVal):'#888')+';">'+eVal+'</td>';
+                h += '<td style="padding:8px;text-align:center;font-weight:700;color:'+(typeof lVal==='number'?enpsColor(lVal):'#888')+';">'+lVal+'</td>';
+                h += '<td style="padding:8px;font-size:11px;color:#555;">'+comments+'</td>';
+                h += '</tr>';
+                return h;
+              }
+
+              let h = '<div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;">';
+              h += '<div style="font-weight:600;font-size:13px;margin-bottom:10px;color:#555;">Detalhamento eNPS / lNPS</div>';
+              h += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+              h += '<thead><tr style="background:#f8f9fa;"><th style="text-align:left;padding:8px;font-weight:600;">Referência</th><th style="text-align:left;padding:8px;font-weight:600;">Período</th><th style="text-align:center;padding:8px;font-weight:600;">eNPS</th><th style="text-align:center;padding:8px;font-weight:600;">lNPS</th><th style="text-align:left;padding:8px;font-weight:600;">Comentários</th></tr></thead><tbody>';
+              // Department first
+              rows.filter(r=>r._tipo==='depto').forEach(r=>{ h += renderRow(r, '📊 Depto: '); });
+              // Head
+              rows.filter(r=>r._tipo==='head').forEach(r=>{ h += renderRow(r, '👤 '); });
+              // Sub-leaders sorted alphabetically
+              rows.filter(r=>r._tipo==='lider').sort((a,b)=>(a.referencia||'').localeCompare(b.referencia||'')).forEach(r=>{ h += renderRow(r, '   '); });
+              h += '</tbody></table></div>';
+              return h;
+            })()}
           </div>
         </div>
 
