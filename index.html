@@ -229,9 +229,25 @@ tr:last-child td{border-bottom:none;}
 @media print{
   .sidebar,.topbar,.toolbar,.form-actions,.no-print{display:none !important;}
   .only-print{display:flex !important;}
-  .content{padding:0;}
-  body{background:#fff;}
-  .card{box-shadow:none;border:1px solid #ccc;}
+  .content{padding:0;margin:0;max-width:100%;}
+  body{background:#fff;font-size:11px;}
+  .card{box-shadow:none;border:1px solid #ccc;break-inside:avoid;page-break-inside:avoid;margin-bottom:12px;}
+  .section-title{font-size:13px !important;}
+  table{font-size:11px !important;}
+  td,th{padding:5px 8px !important;font-size:11px !important;}
+  .enps-comment-card{break-inside:avoid;page-break-inside:avoid;}
+  .kpi-card{padding:8px !important;}
+  .kpi-value{font-size:18px !important;}
+  .kpi-label{font-size:10px !important;}
+  .detail-summary{font-size:11px;}
+  .detail-summary .card{padding:12px !important;margin-bottom:10px !important;}
+  .detail-summary table{width:100% !important;table-layout:auto !important;}
+  .detail-summary td,.detail-summary th{word-break:break-word;white-space:normal !important;max-width:none !important;padding:4px 6px !important;}
+  div[style*="background:#fafbfc"]{break-inside:avoid;page-break-inside:avoid;padding:8px !important;margin-bottom:6px !important;}
+  div[style*="font-size:12px"]{line-height:1.5 !important;word-break:break-word !important;}
+  .detail-summary div[style*="border-top:1px solid"]{break-before:avoid;}
+  canvas{max-height:200px !important;}
+  @page{margin:15mm 10mm;}
 }
 </style>
 </head>
@@ -4782,7 +4798,7 @@ function collectFormBasics(){
   if(fd.semNota){ fd.enps = 0; fd.lnps = 0; }
   else { if(el('f_enps')) fd.enps = Number(el('f_enps').value)||0; if(el('f_lnps')) fd.lnps = Number(el('f_lnps').value)||0; }
   fd.feriasVencidas = (fd.feriasTable||[]).length;
-  fd.bancoHoras = (fd.bancoHorasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0);
+  fd.bancoHoras = (fd.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('+')).length;
   fd.horasExtras = (fd.horasExtrasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0);
   fd.pendenciasPonto = (fd.pendenciasPontoTable||[]).length;
   if(el('f_plano')) fd.planoAcao = el('f_plano').innerHTML||el('f_plano').value||'';
@@ -5079,7 +5095,8 @@ function renderMeetingDetail(){
       <table><tbody>
         <tr><td>eNPS</td><td><strong>${(m.semNotaEnps||m.semNota)?'<span style="color:#888;font-style:italic;">Sem nota</span>':m.enps}</strong></td></tr>
         <tr><td>lNPS</td><td><strong>${(m.semNotaLnps||m.semNota)?'<span style="color:#888;font-style:italic;">Sem nota</span>':(m.lnps!=null?m.lnps:'—')}</strong></td></tr>
-        <tr><td>Banco de horas</td><td><strong>${(m.bancoHorasTable||[]).reduce((s,r)=>s+(parseFloat(r.horas)||0),0)}h</strong></td></tr>
+        <tr><td>Banco de horas positivo</td><td><strong>${(m.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('+')).length} colaboradores</strong></td></tr>
+        <tr><td>Banco de horas negativo</td><td><strong>${(m.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('-')).length} colaboradores</strong></td></tr>
       </tbody></table>
       ${(()=>{
         // Pull eNPS/lNPS comments from DB.enps for all leaders in hierarchy
