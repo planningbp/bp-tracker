@@ -4548,10 +4548,7 @@ function renderMeetingForm(){
             ${fd.riscos.map((r,i)=>renderRiskRow(r,i)).join('')}
           </div>
           <button class="btn btn-outline btn-sm" id="btnAddRisk" style="width:auto;margin-bottom:20px;">${ICONS.plus} Adicionar risco</button>
-          ${renderSmartTable('feriasTable','Férias vencidas', fd.feriasTable, [{key:'diasVencidos',label:'Dias vencidos',placeholder:'Ex.: 15'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
           ${renderSmartTable('bancoHorasTable','Banco de horas', fd.bancoHorasTable, [{key:'horas',label:'Horas',placeholder:'Ex.: +08:54'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
-          ${renderSmartTable('horasExtrasTable','Horas extras', fd.horasExtrasTable, [{key:'horas',label:'Horas',placeholder:'Ex.: +08:54'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
-          ${renderSmartTable('pendenciasPontoTable','Pendências de ponto', fd.pendenciasPontoTable, [{key:'tipo',label:'Tipo pendência',placeholder:'Ex.: Falta de marcação'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
         </div>
 
         <div class="form-section ${UI.formSection===5?'active':''}" data-panel="5">
