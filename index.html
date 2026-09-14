@@ -4607,10 +4607,23 @@ function renderMeetingForm(){
                 const lVal = (r.semNotaLnps) ? '<span style="color:#888;">Sem nota</span>' : (r.lnps!=null?r.lnps:'—');
                 const eC = (r.comentariosEnps||r.comentarios||'').trim();
                 const lC = (r.comentariosLnps||'').trim();
+                function fmtComment(txt){
+                  // Break lines before key sections
+                  let s = esc(txt);
+                  s = s.replace(/[-–—]\s*(Pontos?\s+fortes?)\s*:/gi, '<br><strong style="color:#22c55e;">$1:</strong>');
+                  s = s.replace(/[-–—]\s*(Pontos?\s+de\s+aten[çc][aã]o)\s*:/gi, '<br><strong style="color:#f59e0b;">$1:</strong>');
+                  s = s.replace(/[-–—]\s*(Planos?\s+de\s+a[çc][aã]o)\s*:/gi, '<br><strong style="color:#6366f1;">$1:</strong>');
+                  // Also handle without dash prefix
+                  s = s.replace(/(?<![<\w])(Pontos?\s+fortes?)\s*:/gi, '<br><strong style="color:#22c55e;">$1:</strong>');
+                  s = s.replace(/(?<![<\w])(Pontos?\s+de\s+aten[çc][aã]o)\s*:/gi, '<br><strong style="color:#f59e0b;">$1:</strong>');
+                  s = s.replace(/(?<![<\w])(Planos?\s+de\s+a[çc][aã]o)\s*:/gi, '<br><strong style="color:#6366f1;">$1:</strong>');
+                  // Clean leading <br>
+                  s = s.replace(/^(<br>)+/, '');
+                  return s;
+                }
                 let comments = '';
-                if(eC) comments += '<span style="color:#22c55e;font-weight:600;">eNPS:</span> '+esc(eC);
-                if(eC && lC) comments += '<br>';
-                if(lC) comments += '<span style="color:#962DFF;font-weight:600;">lNPS:</span> '+esc(lC);
+                if(eC) comments += '<div style="margin-bottom:6px;"><span style="color:#22c55e;font-weight:600;">eNPS:</span> '+fmtComment(eC)+'</div>';
+                if(lC) comments += '<div><span style="color:#962DFF;font-weight:600;">lNPS:</span> '+fmtComment(lC)+'</div>';
                 if(!comments) comments = '—';
                 const isBold = r._tipo==='depto' || r._tipo==='head';
                 const bg = r._tipo==='depto' ? 'background:#f0fdf4;' : r._tipo==='head' ? 'background:#faf5ff;' : '';
