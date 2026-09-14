@@ -4261,34 +4261,57 @@ function openMeetingForm(id){
 }
 function applyEnpsAutoCalc(fd){
   if(!DB.enps || !DB.enps.length) return;
-  const areaN = normalizeStr(fd.area||'');
   const gerenteN = normalizeStr(fd.gerente||'');
   const period = fd.period||'';
-  // 1) By leader + period
-  let rec = gerenteN ? DB.enps.find(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN && r.periodo===period) : null;
-  // 2) By department + period
-  if(!rec && areaN) rec = DB.enps.find(r=> r.tipo==='departamento' && normalizeStr(r.referencia)===areaN && r.periodo===period);
-  // 3) By area partial match + period
-  if(!rec && areaN) rec = DB.enps.find(r=> (r.tipo==='departamento'||r.tipo==='lider') && r.periodo===period && normalizeStr(r.referencia).includes(areaN));
-  // 4) Latest for leader regardless of period
-  if(!rec && gerenteN){
-    const lRecs = DB.enps.filter(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
-    if(lRecs.length) rec = lRecs[0];
+  if(!gerenteN) return;
+
+  // Collect all leader names in the hierarchy tree under this gerente
+  const teamTree = getTeamTree(fd.gerente||'');
+  const subLiders = new Set();
+  subLiders.add(gerenteN); // include self
+  teamTree.forEach(c=>{
+    const cn = normalizeStr(c.nome||c.Nome||'');
+    if(cn && isCargoLideranca(c.cargo||c.Cargo||'')) subLiders.add(cn);
+    // Also check if this person is listed as lider of someone
+    const hasReports = DB.colaboradores.some(cc=> normalizeStr(cc.lider||cc['Líder']||cc.Lider||'')===cn);
+    if(hasReports) subLiders.add(cn);
+  });
+
+  // Find eNPS records for all leaders in the tree
+  function findRecords(liderSet, per){
+    return DB.enps.filter(r=> r.tipo==='lider' && liderSet.has(normalizeStr(r.referencia)) && (!per || r.periodo===per) && !(r.semNotaEnps||r.semNota));
   }
-  // 5) Latest for area regardless of period
-  if(!rec && areaN){
-    const aRecs = DB.enps.filter(r=> r.tipo==='departamento' && normalizeStr(r.referencia)===areaN).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
-    if(aRecs.length) rec = aRecs[0];
+
+  // Try with period first, then without
+  let recs = findRecords(subLiders, period);
+  if(!recs.length) {
+    // Get latest period available for these leaders
+    const allRecs = findRecords(subLiders, '');
+    if(allRecs.length){
+      // Group by period, pick the most recent
+      const periods = [...new Set(allRecs.map(r=>r.periodo||''))].sort().reverse();
+      if(periods.length) recs = allRecs.filter(r=>r.periodo===periods[0]);
+    }
   }
-  // 6) If still nothing, get latest empresa record
-  if(!rec){
-    const eRecs = DB.enps.filter(r=> r.tipo==='empresa').sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
-    if(eRecs.length) rec = eRecs[0];
-  }
-  if(rec){
-    if(rec.enps!=null) fd.enps = rec.enps;
-    if(rec.lnps!=null) fd.lnps = rec.lnps;
-    if(rec.semNotaEnps || rec.semNota) fd.semNota = true;
+
+  if(recs.length){
+    // Average eNPS and lNPS across all leaders in tree
+    const enpsVals = recs.filter(r=>r.enps!=null).map(r=>r.enps);
+    const lnpsVals = recs.filter(r=>r.lnps!=null).map(r=>r.lnps);
+    if(enpsVals.length) fd.enps = Math.round(enpsVals.reduce((a,b)=>a+b,0)/enpsVals.length);
+    if(lnpsVals.length) fd.lnps = Math.round(lnpsVals.reduce((a,b)=>a+b,0)/lnpsVals.length);
+  } else {
+    // Fallback: single record for this leader
+    let rec = DB.enps.find(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN && r.periodo===period);
+    if(!rec){
+      const lRecs = DB.enps.filter(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+      if(lRecs.length) rec = lRecs[0];
+    }
+    if(rec){
+      if(rec.enps!=null) fd.enps = rec.enps;
+      if(rec.lnps!=null) fd.lnps = rec.lnps;
+      if(rec.semNotaEnps || rec.semNota) fd.semNota = true;
+    }
   }
 }
 function applyAutoCalc(){
@@ -8432,15 +8455,23 @@ function renderEnpsPage(){
   }
   html += '</tbody></table></div></div>';
 
-  // Evolution charts - eNPS and lNPS side by side
+  // Charts: bar chart by department + evolution line chart (smaller, per department)
   html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
     <div class="card" style="padding:20px;">
-      <div style="font-weight:700;font-size:14px;margin-bottom:14px;color:#22c55e;">Evolução eNPS</div>
-      <div style="height:320px;"><canvas id="enpsChartLeft"></canvas></div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:14px;color:#22c55e;">eNPS por Líder</div>
+      <div style="height:400px;"><canvas id="enpsBarChart"></canvas></div>
     </div>
     <div class="card" style="padding:20px;">
-      <div style="font-weight:700;font-size:14px;margin-bottom:14px;color:#962DFF;">Evolução lNPS</div>
-      <div style="height:320px;"><canvas id="lnpsChartRight"></canvas></div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:14px;color:#962DFF;">lNPS por Líder</div>
+      <div style="height:400px;"><canvas id="lnpsBarChart"></canvas></div>
+    </div>
+  </div>`;
+  // Evolution line charts per department (collapsible)
+  html += `<div class="card" style="padding:20px;margin-bottom:20px;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Evolução por Período</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="height:300px;"><canvas id="enpsEvoChart"></canvas></div>
+      <div style="height:300px;"><canvas id="lnpsEvoChart"></canvas></div>
     </div>
   </div>`;
 
@@ -8677,83 +8708,161 @@ function bindEnpsPage(){
     });
   });
 
-  // Chart rendering — two separate charts: eNPS (left) and lNPS (right)
-  if(window._enpsChartL){ window._enpsChartL.destroy(); window._enpsChartL = null; }
-  if(window._enpsChartR){ window._enpsChartR.destroy(); window._enpsChartR = null; }
-  const ctxL = document.getElementById('enpsChartLeft');
-  const ctxR = document.getElementById('lnpsChartRight');
-  if(ctxL && ctxR){
+  // Chart rendering — bar charts + compact evolution
+  ['_enpsBarC','_lnpsBarC','_enpsEvoC','_lnpsEvoC'].forEach(k=>{ if(window[k]){ window[k].destroy(); window[k]=null; }});
+  const barCtxE = document.getElementById('enpsBarChart');
+  const barCtxL2 = document.getElementById('lnpsBarChart');
+  const evoCtxE = document.getElementById('enpsEvoChart');
+  const evoCtxL2 = document.getElementById('lnpsEvoChart');
+  if(barCtxE && barCtxL2){
     const allEnpsRecs = (DB.enps||[]).filter(r=>{
       if(tab==='geral') return true;
       return r.tipo===tab;
     });
-    const enpsRecs = allEnpsRecs.filter(r=>!(r.semNotaEnps||r.semNota) && r.enps!=null);
-    const lnpsRecs = allEnpsRecs.filter(r=>!(r.semNotaLnps) && r.lnps!=null);
-    function makeChartOpts(title){
-      return {
-        responsive:true, maintainAspectRatio:false,
-        interaction:{mode:'nearest',intersect:false},
-        plugins:{
-          legend:{position:'bottom',labels:{boxWidth:12,padding:10,font:{size:10},usePointStyle:true}},
-          tooltip:{backgroundColor:'rgba(0,0,0,0.85)',titleFont:{size:12},bodyFont:{size:12},padding:10,cornerRadius:8}
+
+    // Helper: get department for a leader reference
+    function getDept(refName){
+      const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===normalizeStr(refName));
+      return colab ? (colab.area||colab.departamento||colab.departamentoRaw||'Sem área') : 'Sem área';
+    }
+
+    // Get latest record per reference
+    function getLatest(recs, scoreKey){
+      const byRef = {};
+      recs.filter(r=>r[scoreKey]!=null).forEach(r=>{
+        const key = normalizeStr(r.referencia||'');
+        if(!byRef[key] || (r.periodo||'').localeCompare(byRef[key].periodo||'')>0) byRef[key] = r;
+      });
+      return Object.values(byRef);
+    }
+
+    // Build horizontal bar chart
+    function renderBarChart(ctx, scoreKey){
+      const filtered = allEnpsRecs.filter(r=> scoreKey==='enps' ? !(r.semNotaEnps||r.semNota) : !(r.semNotaLnps));
+      const latest = getLatest(filtered, scoreKey);
+      if(!latest.length) return null;
+      // Group by department
+      const deptMap = {};
+      latest.forEach(r=>{
+        const dept = r.tipo==='empresa' ? 'Empresa' : r.tipo==='departamento' ? r.referencia : getDept(r.referencia);
+        if(!deptMap[dept]) deptMap[dept] = [];
+        deptMap[dept].push(r);
+      });
+      const depts = Object.keys(deptMap).sort();
+      const labels = [];
+      const values = [];
+      const bgColors = [];
+      const borderColors = [];
+      depts.forEach((dept,di)=>{
+        // Department header as empty separator row
+        if(di>0){ labels.push(''); values.push(null); bgColors.push('transparent'); borderColors.push('transparent'); }
+        labels.push('▸ '+dept.toUpperCase());
+        // Dept average
+        const deptVals = deptMap[dept].filter(r=>r[scoreKey]!=null).map(r=>r[scoreKey]);
+        const avg = deptVals.length ? Math.round(deptVals.reduce((a,b)=>a+b,0)/deptVals.length) : 0;
+        values.push(avg);
+        const avgClr = avg>=50?'#22c55e':avg>=0?'#f59e0b':'#ff4343';
+        bgColors.push(avgClr+'66'); borderColors.push(avgClr);
+        // Individual leaders sorted by score
+        deptMap[dept].sort((a,b)=>(b[scoreKey]||0)-(a[scoreKey]||0)).forEach(r=>{
+          labels.push('   '+r.referencia);
+          const v = r[scoreKey]||0;
+          values.push(v);
+          const clr = v>=50?'#22c55e':v>=0?'#f59e0b':'#ff4343';
+          bgColors.push(clr+'33'); borderColors.push(clr);
+        });
+      });
+      const chartH = Math.max(300, labels.length * 26);
+      ctx.parentElement.style.height = chartH+'px';
+      return new Chart(ctx, {
+        type:'bar',
+        data:{
+          labels: labels,
+          datasets:[{
+            data: values,
+            backgroundColor: bgColors,
+            borderColor: borderColors,
+            borderWidth: 2,
+            borderRadius: 4,
+            barThickness: 18
+          }]
         },
-        scales:{
-          y:{min:-100, max:100,
-            grid:{color:'#e5e5e5',lineWidth:1},
-            border:{color:'#ccc',width:1},
-            ticks:{stepSize:25,font:{size:10},color:'#666',padding:6}
+        options:{
+          indexAxis:'y', responsive:true, maintainAspectRatio:false,
+          plugins:{
+            legend:{display:false},
+            tooltip:{
+              callbacks:{ label: c2 => c2.raw!=null ? c2.raw.toString() : '' },
+              backgroundColor:'rgba(0,0,0,0.85)', padding:10, cornerRadius:8
+            }
           },
-          x:{
-            grid:{color:'#f0f0f0',lineWidth:1},
-            border:{color:'#ccc',width:1},
-            ticks:{font:{size:10},color:'#666',padding:6}
+          scales:{
+            x:{min:-100, max:100, grid:{color:'#e5e5e5'}, ticks:{stepSize:25, font:{size:10}, color:'#666'}},
+            y:{grid:{display:false}, ticks:{font:{size:11, weight:ctx2=>ctx2.tick.label.startsWith('▸')?'700':'400'}, color:ctx2=>ctx2.tick&&ctx2.tick.label&&ctx2.tick.label.startsWith('▸')?'#111':'#555', padding:4}}
           }
         }
-      };
+      });
     }
-    const colors = ['#22c55e','#962DFF','#00C48C','#f59e0b','#ff4343','#6366f1','#ec4899','#14b8a6','#f97316','#8b5cf6','#0ea5e9','#84cc16'];
-    // Build unified color map so same reference gets same color in both charts
-    const allRefsUnified = [...new Set(allEnpsRecs.map(r=>r.referencia||''))];
-    const refColorMap = {};
-    allRefsUnified.forEach((ref,i)=>{ refColorMap[ref] = colors[i%colors.length]; });
-    function buildDatasets(recs, scoreKey){
-      if(tab==='geral'){
-        const tipos = ['lider','departamento','empresa'];
-        const tipoLabels = {lider:'Líder',departamento:'Departamento',empresa:'Empresa'};
-        const tipoColors = {lider:'#22c55e',departamento:'#962DFF',empresa:'#00C48C'};
+
+    window._enpsBarC = renderBarChart(barCtxE, 'enps');
+    window._lnpsBarC = renderBarChart(barCtxL2, 'lnps');
+
+    // Evolution line charts (compact, by department averages)
+    if(evoCtxE && evoCtxL2){
+      const evoColors = ['#22c55e','#962DFF','#00C48C','#f59e0b','#ff4343','#6366f1','#ec4899','#14b8a6','#f97316','#8b5cf6'];
+      function buildEvoData(scoreKey){
+        const recs = allEnpsRecs.filter(r=> scoreKey==='enps' ? (!(r.semNotaEnps||r.semNota) && r.enps!=null) : (!(r.semNotaLnps) && r.lnps!=null));
         const allPeriods = [...new Set(recs.map(r=>r.periodo||''))].sort();
-        const datasets = tipos.map(t=>{
-          const tr = recs.filter(r=>r.tipo===t);
-          const data = allPeriods.map(p=>{
-            const pr = tr.filter(r=>r.periodo===p);
-            if(!pr.length) return null;
-            return Math.round(pr.reduce((s,r)=>s+r[scoreKey],0)/pr.length);
+        if(tab==='geral' || tab==='empresa'){
+          const tipos = [{k:'lider',l:'Média Líderes'},{k:'departamento',l:'Média Deptos'},{k:'empresa',l:'Empresa'}];
+          const ds = tipos.map((t,ti)=>{
+            const data = allPeriods.map(p=>{
+              const pr = recs.filter(r=>r.tipo===t.k && r.periodo===p);
+              if(!pr.length) return null;
+              return Math.round(pr.reduce((s,r)=>s+r[scoreKey],0)/pr.length);
+            });
+            return {label:t.l, data, borderColor:evoColors[ti], borderWidth:2, pointRadius:4, tension:0, fill:false, spanGaps:true};
           });
-          return {label:tipoLabels[t], data, borderColor:tipoColors[t], backgroundColor:tipoColors[t]+'22', borderWidth:3, pointRadius:6, pointHoverRadius:9, pointBackgroundColor:tipoColors[t], pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
-        });
-        return {labels:allPeriods, datasets};
-      } else {
-        const refs = [...new Set(recs.map(r=>r.referencia||''))];
-        const allPeriods = [...new Set(recs.map(r=>r.periodo||''))].sort();
-        const datasets = refs.map((ref)=>{
-          const rr = recs.filter(r=>r.referencia===ref);
-          const data = allPeriods.map(p=>{
-            const rec = rr.find(r=>r.periodo===p);
-            return rec ? rec[scoreKey] : null;
+          return {labels:allPeriods, datasets:ds};
+        } else {
+          // Group by department, show department averages over time
+          const deptRecs = {};
+          recs.forEach(r=>{
+            const dept = r.tipo==='departamento' ? r.referencia : getDept(r.referencia);
+            if(!deptRecs[dept]) deptRecs[dept] = [];
+            deptRecs[dept].push(r);
           });
-          const c = refColorMap[ref] || colors[0];
-          return {label:ref, data, borderColor:c, backgroundColor:c+'22', borderWidth:3, pointRadius:6, pointHoverRadius:9, pointBackgroundColor:c, pointBorderColor:'#fff', pointBorderWidth:2, tension:0, fill:false, spanGaps:true};
-        });
-        return {labels:allPeriods, datasets};
+          const depts = Object.keys(deptRecs).sort();
+          const ds = depts.map((dept,di)=>{
+            const data = allPeriods.map(p=>{
+              const pr = deptRecs[dept].filter(r=>r.periodo===p);
+              if(!pr.length) return null;
+              return Math.round(pr.reduce((s,r)=>s+r[scoreKey],0)/pr.length);
+            });
+            return {label:dept, data, borderColor:evoColors[di%evoColors.length], borderWidth:2, pointRadius:4, tension:0, fill:false, spanGaps:true};
+          });
+          return {labels:allPeriods, datasets:ds};
+        }
       }
-    }
-    if(enpsRecs.length){
-      const d = buildDatasets(enpsRecs, 'enps');
-      window._enpsChartL = new Chart(ctxL, {type:'line', data:d, options:makeChartOpts('eNPS')});
-    }
-    if(lnpsRecs.length){
-      const d = buildDatasets(lnpsRecs, 'lnps');
-      window._enpsChartR = new Chart(ctxR, {type:'line', data:d, options:makeChartOpts('lNPS')});
+      const evoOpts = {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10},usePointStyle:true}},
+          tooltip:{backgroundColor:'rgba(0,0,0,0.85)',padding:8,cornerRadius:8}
+        },
+        scales:{
+          y:{min:-100, max:100, grid:{color:'#e5e5e5'}, ticks:{stepSize:25,font:{size:9},color:'#666'}},
+          x:{grid:{color:'#f0f0f0'}, ticks:{font:{size:9},color:'#666'}}
+        }
+      };
+      const eData = buildEvoData('enps');
+      if(eData.datasets.some(d=>d.data.some(v=>v!=null))){
+        window._enpsEvoC = new Chart(evoCtxE, {type:'line', data:eData, options:{...evoOpts, plugins:{...evoOpts.plugins, title:{display:true, text:'Evolução eNPS', font:{size:12,weight:'600'}, color:'#22c55e'}}}});
+      }
+      const lData = buildEvoData('lnps');
+      if(lData.datasets.some(d=>d.data.some(v=>v!=null))){
+        window._lnpsEvoC = new Chart(evoCtxL2, {type:'line', data:lData, options:{...evoOpts, plugins:{...evoOpts.plugins, title:{display:true, text:'Evolução lNPS', font:{size:12,weight:'600'}, color:'#962DFF'}}}});
+      }
     }
   }
 }
