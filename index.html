@@ -802,6 +802,11 @@ try {
       desligamentos: ['mesDate','dtAdmissao','ultimoDia'],
       promocoes: ['mesDate']
     };
+    var _fbRenderTimer = null;
+    function fbDebouncedRender(){
+      if(_fbRenderTimer) clearTimeout(_fbRenderTimer);
+      _fbRenderTimer = setTimeout(function(){ if(typeof render==='function') render(); }, 200);
+    }
     FB_SYNC_KEYS.forEach(function(key){
       fbDB.ref(key).on('value', function(snap){
         var data = snap.val();
@@ -814,7 +819,10 @@ try {
         saveJSON(LS[key], DB[key]);
         _fbReceiving = false;
         // Re-render current page if relevant
-        if(UI.page===key || UI.page==='dashboard' || UI.page==='lideres'){
+        if(isLiderSession()){
+          // Líder portal: re-render on any data change so heads see updates in real-time
+          fbDebouncedRender();
+        } else if(UI.page===key || UI.page==='dashboard' || UI.page==='lideres'){
           var c = document.getElementById('content');
           if(c && typeof render === 'function') render();
         }
@@ -823,8 +831,8 @@ try {
             var c2 = document.getElementById('content');
             if(c2){ c2.innerHTML = renderSolicitacoes(); bindSolicitacoes(); }
           }
-          if(SESSION && SESSION.role==='lider'){
-            var ct = document.getElementById('content');
+          if(SESSION && SESSION.type==='lider'){
+            var ct = document.getElementById('lider-content');
             if(ct && ct.querySelector('#formSol')){ renderLiderForms(ct); }
           }
         }
