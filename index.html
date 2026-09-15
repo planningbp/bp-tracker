@@ -2364,10 +2364,16 @@ function renderLiderRelatorio(ct){
 
   let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
     <div><h2 style="margin:0;">Relatório Completo da Equipe</h2><p style="margin:4px 0 0;color:#888;font-size:13px;">Gerado em ${today.toLocaleDateString('pt-BR')} · Líder: ${esc(nome)}</p></div>
-    <button class="btn btn-primary" id="btnPrintRelatorio" style="width:auto;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-      Imprimir
-    </button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-outline" id="btnPrintRelatorio" style="width:auto;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimir
+      </button>
+      <button class="btn btn-primary" id="btnExportLiderPDF" style="width:auto;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
+        Salvar PDF
+      </button>
+    </div>
   </div>`;
 
   // ===== 1. COLABORADORES ATIVOS =====
@@ -2564,6 +2570,7 @@ function renderLiderRelatorio(ct){
   ct.innerHTML = html;
 
   document.getElementById('btnPrintRelatorio').addEventListener('click', ()=>{ window.print(); });
+  document.getElementById('btnExportLiderPDF').addEventListener('click', ()=> exportLiderRelatorioPDF());
 }
 
 function renderLiderDashboard(ct){
@@ -5023,6 +5030,7 @@ function renderMeetingDetail(){
     <button class="btn btn-outline" id="btnBackList">Voltar</button>
     <button class="btn btn-outline" id="btnToggleTopics" style="width:auto;">&#9776; Tópicos</button>
     <button class="btn btn-outline" id="btnPrintDetail" style="width:auto;">${ICONS.print} Imprimir</button>
+    <button class="btn btn-primary" style="width:auto;" id="btnExportPDF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg> Salvar PDF</button>
     <button class="btn btn-primary" style="width:auto;" id="btnEditDetail">Editar</button>
   </div>
   <div id="topicsPanel" class="card no-print" style="display:none;margin-bottom:16px;padding:16px;">
@@ -5223,6 +5231,7 @@ function renderMeetingDetail(){
 function bindMeetingDetail(){
   document.getElementById('btnBackList').addEventListener('click', ()=>{ UI.page='meetings'; renderShellAndPage(); });
   document.getElementById('btnPrintDetail').addEventListener('click', ()=> window.print());
+  document.getElementById('btnExportPDF').addEventListener('click', ()=> exportMeetingPDF(UI.detailMeetingId));
   document.getElementById('btnEditDetail').addEventListener('click', ()=> openMeetingForm(UI.detailMeetingId));
   // Topics panel toggle
   const btnToggle = document.getElementById('btnToggleTopics');
@@ -7340,6 +7349,375 @@ function fmtSalarioPDF(v){
   const n = typeof v==='number' ? v : parseFloat(String(v).replace(/[^\d.,-]/g,'').replace(',','.'));
   if(isNaN(n)) return String(v);
   return n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function exportMeetingPDF(meetingId){
+  const m = DB.meetings.find(x=>x.id===meetingId);
+  if(!m){ alert('Reunião não encontrada.'); return; }
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF();
+  const pw = doc.internal.pageSize.getWidth();
+  const teal = [0,191,165];
+  const hStyle = {fillColor:teal, textColor:255, fontStyle:'bold', fontSize:8};
+  const altRow = {fillColor:[248,250,252]};
+  const marg = {left:14, right:14};
+  const maxW = pw - 28;
+
+  function stripHtml(html){ return (html||'').replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#039;/g,"'").replace(/&nbsp;/g,' '); }
+  function secTitle(text, yPos){
+    if(yPos > doc.internal.pageSize.getHeight()-40){ doc.addPage(); yPos = pdfHeader(doc, 'Relatório de Reunião', m.area+' · '+m.period); }
+    doc.setFontSize(12); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
+    doc.text(text, 14, yPos);
+    doc.setFont(undefined,'normal');
+    return yPos + 6;
+  }
+  function checkPage(y, need){
+    if(y+need > doc.internal.pageSize.getHeight()-20){ doc.addPage(); return pdfHeader(doc, 'Relatório de Reunião', m.area+' · '+m.period); }
+    return y;
+  }
+
+  // === HEADER ===
+  let y = pdfHeader(doc, 'Relatório de Reunião', m.area+' · '+m.period+' · '+(m.gerente||''));
+
+  // === RESUMO EXECUTIVO ===
+  const resumoText = 'Na área de '+m.area+', referente ao período '+m.period+', o headcount registrado é de '+(m.headcount||0)+' colaboradores, com turnover de '+(m.turnover||0)+'%. Foram identificadas '+(m.admissoesCount||0)+' admissões e '+(m.desligamentosCount||0)+' desligamentos no período. O eNPS apurado foi de '+m.enps+' pontos. Reunião conduzida com '+(m.gerente||'líder não informado')+', status: '+meetingStatus(m)+'.';
+  doc.setFontSize(9); doc.setTextColor(80);
+  const lines = doc.splitTextToSize(resumoText, maxW);
+  doc.text(lines, 14, y);
+  y += lines.length * 4.5 + 6;
+
+  // === KPIs ===
+  doc.autoTable({
+    startY: y,
+    head:[['Headcount','Turnover','Admissões','Desligamentos','eNPS','lNPS','Status']],
+    body:[[String(m.headcount||0), (m.turnover||0)+'%', String(m.admissoesCount||0), String(m.desligamentosCount||0),
+      (m.semNota||m.semNotaEnps)?'Sem nota':String(m.enps||0), (m.semNota||m.semNotaLnps)?'Sem nota':String(m.lnps!=null?m.lnps:'—'), meetingStatus(m)]],
+    styles:{fontSize:9, cellPadding:4, halign:'center'},
+    headStyles:hStyle,
+    margin:marg
+  });
+  y = doc.lastAutoTable.finalY + 8;
+
+  // === QUADRO DE PESSOAL + DESENVOLVIMENTO + CLIMA ===
+  doc.autoTable({
+    startY: y,
+    head:[['Indicador','Valor']],
+    body:[
+      ['Vagas abertas', String(m.vagasAbertas||0)],
+      ['Movimentações internas', String(m.movimentacoes||0)],
+      ['Período de experiência', String(m.experienciaCount||0)],
+      ['PDIs ativos', String(m.pdis||0)],
+      ['Potenciais sucessores', String(m.sucessores||0)],
+      ['Talentos em destaque', String(m.talentos||0)],
+      ['Banco horas positivo', (m.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('+')).length+' colaboradores'],
+      ['Banco horas negativo', (m.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('-')).length+' colaboradores']
+    ],
+    styles:{fontSize:9, cellPadding:3},
+    headStyles:hStyle,
+    columnStyles:{0:{fontStyle:'bold',cellWidth:60}},
+    margin:marg
+  });
+  y = doc.lastAutoTable.finalY + 8;
+
+  // === eNPS/lNPS COMMENTS ===
+  const gerenteN = normalizeStr(m.gerente||'');
+  const teamTree = gerenteN ? getTeamTree(m.gerente||'') : [];
+  const subLiders = new Set();
+  if(gerenteN) subLiders.add(gerenteN);
+  teamTree.forEach(c=>{
+    const cn = normalizeStr(c.nome||c.Nome||'');
+    if(cn && (isCargoLideranca(c.cargo||c.Cargo||'') || DB.colaboradores.some(cc=>normalizeStr(cc.lider||cc['Líder']||cc.Lider||'')===cn))) subLiders.add(cn);
+  });
+  let comentRecs = (DB.enps||[]).filter(r=> r.tipo==='lider' && subLiders.has(normalizeStr(r.referencia||'')) && ((r.comentariosEnps||r.comentarios||'').trim() || (r.comentariosLnps||'').trim()));
+  const latest = {};
+  comentRecs.forEach(r=>{ const k=normalizeStr(r.referencia); if(!latest[k]||(r.periodo||'').localeCompare(latest[k].periodo||'')>0) latest[k]=r; });
+  const comentRows = Object.values(latest);
+  if(comentRows.length){
+    y = secTitle('Comentários eNPS / lNPS', y);
+    const cBody = comentRows.map(r=>{
+      const eC = stripHtml(r.comentariosEnps||r.comentarios||'').trim();
+      const lC = stripHtml(r.comentariosLnps||'').trim();
+      let txt = '';
+      if(eC) txt += 'eNPS: '+eC;
+      if(lC) txt += (txt?'\n':'')+'lNPS: '+lC;
+      return [r.referencia||'', r.periodo||'', String(r.enps!=null?r.enps:'—'), String(r.lnps!=null?r.lnps:'—'), txt];
+    });
+    doc.autoTable({
+      startY: y,
+      head:[['Líder','Período','eNPS','lNPS','Comentários']],
+      body: cBody,
+      styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
+      headStyles:hStyle,
+      columnStyles:{0:{cellWidth:35},1:{cellWidth:18},2:{cellWidth:14,halign:'center'},3:{cellWidth:14,halign:'center'},4:{cellWidth:maxW-81}},
+      margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === ADMISSÕES ===
+  if(m.admissoesTable && m.admissoesTable.length){
+    y = checkPage(y, 20);
+    y = secTitle('Admissões no período ('+m.admissoesTable.length+')', y);
+    doc.autoTable({
+      startY: y,
+      head:[['Nome','Cargo','Líder','Departamento','Regime','Admissão']],
+      body: m.admissoesTable.map(r=>[r.nome,r.cargo,r.lider,r.departamento,r.regime,r.admissao]),
+      styles:{fontSize:8, cellPadding:3},
+      headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === DESLIGAMENTOS ===
+  if(m.desligamentosTable && m.desligamentosTable.length){
+    y = checkPage(y, 20);
+    y = secTitle('Desligamentos no período ('+m.desligamentosTable.length+')', y);
+    doc.autoTable({
+      startY: y,
+      head:[['Nome','Cargo','Líder','Tipo','Motivo','Último dia','Tempo']],
+      body: m.desligamentosTable.map(r=>[r.nome,r.cargo,r.lider,r.tipo,r.motivo,r.ultimoDia,r.tempoDeCasa]),
+      styles:{fontSize:8, cellPadding:3},
+      headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === ACOMPANHAMENTOS ===
+  if(m.experienciaTable && m.experienciaTable.length){
+    y = checkPage(y, 20);
+    y = secTitle('Acompanhamentos — 7/15/45/90 dias ('+m.experienciaTable.length+')', y);
+    doc.autoTable({
+      startY: y,
+      head:[['Nome','Cargo','Admissão','Marco','Data','Status','Obs.']],
+      body: m.experienciaTable.map(r=>[r.nome,r.cargo,r.admissao,r.milestone,r.milestoneDate,r.status,r.observacao||'']),
+      styles:{fontSize:8, cellPadding:3},
+      headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === PROMOÇÕES ===
+  if(m.promocoesTable && m.promocoesTable.length){
+    y = checkPage(y, 20);
+    y = secTitle('Promoções / Movimentações ('+m.promocoesTable.length+')', y);
+    doc.autoTable({
+      startY: y,
+      head:[['Nome','Gestor','Cargo anterior','Cargo novo','Reajuste','%']],
+      body: m.promocoesTable.map(r=>[r.nome,r.gestor,r.cargoAnterior,r.cargoNovo,r.reajuste,r.pct]),
+      styles:{fontSize:8, cellPadding:3},
+      headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === RISCOS ===
+  if(m.riscos && m.riscos.length){
+    y = checkPage(y, 20);
+    y = secTitle('Riscos e Pendências ('+m.riscos.length+')', y);
+    doc.autoTable({
+      startY: y,
+      head:[['Nome','Cargo','Motivo','Criticidade']],
+      body: m.riscos.map(r=>[r.nome,r.cargo,r.motivo,r.criticidade]),
+      styles:{fontSize:8, cellPadding:3},
+      headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === BANCO DE HORAS ===
+  if(m.bancoHorasTable && m.bancoHorasTable.length){
+    y = checkPage(y, 20);
+    y = secTitle('Banco de Horas ('+m.bancoHorasTable.length+')', y);
+    doc.autoTable({
+      startY: y,
+      head:[['Nome','Cargo','Líder','Horas']],
+      body: m.bancoHorasTable.map(r=>[r.nome,r.cargo||'',r.lider||'',r.horas||'']),
+      styles:{fontSize:8, cellPadding:3},
+      headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === PDIs ===
+  const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(m.area)).filter(p=> (!m.gerente || isHead(m.gerente)) || normalizeStr(p.lider)===normalizeStr(m.gerente));
+  if(areaPdis.length){
+    y = checkPage(y, 20);
+    y = secTitle('PDIs — Planos de Desenvolvimento ('+areaPdis.length+')', y);
+    doc.autoTable({
+      startY: y,
+      head:[['Nome','Líder','Aprovado','Áreas','Em progresso','Finalizada']],
+      body: areaPdis.map(p=>[p.nome, p.lider||'', p.aprovado||'', String(p.totalAreas||0), String(p.emProgresso||0), String(p.finalizada||0)]),
+      styles:{fontSize:8, cellPadding:3},
+      headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === AÇÕES DO PERÍODO ===
+  const acoes = m.acoes||[];
+  if(acoes.length){
+    y = checkPage(y, 20);
+    y = secTitle('Ações do Período ('+acoes.length+')', y);
+    doc.autoTable({
+      startY: y,
+      head:[['Ação','Descrição']],
+      body: acoes.map((a,i)=>[a.titulo||'Ação '+(i+1), stripHtml(a.descricao||'')]),
+      styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
+      headStyles:hStyle, alternateRowStyles:altRow, margin:marg,
+      columnStyles:{0:{cellWidth:45},1:{cellWidth:maxW-45}}
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === PLANO DE AÇÃO ===
+  const plano = stripHtml(m.planoAcao||'').trim();
+  const obs = stripHtml(m.observacoes||'').trim();
+  if(plano || obs){
+    y = checkPage(y, 30);
+    y = secTitle('Plano de Ação', y);
+    if(plano){
+      doc.setFontSize(9); doc.setTextColor(60);
+      const plLines = doc.splitTextToSize(plano, maxW);
+      y = checkPage(y, plLines.length*4.5);
+      doc.text(plLines, 14, y);
+      y += plLines.length * 4.5 + 6;
+    }
+    if(obs){
+      y = checkPage(y, 20);
+      doc.setFontSize(10); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
+      doc.text('Observações', 14, y); y += 5;
+      doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(60);
+      const obsLines = doc.splitTextToSize(obs, maxW);
+      y = checkPage(y, obsLines.length*4.5);
+      doc.text(obsLines, 14, y);
+    }
+  }
+
+  pdfFooter(doc);
+  const fname = 'Reuniao_'+(m.area||'').replace(/\s+/g,'_')+'_'+(m.period||'').replace(/[\/\s]+/g,'-')+'_'+new Date().toISOString().slice(0,10)+'.pdf';
+  doc.save(fname);
+}
+
+function exportLiderRelatorioPDF(){
+  if(!isLiderSession()) return;
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF();
+  const nome = SESSION.liderNome;
+  const team = getLiderTeam();
+  const teamNames = getLiderTeamNames();
+  const teal = [0,191,165];
+  const hStyle = {fillColor:teal, textColor:255, fontStyle:'bold', fontSize:8};
+  const altRow = {fillColor:[248,250,252]};
+  const marg = {left:14,right:14};
+  const pw = doc.internal.pageSize.getWidth();
+  const maxW = pw - 28;
+
+  function checkPage(y, need){
+    if(y+need > doc.internal.pageSize.getHeight()-20){ doc.addPage(); return pdfHeader(doc, 'Relatório da Equipe', nome); }
+    return y;
+  }
+  function secTitle(text, yPos){
+    yPos = checkPage(yPos, 20);
+    doc.setFontSize(12); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
+    doc.text(text, 14, yPos);
+    doc.setFont(undefined,'normal');
+    return yPos + 6;
+  }
+
+  let y = pdfHeader(doc, 'Relatório Completo da Equipe', 'Líder: '+nome+' · Gerado em '+new Date().toLocaleDateString('pt-BR'));
+
+  // Ativos
+  const ativos = team.filter(c=>(c.status||'Ativo')==='Ativo').sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+  y = secTitle('Colaboradores Ativos ('+ativos.length+')', y);
+  if(ativos.length){
+    doc.autoTable({
+      startY:y,
+      head:[['Nome','Cargo','Área','Regime','Admissão','Líder']],
+      body:ativos.map(c=>[c.nome||'',c.cargo||c.Cargo||'',c.area||c.departamento||'',c.regime||'',fmtDatePDF(c.admissao),c.lider||'']),
+      styles:{fontSize:8,cellPadding:3}, headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // Desligamentos
+  const deslig = DB.desligamentos.filter(d=>teamNames.includes(normalizeStr(d.nome||d.Nome||'')));
+  if(deslig.length){
+    y = secTitle('Desligamentos ('+deslig.length+')', y);
+    doc.autoTable({
+      startY:y,
+      head:[['Nome','Cargo','Tipo','Motivo','Último Dia','Tempo']],
+      body:deslig.map(d=>[d.nome||'',d.cargo||'',d.tipo||'',d.motivo||'',fmtDatePDF(d.ultimoDia),d.tempoDeCasa||'']),
+      styles:{fontSize:8,cellPadding:3}, headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // Acompanhamentos
+  const acomp = DB.acompanhamentos.filter(r=>teamNames.includes(normalizeStr(r.colaborador||r.Colaborador||'')));
+  if(acomp.length){
+    y = secTitle('Acompanhamentos ('+acomp.length+')', y);
+    doc.autoTable({
+      startY:y,
+      head:[['Colaborador','Tipo','Data','Responsável','Status','Obs.']],
+      body:acomp.map(a=>[a.colaborador||'',a.tipo||'',a.data||'',a.responsavel||'',a.status||'',a.observacoes||'']),
+      styles:{fontSize:8,cellPadding:3}, headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // 1:1s
+  const oneones = DB.oneOnOnes.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+  if(oneones.length){
+    y = secTitle('1:1s ('+oneones.length+')', y);
+    doc.autoTable({
+      startY:y,
+      head:[['Colaborador','Data','Tipo','Resumo']],
+      body:oneones.sort((a,b)=>(b.data||'').localeCompare(a.data||'')).map(o=>[o.nome||'',o.data||'',o.tipo||'',o.resumo||'']),
+      styles:{fontSize:8,cellPadding:3,overflow:'linebreak'}, headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // Banco de horas
+  const banco = (DB.bancoHorasImport||[]).filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+  if(banco.length){
+    y = secTitle('Banco de Horas ('+banco.length+')', y);
+    doc.autoTable({
+      startY:y,
+      head:[['Nome','Horas','Cargo','Líder']],
+      body:banco.map(b=>[b.nome||'',b.horas||'',b.cargo||'',b.lider||'']),
+      styles:{fontSize:8,cellPadding:3}, headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // PDIs
+  const pdis = DB.pdis.filter(r=>teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+  if(pdis.length){
+    y = secTitle('PDIs ('+pdis.length+')', y);
+    doc.autoTable({
+      startY:y,
+      head:[['Nome','Título','Status','Prazo','Progresso']],
+      body:pdis.map(p=>[p.nome||'',p.titulo||'',p.status||'',p.prazo||'',p.progresso||'']),
+      styles:{fontSize:8,cellPadding:3}, headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // Promoções
+  const promos = DB.promocoes.filter(p=>teamNames.includes(normalizeStr(p.nome||p.Nome||'')) && isPromoSalarial(p));
+  if(promos.length){
+    y = secTitle('Promoções ('+promos.length+')', y);
+    doc.autoTable({
+      startY:y,
+      head:[['Nome','Cargo Anterior','Cargo Novo','Área','Gestor']],
+      body:promos.map(p=>[p.nome||'',p.cargoAtual||'',p.cargoAprovado||'',p.area||'',p.gestor||'']),
+      styles:{fontSize:8,cellPadding:3}, headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+    });
+  }
+
+  pdfFooter(doc);
+  doc.save('Relatorio_Equipe_'+nome.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.pdf');
 }
 
 function exportColaboradoresPDF(filterArea){
