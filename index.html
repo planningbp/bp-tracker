@@ -4294,56 +4294,34 @@ function openMeetingForm(id){
 function applyEnpsAutoCalc(fd){
   if(!DB.enps || !DB.enps.length) return;
   const gerenteN = normalizeStr(fd.gerente||'');
+  const areaN = normalizeStr(fd.area||'');
   const period = fd.period||'';
   if(!gerenteN) return;
 
-  // Collect all leader names in the hierarchy tree under this gerente
-  const teamTree = getTeamTree(fd.gerente||'');
-  const subLiders = new Set();
-  subLiders.add(gerenteN); // include self
-  teamTree.forEach(c=>{
-    const cn = normalizeStr(c.nome||c.Nome||'');
-    if(cn && isCargoLideranca(c.cargo||c.Cargo||'')) subLiders.add(cn);
-    // Also check if this person is listed as lider of someone
-    const hasReports = DB.colaboradores.some(cc=> normalizeStr(cc.lider||cc['Líder']||cc.Lider||'')===cn);
-    if(hasReports) subLiders.add(cn);
-  });
-
-  // Find eNPS records for all leaders in the tree
-  function findRecords(liderSet, per){
-    return DB.enps.filter(r=> r.tipo==='lider' && liderSet.has(normalizeStr(r.referencia)) && (!per || r.periodo===per) && !(r.semNotaEnps||r.semNota));
-  }
-
-  // Try with period first, then without
-  let recs = findRecords(subLiders, period);
-  if(!recs.length) {
-    // Get latest period available for these leaders
-    const allRecs = findRecords(subLiders, '');
-    if(allRecs.length){
-      // Group by period, pick the most recent
-      const periods = [...new Set(allRecs.map(r=>r.periodo||''))].sort().reverse();
-      if(periods.length) recs = allRecs.filter(r=>r.periodo===periods[0]);
+  // 1) Priority: use the EXACT department record (tipo==='departamento')
+  if(areaN){
+    let deptRec = DB.enps.find(r=> r.tipo==='departamento' && normalizeStr(r.referencia)===areaN && r.periodo===period && !(r.semNotaEnps||r.semNota));
+    if(!deptRec){
+      // Try latest period for this department
+      const deptRecs = DB.enps.filter(r=> r.tipo==='departamento' && normalizeStr(r.referencia)===areaN && !(r.semNotaEnps||r.semNota)).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+      if(deptRecs.length) deptRec = deptRecs[0];
+    }
+    if(deptRec){
+      if(deptRec.enps!=null) fd.enps = deptRec.enps;
+      if(deptRec.lnps!=null) fd.lnps = deptRec.lnps;
+      return; // exact dept score found — done
     }
   }
 
-  if(recs.length){
-    // Average eNPS and lNPS across all leaders in tree
-    const enpsVals = recs.filter(r=>r.enps!=null).map(r=>r.enps);
-    const lnpsVals = recs.filter(r=>r.lnps!=null).map(r=>r.lnps);
-    if(enpsVals.length) fd.enps = Math.round(enpsVals.reduce((a,b)=>a+b,0)/enpsVals.length);
-    if(lnpsVals.length) fd.lnps = Math.round(lnpsVals.reduce((a,b)=>a+b,0)/lnpsVals.length);
-  } else {
-    // Fallback: single record for this leader
-    let rec = DB.enps.find(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN && r.periodo===period);
-    if(!rec){
-      const lRecs = DB.enps.filter(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
-      if(lRecs.length) rec = lRecs[0];
-    }
-    if(rec){
-      if(rec.enps!=null) fd.enps = rec.enps;
-      if(rec.lnps!=null) fd.lnps = rec.lnps;
-      if(rec.semNotaEnps || rec.semNota) fd.semNota = true;
-    }
+  // 2) Fallback: single record for this specific leader
+  let rec = DB.enps.find(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN && r.periodo===period && !(r.semNotaEnps||r.semNota));
+  if(!rec){
+    const lRecs = DB.enps.filter(r=> r.tipo==='lider' && normalizeStr(r.referencia)===gerenteN && !(r.semNotaEnps||r.semNota)).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+    if(lRecs.length) rec = lRecs[0];
+  }
+  if(rec){
+    if(rec.enps!=null) fd.enps = rec.enps;
+    if(rec.lnps!=null) fd.lnps = rec.lnps;
   }
 }
 function applyAutoCalc(){
@@ -4364,12 +4342,7 @@ function applyAutoCalc(){
     return {nome:e.nome, cargo:e.cargo, admissao:fmtDate(e.admissao), milestone:e.milestone+' dias', milestoneDate:fmtDate(e.milestoneDate), status: saved ? saved.status : 'Pendente', observacao: saved ? saved.observacao||'' : ''};
   });
   fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, gestor:p.gestor||'', aprovador:p.aprovador||'', cargoAnterior:p.cargoAtual||'', salarioAnterior:p.salarioAtual||'', cargoNovo:p.cargoAprovado||'', salarioNovo:p.valorAprovado||'', reajuste:p.reajuste||'', pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
-  // Pull eNPS/lNPS from scores (when area is available)
-  const scoreMatch = DB.scores.find(s=> (s.tipo||'area')==='area' && normalizeStr(s.area)===normalizeStr(fd.area) && s.period===fd.period);
-  if(scoreMatch){
-    fd.enps = scoreMatch.enps;
-    fd.lnps = scoreMatch.lnps;
-  }
+  // eNPS/lNPS already set by applyEnpsAutoCalc() with exact dept/leader scores from DB.enps
   // Auto-populate banco de horas from imported data
   if(DB.bancoHorasImport.length){
     const areaBH = DB.bancoHorasImport.filter(b=> normalizeStr(b.area)===normalizeStr(fd.area));
@@ -4591,8 +4564,8 @@ function renderMeetingForm(){
           </div>
           <div id="enpsFields" style="${fd.semNota?'opacity:0.4;pointer-events:none':''}">
             <div class="field-grid">
-              <div class="field"><label>eNPS (média)</label><input id="f_enps" type="number" value="${fd.enps}"></div>
-              <div class="field"><label>lNPS (média liderança)</label><input id="f_lnps" type="number" value="${fd.lnps}"></div>
+              <div class="field"><label>eNPS</label><input id="f_enps" type="number" value="${fd.enps}"></div>
+              <div class="field"><label>lNPS</label><input id="f_lnps" type="number" value="${fd.lnps}"></div>
             </div>
             ${(()=>{
               // Show breakdown: head's own, department, all direct+indirect leaders
