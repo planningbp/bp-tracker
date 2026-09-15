@@ -1765,11 +1765,17 @@ function getUltimaPromocao(nome){
   // 2) Check inline promocoes field on colaborador (e.g. "08/2026;Analista III C;R$4.125,04")
   const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===nk);
   if(colab && colab.promocoes){
-    String(colab.promocoes).split('\n').filter(Boolean).forEach(line=>{
-      const parts = line.split(';');
+    // Split by newlines, or detect multiple MM/YYYY entries on one line
+    let promoStr = String(colab.promocoes);
+    // Normalize line separators
+    promoStr = promoStr.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+    // If no newline but multiple date patterns, split before each date (except the first)
+    if(!promoStr.includes('\n') && (promoStr.match(/\d{1,2}\/\d{4}/g)||[]).length > 1){
+      promoStr = promoStr.replace(/\s+(\d{1,2}\/\d{4})/g, '\n$1');
+    }
+    promoStr.split('\n').filter(Boolean).forEach(line=>{
+      const parts = line.trim().split(';');
       if(parts.length>=2){
-        // Only count as promotion if there's a salary value (3rd part)
-        if(parts.length < 3 || !parseBRL(parts[2])) return;
         const raw = parts[0].trim();
         let d = null;
         const mmyyyy = raw.match(/^(\d{1,2})\/(\d{4})$/);
