@@ -101,6 +101,7 @@ input,select,textarea{font-family:inherit;}
 .form-label{font-size:12px;font-weight:600;color:var(--text-light);display:block;margin-bottom:6px;}
 .input{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;outline:none;transition:border-color .15s;background:#fff;color:var(--text);box-sizing:border-box;}
 .rich-editor{cursor:text;font-size:14px;} .rich-editor:focus{border-color:var(--primary);} .rich-editor ul,.rich-editor ol{margin:4px 0 4px 20px;} .rich-editor li{margin-bottom:2px;}
+.rich-content ul,.rich-content ol{margin:6px 0 6px 20px;} .rich-content li{margin-bottom:4px;line-height:1.6;} .rich-content p{margin:0 0 8px;} .rich-content br+br{content:'';display:block;margin-top:6px;}
 .rich-toolbar button{font-size:12px;padding:2px 0;min-height:28px;border-radius:6px;cursor:pointer;}
 .input:focus{border-color:var(--primary);}
 
@@ -1898,20 +1899,22 @@ function computeAutoData(area, period, lider, customStart, customEnd){
   const inRange = (d) => d && d>=start && d<=end;
   // If leader is Head or no leader selected → full area; otherwise filter by leader's direct reports
   const fullArea = !lider || isHead(lider);
+  const areaN = normalizeStr(area);
+  const liderN = normalizeStr(lider);
   const colabs = DB.colaboradores.filter(c=>{
-    if(c.area!==area) return false;
-    if(!fullArea) return normalizeStr(c.lider)===normalizeStr(lider);
+    if(normalizeStr(c.area||c.departamento||'')!==areaN) return false;
+    if(!fullArea) return normalizeStr(c.lider||c['Líder']||c.Lider||'')===liderN;
     return true;
   });
   const colabNames = new Set(colabs.map(c=>normalizeStr(c.nome)));
   const desligsAll = DB.desligamentos.filter(d=>{
-    if(d.area!==area) return false;
-    if(!fullArea) return colabNames.has(normalizeStr(d.nome)) || normalizeStr(d.lider)===normalizeStr(lider);
+    if(normalizeStr(d.area||'')!==areaN) return false;
+    if(!fullArea) return colabNames.has(normalizeStr(d.nome)) || normalizeStr(d.lider||'')===liderN;
     return true;
   });
   const desligsPeriod = desligsAll.filter(d=> d.mesDate && inRange(d.mesDate));
   const promosPeriod = DB.promocoes.filter(p=>{
-    if(p.area!==area) return false;
+    if(normalizeStr(p.area||'')!==areaN) return false;
     if(!fullArea) return colabNames.has(normalizeStr(p.nome));
     return true;
   }).filter(p=> p.mesDate && inRange(p.mesDate) && isPromoSalarial(p));
@@ -2139,7 +2142,22 @@ let liderDetailColab = null;
 
 function getLiderTeam(){
   if(!isLiderSession()) return [];
-  return getTeamTree(SESSION.liderNome);
+  const nome = SESSION.liderNome;
+  // Heads see ALL collaborators in their area(s), not just direct tree
+  if(isHead(nome)){
+    const headColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===normalizeStr(nome));
+    const headArea = headColab ? normalizeStr(headColab.area||headColab.departamento||'') : '';
+    if(headArea){
+      // All collaborators in the same area (except the head themselves)
+      const areaTeam = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamento||'')===headArea && normalizeStr(c.nome||c.Nome||'')!==normalizeStr(nome));
+      // Also include anyone in the tree that might be in a different area
+      const treeTeam = getTeamTree(nome);
+      const seen = new Set(areaTeam.map(c=>normalizeStr(c.nome||c.Nome||'')));
+      treeTeam.forEach(c=>{ if(!seen.has(normalizeStr(c.nome||c.Nome||''))) areaTeam.push(c); });
+      return areaTeam;
+    }
+  }
+  return getTeamTree(nome);
 }
 
 function getLiderTeamNames(){
@@ -2351,14 +2369,16 @@ function renderLiderRelatorio(ct){
   const teamNames = getLiderTeamNames();
   const nome = SESSION.liderNome;
 
-  // Data
+  // Data — Heads also match desligamentos/promoções by area
   const ativos = team.filter(c=>(c.status||'Ativo')==='Ativo');
   const inativos = team.filter(c=>(c.status||'Ativo')!=='Ativo');
-  const deslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')));
+  const _isH2 = isHead(nome);
+  const _hA2 = _isH2 ? [...new Set(team.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))] : [];
+  const deslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')) || (_isH2 && _hA2.includes(normalizeStr(d.area||d.departamentoRaw||d.departamento||''))));
   const acomp = DB.acompanhamentos.filter(r=> teamNames.includes(normalizeStr(r.colaborador||r.Colaborador||'')));
   const oneones = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
   const pdis = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
-  const promos = DB.promocoes.filter(p=> teamNames.includes(normalizeStr(p.nome||p.Nome||'')) && isPromoSalarial(p));
+  const promos = DB.promocoes.filter(p=> (teamNames.includes(normalizeStr(p.nome||p.Nome||'')) || (_isH2 && _hA2.includes(normalizeStr(p.area||'')))) && isPromoSalarial(p));
   const banco = (DB.bancoHorasImport||[]).filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
 
   // Sort acompanhamentos by date desc
@@ -2608,10 +2628,12 @@ function renderLiderDashboard(ct){
     return html;
   }
 
-  // Data filtered by team
+  // Data filtered by team — Heads also match by area for desligamentos/promoções (people who left aren't in team)
   const myColabs = team;
-  const myDeslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')));
-  const myPromos = DB.promocoes.filter(p=> teamNames.includes(normalizeStr(p.nome||p.Nome||'')) && isPromoSalarial(p));
+  const _isHeadUser = isHead(SESSION.liderNome);
+  const _headAreas = _isHeadUser ? [...new Set(myColabs.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))] : [];
+  const myDeslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')) || (_isHeadUser && _headAreas.includes(normalizeStr(d.area||d.departamentoRaw||d.departamento||''))));
+  const myPromos = DB.promocoes.filter(p=> (teamNames.includes(normalizeStr(p.nome||p.Nome||'')) || (_isHeadUser && _headAreas.includes(normalizeStr(p.area||'')))) && isPromoSalarial(p));
   const pdisCount = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
   const oneOnOnesCount = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
 
@@ -2622,13 +2644,32 @@ function renderLiderDashboard(ct){
   const totalPromos = myPromos.length;
   const turnover = totalHC > 0 ? Math.round(totalDesl/totalHC*10000)/100 : 0;
 
-  // eNPS/lNPS - check scores for leader or for team areas
+  // eNPS/lNPS - check DB.enps first (BP's primary source), then DB.scores as fallback
   const teamAreas = [...new Set(myColabs.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))];
-  const myScoresLider = DB.scores.filter(s=>s.tipo==='lider' && normalizeStr(s.lider||'')===normalizeStr(SESSION.liderNome));
-  const myScoresArea = DB.scores.filter(s=>(s.tipo||'area')==='area' && teamAreas.includes(normalizeStr(s.area||'')));
-  const myScores = myScoresLider.length ? myScoresLider : myScoresArea;
-  const avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : 0;
-  const avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : 0;
+  const liderN = normalizeStr(SESSION.liderNome);
+  // Priority 1: DB.enps department records for the head's area(s)
+  const enpsAreaRecs = (DB.enps||[]).filter(r=> r.tipo==='departamento' && teamAreas.includes(normalizeStr(r.referencia||'')) && !(r.semNotaEnps||r.semNota));
+  // Priority 2: DB.enps leader records for this specific leader
+  const enpsLiderRecs = (DB.enps||[]).filter(r=> r.tipo==='lider' && normalizeStr(r.referencia||'')===liderN && !(r.semNotaEnps||r.semNota));
+  // Priority 3: DB.scores (legacy)
+  const scoresLider = DB.scores.filter(s=>s.tipo==='lider' && normalizeStr(s.lider||'')===liderN);
+  const scoresArea = DB.scores.filter(s=>(s.tipo||'area')==='area' && teamAreas.includes(normalizeStr(s.area||'')));
+  // Pick best source: latest record from each
+  let avgEnps = 0, avgLnps = 0;
+  const allEnpsRecs = [...enpsAreaRecs, ...enpsLiderRecs].sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+  if(allEnpsRecs.length){
+    // Use latest period department score if available, otherwise latest leader score
+    const latestDept = allEnpsRecs.find(r=>r.tipo==='departamento');
+    const best = latestDept || allEnpsRecs[0];
+    avgEnps = best.enps!=null ? Math.round(Number(best.enps)) : 0;
+    avgLnps = best.lnps!=null ? Math.round(Number(best.lnps)) : 0;
+  } else {
+    const myScores = scoresLider.length ? scoresLider : scoresArea;
+    avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : 0;
+    avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : 0;
+  }
+  // Combined scores for the scores table display
+  const allScoresForTable = [...(DB.enps||[]).filter(r=> (r.tipo==='departamento'&&teamAreas.includes(normalizeStr(r.referencia||'')))||(r.tipo==='lider'&&normalizeStr(r.referencia||'')===liderN)).map(r=>({tipo:r.tipo==='departamento'?'area':'lider', area:r.tipo==='departamento'?r.referencia:'', lider:r.tipo==='lider'?r.referencia:'', period:r.periodo, enps:r.enps, lnps:r.lnps})), ...scoresLider, ...scoresArea];
 
   // Composition by regime
   const regimeMap = {clt:0,pj:0,estagio:0,temp:0,outros:0};
@@ -2664,8 +2705,8 @@ function renderLiderDashboard(ct){
     return results;
   })();
 
-  // eNPS/lNPS scores table for display (read-only)
-  const allScoresForTeam = [...myScoresLider, ...myScoresArea].sort((a,b)=>(b.period||'').localeCompare(a.period||''));
+  // eNPS/lNPS scores table for display (read-only) — use combined data from DB.enps + DB.scores
+  const allScoresForTeam = allScoresForTable.sort((a,b)=>(b.period||b.periodo||'').localeCompare(a.period||a.periodo||''));
 
   ct.innerHTML = `
     <!-- KPI Cards Row 1 -->
@@ -2741,15 +2782,17 @@ function renderLiderDashboard(ct){
         ${allScoresForTeam.map((s,i)=>{
           const tipo = s.tipo||'area';
           const tipoLabel = tipo==='lider'?'Líder':'Área';
-          const ref = tipo==='lider'?esc(s.lider||''):esc(s.area||'');
-          const enpsColor = s.enps>=50?'#22c55e':s.enps>=0?'#FA6914':'#ff4343';
-          const lnpsColor = s.lnps>=50?'#22c55e':s.lnps>=0?'#FA6914':'#ff4343';
+          const ref = tipo==='lider'?esc(s.lider||s.referencia||''):esc(s.area||s.referencia||'');
+          const eVal = s.enps!=null?Number(s.enps):0;
+          const lVal = s.lnps!=null?Number(s.lnps):0;
+          const enpsColor = eVal>=50?'#22c55e':eVal>=0?'#FA6914':'#ff4343';
+          const lnpsColor = lVal>=50?'#22c55e':lVal>=0?'#FA6914':'#ff4343';
           return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
             '<td style="padding:10px 14px;">'+tipoLabel+'</td>'+
             '<td style="padding:10px 14px;font-weight:600;">'+ref+'</td>'+
-            '<td style="padding:10px 14px;">'+esc(s.period)+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+s.enps+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+s.lnps+'</td></tr>';
+            '<td style="padding:10px 14px;">'+esc(s.period||s.periodo||'')+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+eVal+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+lVal+'</td></tr>';
         }).join('')}
         </tbody></table></div>
     </div>` : ''}
@@ -2812,15 +2855,15 @@ function renderLiderDashboard(ct){
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
   });
 
-  // eNPS / lNPS evolution
-  const scoresForChart = myScoresLider.length ? myScoresLider : myScoresArea;
+  // eNPS / lNPS evolution — use combined DB.enps + DB.scores
+  const scoresForChart = allScoresForTable;
   const periodEnps = periods.map(p=>{
-    const sc = scoresForChart.filter(s=>s.period===p);
-    return sc.length ? Math.round(sc.reduce((s,r)=>s+(r.enps||0),0)/sc.length) : null;
+    const sc = scoresForChart.filter(s=>(s.period||s.periodo||'')===p);
+    return sc.length ? Math.round(sc.reduce((s,r)=>s+(Number(r.enps)||0),0)/sc.length) : null;
   });
   const periodLnps = periods.map(p=>{
-    const sc = scoresForChart.filter(s=>s.period===p);
-    return sc.length ? Math.round(sc.reduce((s,r)=>s+(r.lnps||0),0)/sc.length) : null;
+    const sc = scoresForChart.filter(s=>(s.period||s.periodo||'')===p);
+    return sc.length ? Math.round(sc.reduce((s,r)=>s+(Number(r.lnps)||0),0)/sc.length) : null;
   });
 
   destroyChart('chartLiderEnps');
@@ -2895,10 +2938,17 @@ function renderLiderDashboard(ct){
 
 function renderLiderDataPage(ct, dbKey, fields, labels){
   const teamNames = getLiderTeamNames();
+  const _isH = isHead(SESSION.liderNome);
+  const _hAreas = _isH ? [...new Set(getLiderTeam().map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))] : [];
   const nameField = fields[0];
   const data = (DB[dbKey]||[]).filter(r=>{
     const n = normalizeStr(r[nameField]||r.nome||r.Nome||r.colaborador||r.Colaborador||'');
-    return teamNames.includes(n);
+    if(teamNames.includes(n)) return true;
+    // Heads: also match by area (for desligamentos/promoções of people no longer in team)
+    if(_isH && (dbKey==='desligamentos'||dbKey==='promocoes')){
+      return _hAreas.includes(normalizeStr(r.area||r.departamentoRaw||r.departamento||''));
+    }
+    return false;
   });
 
   let html = `<div class="card"><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -3183,9 +3233,10 @@ function renderDashboard(){
   }
   // Apply leader filter
   if(fLider){
-    myColabs = myColabs.filter(c=>(c.lider||c['Líder']||c.Lider||'')===fLider);
-    myDeslig = myDeslig.filter(d=>(d.lider||d['Líder']||d.Lider||'')===fLider);
-    myPromos = myPromos.filter(p=>(p.lider||p['Líder']||p.Lider||'')===fLider);
+    const fLiderN = normalizeStr(fLider);
+    myColabs = myColabs.filter(c=>normalizeStr(c.lider||c['Líder']||c.Lider||'')===fLiderN);
+    myDeslig = myDeslig.filter(d=>normalizeStr(d.lider||d['Líder']||d.Lider||'')===fLiderN);
+    myPromos = myPromos.filter(p=>normalizeStr(p.lider||p['Líder']||p.Lider||'')===fLiderN);
   }
 
   // Date filtered subsets
@@ -4354,21 +4405,54 @@ function applyAutoCalc(){
     const saved = DB.acompanhamentos.find(a=> normalizeStr(a.nome)===normalizeStr(e.nome) && a.milestone===e.milestone);
     return {nome:e.nome, cargo:e.cargo, admissao:fmtDate(e.admissao), milestone:e.milestone+' dias', milestoneDate:fmtDate(e.milestoneDate), status: saved ? saved.status : 'Pendente', observacao: saved ? saved.observacao||'' : ''};
   });
-  fd.promocoesTable = auto.promocoes.map(p=>({nome:p.nome, gestor:p.gestor||'', aprovador:p.aprovador||'', cargoAnterior:p.cargoAtual||'', salarioAnterior:p.salarioAtual||'', cargoNovo:p.cargoAprovado||'', salarioNovo:p.valorAprovado||'', reajuste:p.reajuste||'', pct: p.pct!=null?fmtPct(p.pct*100):'—'}));
+  fd.promocoesTable = auto.promocoes.map(p=>{
+    let cargoAnt = p.cargoAtual||'';
+    let salAnt = p.salarioAtual||'';
+    // Fallback: try to find previous promo or collaborator admission data
+    if(!cargoAnt || !salAnt){
+      const nk = normalizeStr(p.nome);
+      const colab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
+      // Look for previous promotions (before this one)
+      const prevPromos = DB.promocoes.filter(pp=> pp!==p && normalizeStr(pp.nome)===nk && pp.mesDate && p.mesDate && new Date(pp.mesDate)<new Date(p.mesDate)).sort((a,b)=>new Date(a.mesDate)-new Date(b.mesDate));
+      if(prevPromos.length){
+        const last = prevPromos[prevPromos.length-1];
+        if(!cargoAnt) cargoAnt = last.cargoAprovado||last.cargoAtual||'';
+        if(!salAnt) salAnt = last.valorAprovado||last.salarioAtual||'';
+      } else if(colab){
+        if(!cargoAnt) cargoAnt = colab.cargoAdmissao||colab.cargo_admissao||'';
+        if(!salAnt) salAnt = colab.salarioAdmissao||colab.salario_admissao||'';
+      }
+    }
+    function fmtR$(v){ if(!v) return ''; if(typeof v==='number') return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2}); return String(v); }
+    const salAntFmt = fmtR$(salAnt);
+    const salNovoFmt = fmtR$(p.valorAprovado);
+    const reajFmt = fmtR$(p.reajuste);
+    return {nome:p.nome, gestor:p.gestor||'', aprovador:p.aprovador||'', cargoAnterior:cargoAnt, salarioAnterior:salAntFmt, cargoNovo:p.cargoAprovado||'', salarioNovo:salNovoFmt, reajuste:reajFmt, pct: p.pct!=null&&p.pct!==''?fmtPct(p.pct*100):'—'};
+  });
   // eNPS/lNPS already set by applyEnpsAutoCalc() with exact dept/leader scores from DB.enps
+  // Helper: filter records by gerente's team (same logic as computeAutoData)
+  const _fullArea = !fd.gerente || isHead(fd.gerente);
+  const _teamNames = _fullArea ? null : new Set(
+    DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamento||'')===normalizeStr(fd.area) && normalizeStr(c.lider||c['Líder']||c.Lider||'')===normalizeStr(fd.gerente))
+      .map(c=>normalizeStr(c.nome||c.Nome||''))
+  );
+  function isInTeam(nome){ return _fullArea || (_teamNames && _teamNames.has(normalizeStr(nome))); }
   // Auto-populate banco de horas from imported data
   if(DB.bancoHorasImport.length){
-    const areaBH = DB.bancoHorasImport.filter(b=> normalizeStr(b.area)===normalizeStr(fd.area));
+    const areaBH = DB.bancoHorasImport.filter(b=> normalizeStr(b.area)===normalizeStr(fd.area) && isInTeam(b.nome));
     if(areaBH.length) fd.bancoHorasTable = areaBH.map(b=>({nome:b.nome, cargo:b.cargo||'', lider:b.lider||'', horas:b.horas||'', observacao:b.observacao||''}));
   }
   fd.autoApplied = true;
 }
 function detailMiniTable(title, rows, headers, keys){
   if(!rows || !rows.length) return '';
+  // Filter out columns that are entirely empty
+  const visibleCols = headers.map((h,i)=>({h, k:keys[i], i})).filter(col=> rows.some(r=>(r[col.k]||'').toString().trim()));
+  if(!visibleCols.length) visibleCols.push(...headers.map((h,i)=>({h, k:keys[i], i})));
   return `<div class="card" style="margin-bottom:20px;">
     <div class="section-title">${title} (${rows.length})</div>
-    <div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>
-    ${rows.map(r=>`<tr>${keys.map(k=>`<td>${esc(r[k]||'')}</td>`).join('')}</tr>`).join('')}
+    <div class="table-wrap"><table><thead><tr>${visibleCols.map(c=>`<th>${c.h}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map((r,ri)=>`<tr style="${ri%2?'background:#fafbfc;':''}">${visibleCols.map(c=>`<td>${esc(r[c.k]||'')}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></div>`;
 }
 function detailGroupedTable(title, rows, extraHeaders, extraKeys){
@@ -4386,10 +4470,12 @@ function detailGroupedTable(title, rows, extraHeaders, extraKeys){
       byL[l].map((r,i)=>'<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="'+td+'">'+esc(r.nome)+'</td><td style="'+td+'">'+esc(r.cargo||'')+'</td>'+extraKeys.map(k=>'<td style="'+td+'">'+esc(r[k]||'')+'</td>').join('')+'</tr>').join('')+
       '</tbody></table></div>').join('')+'</div>';
 }
-function renderSmartTable(tableId, title, rows, extraCols, area){
+function renderSmartTable(tableId, title, rows, extraCols, area, gerente){
   // extraCols: [{key,label,placeholder}] — columns besides nome/cargo/lider
   rows = rows||[];
-  const areaColabs = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamentoRaw||'')===normalizeStr(area||''));
+  const _full = !gerente || isHead(gerente);
+  const _gerN = normalizeStr(gerente||'');
+  const areaColabs = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamentoRaw||'')===normalizeStr(area||'')).filter(c=> _full || normalizeStr(c.lider||c['Líder']||c.Lider||'')===_gerN);
   const colabOpts = areaColabs.map(c=>`<option value="${esc(c.nome)}" data-cargo="${esc(c.cargo||'')}" data-lider="${esc(c.lider||'')}">${esc(c.nome)}</option>`).join('');
   // Auto-fill lider/cargo from colaboradores if missing
   rows.forEach(r=>{
@@ -4677,7 +4763,7 @@ function renderMeetingForm(){
             ${fd.riscos.map((r,i)=>renderRiskRow(r,i)).join('')}
           </div>
           <button class="btn btn-outline btn-sm" id="btnAddRisk" style="width:auto;margin-bottom:20px;">${ICONS.plus} Adicionar risco</button>
-          ${renderSmartTable('bancoHorasTable','Banco de horas', fd.bancoHorasTable, [{key:'horas',label:'Horas',placeholder:'Ex.: +08:54'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area)}
+          ${renderSmartTable('bancoHorasTable','Banco de horas', fd.bancoHorasTable, [{key:'horas',label:'Horas',placeholder:'Ex.: +08:54'},{key:'observacao',label:'Observação',placeholder:'Observação (opcional)'}], fd.area, fd.gerente)}
         </div>
 
         <div class="form-section ${UI.formSection===5?'active':''}" data-panel="5">
@@ -5214,24 +5300,35 @@ function renderMeetingDetail(){
   <div data-report-topic="acoes">${(()=>{
     const acoes = m.acoes||[];
     if(!acoes.length) return '';
-    return '<div class="card" style="margin-bottom:20px;"><div class="section-title">Ações do Período ('+acoes.length+')</div>'+
-      acoes.map((a,i)=>{
-        const anexosHtml = (a.anexos||[]).length ? '<div style="margin-top:8px;">'+
-          (a.anexos||[]).map(anx=>'<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#f0f4f8;border-radius:6px;margin:3px 4px 3px 0;font-size:11px;">'+
-            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>'+
-            '<a href="'+anx.data+'" download="'+esc(anx.nome)+'" style="color:var(--primary);font-weight:600;">'+esc(anx.nome)+'</a>'+
-            '<span style="color:#888;">('+( anx.tamanho||'')+')</span></div>'
-          ).join('')+'</div>' : '';
-        return '<div style="padding:12px 14px;background:#fafbfc;border-radius:8px;margin-bottom:10px;border-left:3px solid var(--primary);">'+
-          '<div style="font-weight:700;font-size:13.5px;margin-bottom:4px;">'+esc(a.titulo||'Ação '+(i+1))+'</div>'+
-          (a.descricao? '<p style="font-size:13px;line-height:1.6;white-space:pre-wrap;margin:0;">'+esc(a.descricao)+'</p>' : '')+
-          anexosHtml+'</div>';
-      }).join('')+'</div>';
+    let h = '<div class="card" style="margin-bottom:20px;"><div class="section-title">Ações do Período ('+acoes.length+')</div>';
+    h += '<div style="display:flex;flex-direction:column;gap:10px;">';
+    acoes.forEach((a,i)=>{
+      const anexosHtml = (a.anexos||[]).length ? '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">'+
+        (a.anexos||[]).map(anx=>'<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#f0f4f8;border-radius:6px;font-size:11px;">'+
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>'+
+          '<a href="'+anx.data+'" download="'+esc(anx.nome)+'" style="color:var(--primary);font-weight:600;">'+esc(anx.nome)+'</a>'+
+          '<span style="color:#888;">('+( anx.tamanho||'')+')</span></div>'
+        ).join('')+'</div>' : '';
+      h += '<div style="padding:14px 16px;background:#fafbfc;border-radius:10px;border-left:4px solid var(--primary);">';
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(a.descricao?'8':'0')+'px;">';
+      h += '<span style="background:var(--primary);color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">'+(i+1)+'</span>';
+      h += '<span style="font-weight:700;font-size:13.5px;">'+esc(a.titulo||'Ação '+(i+1))+'</span></div>';
+      if(a.descricao) h += '<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:#444;margin-left:32px;">'+esc(a.descricao)+'</div>';
+      if(anexosHtml) h += '<div style="margin-left:32px;">'+anexosHtml+'</div>';
+      h += '</div>';
+    });
+    h += '</div></div>';
+    return h;
   })()}</div>
   <div data-report-topic="plano"><div class="card">
     <div class="section-title">Plano de Ação</div>
-    <div style="font-size:13.5px;line-height:1.6;">${m.planoAcao||'—'}</div>
-    ${m.observacoes? '<div class="section-title" style="margin-top:16px;">Observações</div><div style="font-size:13.5px;line-height:1.6;">'+m.observacoes+'</div>' : ''}
+    <div class="rich-content" style="font-size:13.5px;line-height:1.7;word-break:break-word;">${(()=>{
+      const txt = m.planoAcao||'—';
+      // If it contains HTML tags, render as-is; otherwise wrap with pre-wrap
+      if(/<[a-z][\s\S]*>/i.test(txt)) return txt;
+      return '<div style="white-space:pre-wrap;">'+esc(txt)+'</div>';
+    })()}</div>
+    ${m.observacoes? '<div class="section-title" style="margin-top:16px;">Observações</div><div class="rich-content" style="font-size:13.5px;line-height:1.7;word-break:break-word;">'+(/<[a-z][\s\S]*>/i.test(m.observacoes)?m.observacoes:'<div style="white-space:pre-wrap;">'+esc(m.observacoes)+'</div>')+'</div>' : ''}
   </div></div>`;
 }
 function bindMeetingDetail(){
@@ -7564,14 +7661,26 @@ function exportMeetingPDF(meetingId){
   if(acoes.length){
     y = checkPage(y, 20);
     y = secTitle('Ações do Período ('+acoes.length+')', y);
-    doc.autoTable({
-      startY: y,
-      head:[['Ação','Descrição']],
-      body: acoes.map((a,i)=>[a.titulo||'Ação '+(i+1), stripHtml(a.descricao||'')]),
-      styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
-      headStyles:hStyle, alternateRowStyles:altRow, margin:marg,
-      columnStyles:{0:{cellWidth:45},1:{cellWidth:maxW-45}}
-    });
+    const hasDesc = acoes.some(a=>(a.descricao||'').trim());
+    if(hasDesc){
+      doc.autoTable({
+        startY: y,
+        head:[['#','Ação','Descrição']],
+        body: acoes.map((a,i)=>[(i+1), a.titulo||'Ação '+(i+1), stripHtml(a.descricao||'')]),
+        styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
+        headStyles:hStyle, alternateRowStyles:altRow, margin:marg,
+        columnStyles:{0:{cellWidth:10},1:{cellWidth:45},2:{cellWidth:maxW-55}}
+      });
+    } else {
+      doc.autoTable({
+        startY: y,
+        head:[['#','Ação']],
+        body: acoes.map((a,i)=>[(i+1), a.titulo||'Ação '+(i+1)]),
+        styles:{fontSize:8, cellPadding:3},
+        headStyles:hStyle, alternateRowStyles:altRow, margin:marg,
+        columnStyles:{0:{cellWidth:10},1:{cellWidth:maxW-10}}
+      });
+    }
     y = doc.lastAutoTable.finalY + 8;
   }
 
@@ -7645,8 +7754,10 @@ function exportLiderRelatorioPDF(){
     y = doc.lastAutoTable.finalY + 8;
   }
 
-  // Desligamentos
-  const deslig = DB.desligamentos.filter(d=>teamNames.includes(normalizeStr(d.nome||d.Nome||'')));
+  // Desligamentos — Heads also match by area
+  const _isHPDF = isHead(nome);
+  const _hAreasPDF = _isHPDF ? [...new Set(team.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))] : [];
+  const deslig = DB.desligamentos.filter(d=>teamNames.includes(normalizeStr(d.nome||d.Nome||'')) || (_isHPDF && _hAreasPDF.includes(normalizeStr(d.area||d.departamentoRaw||d.departamento||''))));
   if(deslig.length){
     y = secTitle('Desligamentos ('+deslig.length+')', y);
     doc.autoTable({
@@ -7710,8 +7821,8 @@ function exportLiderRelatorioPDF(){
     y = doc.lastAutoTable.finalY + 8;
   }
 
-  // Promoções
-  const promos = DB.promocoes.filter(p=>teamNames.includes(normalizeStr(p.nome||p.Nome||'')) && isPromoSalarial(p));
+  // Promoções — Heads also match by area
+  const promos = DB.promocoes.filter(p=>(teamNames.includes(normalizeStr(p.nome||p.Nome||'')) || (_isHPDF && _hAreasPDF.includes(normalizeStr(p.area||'')))) && isPromoSalarial(p));
   if(promos.length){
     y = secTitle('Promoções ('+promos.length+')', y);
     doc.autoTable({
@@ -10249,8 +10360,8 @@ function syncPromocoesFromText(){
     const lider = c.lider||c['Líder']||c.Lider||'';
     // Parse lines: "MM/YYYY;Cargo;R$Valor"
     const lines = promoText.split(/\n/).map(l=>l.trim()).filter(Boolean);
-    let prevCargo = c.cargo_admissao||c['Cargo Admissão']||'';
-    let prevSalario = parseBRL(c.salario_admissao||c['Salário Admissão']||'0');
+    let prevCargo = c.cargoAdmissao||c.cargo_admissao||c['Cargo Admissão']||c['cargo admissao']||'';
+    let prevSalario = parseBRL(c.salarioAdmissao||c.salario_admissao||c['Salário Admissão']||c['salario admissao']||'0');
     // Sort lines by date
     const parsed = lines.map(line=>{
       const parts = line.split(';').map(p=>p.trim());
