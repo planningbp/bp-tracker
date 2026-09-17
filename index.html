@@ -2668,8 +2668,19 @@ function renderLiderDashboard(ct){
     avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : 0;
     avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : 0;
   }
-  // Combined scores for the scores table display
-  const allScoresForTable = [...(DB.enps||[]).filter(r=> (r.tipo==='departamento'&&teamAreas.includes(normalizeStr(r.referencia||'')))||(r.tipo==='lider'&&normalizeStr(r.referencia||'')===liderN)).map(r=>({tipo:r.tipo==='departamento'?'area':'lider', area:r.tipo==='departamento'?r.referencia:'', lider:r.tipo==='lider'?r.referencia:'', period:r.periodo, enps:r.enps, lnps:r.lnps})), ...scoresLider, ...scoresArea];
+  // For Heads: collect ALL leaders in the area for comparison
+  const _isHeadDash = _isHeadUser;
+  const _areaLiderNames = _isHeadDash ? [...new Set(myColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))] : [];
+  const enpsAllAreaLiders = _isHeadDash ? (DB.enps||[]).filter(r=> r.tipo==='lider' && _areaLiderNames.some(l=>normalizeStr(l)===normalizeStr(r.referencia||'')) && !(r.semNotaEnps && r.semNotaLnps)) : enpsLiderRecs;
+  // Combined scores for the scores table display — Heads see all area leaders
+  const allScoresForTable = [...(DB.enps||[]).filter(r=> {
+    if(r.tipo==='departamento') return teamAreas.includes(normalizeStr(r.referencia||''));
+    if(r.tipo==='lider'){
+      if(_isHeadDash) return _areaLiderNames.some(l=>normalizeStr(l)===normalizeStr(r.referencia||''));
+      return normalizeStr(r.referencia||'')===liderN;
+    }
+    return false;
+  }).map(r=>({tipo:r.tipo==='departamento'?'area':'lider', area:r.tipo==='departamento'?r.referencia:'', lider:r.tipo==='lider'?r.referencia:'', referencia:r.referencia, period:r.periodo, enps:r.enps, lnps:r.lnps, semNotaEnps:r.semNotaEnps, semNotaLnps:r.semNotaLnps, comentariosEnps:r.comentariosEnps||r.comentarios||'', comentariosLnps:r.comentariosLnps||''})), ...scoresLider, ...scoresArea];
 
   // Composition by regime
   const regimeMap = {clt:0,pj:0,estagio:0,temp:0,outros:0};
@@ -2729,11 +2740,20 @@ function renderLiderDashboard(ct){
       <div class="card"><div class="section-title">Promoções (por mês)</div><canvas id="chartLiderPromos" height="220"></canvas></div>
     </div>
 
-    <!-- Charts row 2: eNPS, lNPS -->
+    <!-- Charts row 2: eNPS, lNPS evolution -->
     <div class="grid grid-2" style="margin-bottom:20px;">
       <div class="card"><div class="section-title">eNPS — Evolução por período</div><canvas id="chartLiderEnps" height="220"></canvas></div>
       <div class="card"><div class="section-title">lNPS — Evolução por período</div><canvas id="chartLiderLnps" height="220"></canvas></div>
     </div>
+    ${_isHeadDash ? `
+    <!-- Head: eNPS/lNPS comparativo por líder -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title">eNPS / lNPS — Comparativo por Líder (últimos 3 períodos)</div>
+      <div class="grid grid-2" style="margin-top:12px;">
+        <div><div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#555;">eNPS por Líder</div><canvas id="chartLiderEnpsComp" height="280"></canvas></div>
+        <div><div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#555;">lNPS por Líder</div><canvas id="chartLiderLnpsComp" height="280"></canvas></div>
+      </div>
+    </div>` : ''}
 
     <!-- Charts row 3: Headcount, Regime -->
     <div class="grid grid-2" style="margin-bottom:20px;">
@@ -2770,7 +2790,7 @@ function renderLiderDashboard(ct){
 
     <!-- eNPS/lNPS scores read-only -->
     ${allScoresForTeam.length ? `<div class="card" style="margin-bottom:20px;">
-      <div class="section-title">Registros de eNPS e lNPS</div>
+      <div class="section-title">Registros de eNPS e lNPS${_isHeadDash?' — Todos os líderes da área':''}</div>
       <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
           <th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Nível</th>
@@ -2778,21 +2798,24 @@ function renderLiderDashboard(ct){
           <th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th>
           <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th>
           <th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Coments.</th>
         </tr></thead><tbody>
         ${allScoresForTeam.map((s,i)=>{
           const tipo = s.tipo||'area';
           const tipoLabel = tipo==='lider'?'Líder':'Área';
           const ref = tipo==='lider'?esc(s.lider||s.referencia||''):esc(s.area||s.referencia||'');
-          const eVal = s.enps!=null?Number(s.enps):0;
-          const lVal = s.lnps!=null?Number(s.lnps):0;
-          const enpsColor = eVal>=50?'#22c55e':eVal>=0?'#FA6914':'#ff4343';
-          const lnpsColor = lVal>=50?'#22c55e':lVal>=0?'#FA6914':'#ff4343';
-          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
+          const eVal = s.semNotaEnps ? null : (s.enps!=null?Number(s.enps):null);
+          const lVal = s.semNotaLnps ? null : (s.lnps!=null?Number(s.lnps):null);
+          const eDisp = s.semNotaEnps ? '<span style="color:#aaa;font-size:11px;">Sem nota</span>' : (eVal!=null ? '<span style="font-weight:800;font-size:16px;color:'+(eVal>=50?'#22c55e':eVal>=0?'#FA6914':'#ff4343')+';">'+eVal+'</span>' : '—');
+          const lDisp = s.semNotaLnps ? '<span style="color:#aaa;font-size:11px;">Sem nota</span>' : (lVal!=null ? '<span style="font-weight:800;font-size:16px;color:'+(lVal>=50?'#22c55e':lVal>=0?'#FA6914':'#ff4343')+';">'+lVal+'</span>' : '—');
+          const isMe = tipo==='lider' && normalizeStr(s.lider||s.referencia||'')===liderN;
+          return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+(isMe?'border-left:3px solid #962DFF;':'')+'">'+
             '<td style="padding:10px 14px;">'+tipoLabel+'</td>'+
-            '<td style="padding:10px 14px;font-weight:600;">'+ref+'</td>'+
+            '<td style="padding:10px 14px;font-weight:600;">'+ref+(isMe?' <span style="font-size:10px;background:#962DFF;color:#fff;padding:1px 6px;border-radius:8px;">você</span>':'')+'</td>'+
             '<td style="padding:10px 14px;">'+esc(s.period||s.periodo||'')+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+enpsColor+';">'+eVal+'</td>'+
-            '<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:16px;color:'+lnpsColor+';">'+lVal+'</td></tr>';
+            '<td style="padding:10px 14px;text-align:center;">'+eDisp+'</td>'+
+            '<td style="padding:10px 14px;text-align:center;">'+lDisp+'</td>'+
+            '<td style="padding:10px 14px;font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">'+esc(s.comentariosEnps||s.comentariosLnps||'')+'</td></tr>';
         }).join('')}
         </tbody></table></div>
     </div>` : ''}
@@ -2881,6 +2904,24 @@ function renderLiderDashboard(ct){
     data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
   });
+
+  // Head: comparison bar charts by leader (last 3 periods)
+  if(_isHeadDash && enpsAllAreaLiders.length){
+    const ENPS_COLORS_L = ['#962DFF','#14C8FA','#FA6914','#22c55e','#ff4343','#f59e0b','#06b6d4','#ec4899','#8b5cf6','#10b981'];
+    const _liderNames = [...new Set(enpsAllAreaLiders.map(r=>r.referencia).filter(Boolean))].sort();
+    const _liderPeriods = [...new Set(enpsAllAreaLiders.map(r=>r.periodo).filter(Boolean))].sort();
+    const _last3L = _liderPeriods.slice(-3);
+    function _buildGroupedBarL(canvasId, chartKey, labels, pers, getV){
+      destroyChart(chartKey);
+      const el = document.getElementById(canvasId);
+      if(!el || !labels.length || !pers.length) return;
+      const ds = pers.map((p,pi)=>({label:p, data:labels.map(l=>getV(l,p)), backgroundColor:ENPS_COLORS_L[pi%ENPS_COLORS_L.length], borderRadius:4, barPercentage:0.8, categoryPercentage:0.7}));
+      CHARTS[chartKey] = new Chart(el, {type:'bar', data:{labels:labels.map(l=>l.length>16?l.substring(0,14)+'…':l), datasets:ds},
+        options:{responsive:true, indexAxis:'x', plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}, scales:{y:{beginAtZero:false,grid:{color:'#f0f0f0'}},x:{ticks:{font:{size:10},maxRotation:45}}}}});
+    }
+    _buildGroupedBarL('chartLiderEnpsComp','chartLiderEnpsComp',_liderNames,_last3L,(l,p)=>{const r=enpsAllAreaLiders.find(x=>x.referencia===l&&x.periodo===p&&!x.semNotaEnps);return r?Number(r.enps):null;});
+    _buildGroupedBarL('chartLiderLnpsComp','chartLiderLnpsComp',_liderNames,_last3L,(l,p)=>{const r=enpsAllAreaLiders.find(x=>x.referencia===l&&x.periodo===p&&!x.semNotaLnps);return r?Number(r.lnps):null;});
+  }
 
   // Headcount evolution
   function toMK(d){ if(!d)return null; const dt=d instanceof Date?d:new Date(d); if(isNaN(dt))return null; return dt.getFullYear()*100+(dt.getMonth()+1); }
@@ -3313,10 +3354,34 @@ function renderDashboard(){
     <div class="card"><div class="section-title">Promoções (por mês)</div><canvas id="chartDashPromos" height="220"></canvas></div>
   </div>
 
-  <!-- Charts row 2: eNPS, lNPS -->
+  <!-- eNPS/lNPS Section: By Area -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="section-title">eNPS / lNPS — Comparativo por Área (últimos 3 períodos)</div>
+    <div class="grid grid-2" style="margin-top:12px;">
+      <div><div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#555;">eNPS por Área</div><canvas id="chartDashEnpsArea" height="240"></canvas></div>
+      <div><div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#555;">lNPS por Área</div><canvas id="chartDashLnpsArea" height="240"></canvas></div>
+    </div>
+  </div>
+
+  <!-- eNPS/lNPS Section: By Líder -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="section-title">eNPS / lNPS — Comparativo por Líder (últimos 3 períodos)</div>
+    <div class="grid grid-2" style="margin-top:12px;">
+      <div><div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#555;">eNPS por Líder</div><canvas id="chartDashEnpsLider" height="280"></canvas></div>
+      <div><div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#555;">lNPS por Líder</div><canvas id="chartDashLnpsLider" height="280"></canvas></div>
+    </div>
+  </div>
+
+  <!-- eNPS/lNPS evolution lines -->
   <div class="grid grid-2" style="margin-bottom:20px;">
     <div class="card"><div class="section-title">eNPS — Evolução por período</div><canvas id="chartDashEnps" height="220"></canvas></div>
     <div class="card"><div class="section-title">lNPS — Evolução por período</div><canvas id="chartDashLnps" height="220"></canvas></div>
+  </div>
+
+  <!-- eNPS/lNPS detail table -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="section-title">Detalhamento eNPS / lNPS — Todos os Registros</div>
+    <div id="dashEnpsDetailTable" style="overflow-x:auto;"></div>
   </div>
 
   <!-- Charts row 3: Headcount evo, Turnover evo -->
@@ -3674,18 +3739,75 @@ function bindDashboard(){
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}}}
   });
 
-  // eNPS / lNPS evolution
+  // === eNPS / lNPS — Build data from DB.enps (primary) + DB.scores (fallback) ===
+  const ENPS_COLORS = ['#962DFF','#14C8FA','#FA6914','#22c55e','#ff4343','#f59e0b','#06b6d4','#ec4899','#8b5cf6','#10b981','#6366f1','#f97316'];
+  // Collect all enps records relevant to current filter
+  const enpsRecsAll = (DB.enps||[]).filter(r=> !(r.semNotaEnps && r.semNotaLnps));
+  const enpsRecsFiltered = fArea
+    ? enpsRecsAll.filter(r=> normalizeStr(r.referencia||'')===normalizeStr(fArea) || (r.tipo==='lider' && myColabs.some(c=>normalizeStr(c.lider||c['Líder']||c.Lider||'')===normalizeStr(r.referencia||''))))
+    : enpsRecsAll.filter(r=> {
+        if(r.tipo==='departamento') return expandedAreas2.has(normalizeStr(r.referencia||''));
+        if(r.tipo==='lider') return myColabNames2.has(normalizeStr(r.referencia||'')) || myColabs.some(c=>normalizeStr(c.lider||c['Líder']||c.Lider||'')===normalizeStr(r.referencia||''));
+        return false;
+      });
+
+  // Find last 3 periods that have data
+  const enpsPeriodsWithData = [...new Set(enpsRecsFiltered.map(r=>r.periodo).filter(Boolean))].sort();
+  const last3Periods = enpsPeriodsWithData.slice(-3);
+
+  // --- By Area charts ---
+  const areaRecs = enpsRecsFiltered.filter(r=>r.tipo==='departamento');
+  const areaNames = [...new Set(areaRecs.map(r=>r.referencia).filter(Boolean))].sort();
+  function buildGroupedBar(canvasId, chartKey, groupLabels, periodLabels, getVal){
+    destroyChart(chartKey);
+    const el = document.getElementById(canvasId);
+    if(!el || !groupLabels.length || !periodLabels.length) return;
+    const datasets = periodLabels.map((per,pi)=>({
+      label: per,
+      data: groupLabels.map(g => getVal(g, per)),
+      backgroundColor: ENPS_COLORS[pi % ENPS_COLORS.length],
+      borderRadius: 4,
+      barPercentage: 0.8,
+      categoryPercentage: 0.7
+    }));
+    CHARTS[chartKey] = new Chart(el, {
+      type:'bar',
+      data:{labels:groupLabels.map(g=>g.length>18?g.substring(0,16)+'…':g), datasets},
+      options:{responsive:true, indexAxis:'x',
+        plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}},
+        scales:{y:{beginAtZero:false,grid:{color:'#f0f0f0'}},x:{ticks:{font:{size:10},maxRotation:45}}}}
+    });
+  }
+
+  buildGroupedBar('chartDashEnpsArea','chartDashEnpsArea', areaNames, last3Periods,
+    (area,per)=>{ const r=areaRecs.find(x=>x.referencia===area&&x.periodo===per&&!x.semNotaEnps); return r?Number(r.enps):null; });
+  buildGroupedBar('chartDashLnpsArea','chartDashLnpsArea', areaNames, last3Periods,
+    (area,per)=>{ const r=areaRecs.find(x=>x.referencia===area&&x.periodo===per&&!x.semNotaLnps); return r?Number(r.lnps):null; });
+
+  // --- By Líder charts ---
+  const liderRecs = enpsRecsFiltered.filter(r=>r.tipo==='lider');
+  let liderNames = [...new Set(liderRecs.map(r=>r.referencia).filter(Boolean))].sort();
+  if(fLider) liderNames = liderNames.filter(l=>normalizeStr(l)===normalizeStr(fLider));
+
+  buildGroupedBar('chartDashEnpsLider','chartDashEnpsLider', liderNames, last3Periods,
+    (lider,per)=>{ const r=liderRecs.find(x=>x.referencia===lider&&x.periodo===per&&!x.semNotaEnps); return r?Number(r.enps):null; });
+  buildGroupedBar('chartDashLnpsLider','chartDashLnpsLider', liderNames, last3Periods,
+    (lider,per)=>{ const r=liderRecs.find(x=>x.referencia===lider&&x.periodo===per&&!x.semNotaLnps); return r?Number(r.lnps):null; });
+
+  // --- Evolution line charts (aggregate) ---
   const periodEnps = periods.map(p=>{
+    const recs = enpsRecsFiltered.filter(r=>r.periodo===p && !r.semNotaEnps && r.enps!=null);
+    if(recs.length) return Math.round(recs.reduce((s,r)=>s+Number(r.enps),0)/recs.length);
     const sc = myScores.filter(s=>s.period===p);
     if(sc.length) return Math.round(sc.reduce((s,r)=>s+(r.enps||0),0)/sc.length);
-    const ms = myMeetings.filter(m=>m.period===p);
-    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.enps||0),0)/ms.length) : null;
+    return null;
   });
   const periodLnps = periods.map(p=>{
+    const recs = enpsRecsFiltered.filter(r=>r.periodo===p && !r.semNotaLnps && r.lnps!=null);
+    if(recs.length) return Math.round(recs.reduce((s,r)=>s+Number(r.lnps),0)/recs.length);
     const sc = myScores.filter(s=>s.period===p);
     if(sc.length) return Math.round(sc.reduce((s,r)=>s+(r.lnps||0),0)/sc.length);
-    const ms = myMeetings.filter(m=>m.period===p);
-    return ms.length ? Math.round(ms.reduce((s,m)=>s+(m.lnps||0),0)/ms.length) : null;
+    return null;
   });
 
   destroyChart('chartDashEnps');
@@ -3703,6 +3825,40 @@ function bindDashboard(){
     data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
     options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
   });
+
+  // --- Detail table ---
+  const detailEl = document.getElementById('dashEnpsDetailTable');
+  if(detailEl){
+    const sortedRecs = [...enpsRecsFiltered].sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||'') || (a.tipo||'').localeCompare(b.tipo||'') || (a.referencia||'').localeCompare(b.referencia||''));
+    if(sortedRecs.length){
+      let th = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">';
+      th += '<th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Tipo</th>';
+      th += '<th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Referência</th>';
+      th += '<th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Período</th>';
+      th += '<th style="padding:8px 10px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">eNPS</th>';
+      th += '<th style="padding:8px 10px;text-align:center;font-size:11px;text-transform:uppercase;color:#888;">lNPS</th>';
+      th += '<th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Coments. eNPS</th>';
+      th += '<th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#888;">Coments. lNPS</th>';
+      th += '</tr></thead><tbody>';
+      sortedRecs.forEach((r,i)=>{
+        const eVal = r.semNotaEnps ? '<span style="color:#aaa;">Sem nota</span>' : (r.enps!=null ? '<span style="font-weight:800;color:'+(Number(r.enps)>=50?'#22c55e':Number(r.enps)>=0?'#FA6914':'#ff4343')+';">'+r.enps+'</span>' : '—');
+        const lVal = r.semNotaLnps ? '<span style="color:#aaa;">Sem nota</span>' : (r.lnps!=null ? '<span style="font-weight:800;color:'+(Number(r.lnps)>=50?'#22c55e':Number(r.lnps)>=0?'#FA6914':'#ff4343')+';">'+r.lnps+'</span>' : '—');
+        th += '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'">';
+        th += '<td style="padding:8px 10px;">'+(r.tipo==='departamento'?'Área':'Líder')+'</td>';
+        th += '<td style="padding:8px 10px;font-weight:600;">'+esc(r.referencia||'')+'</td>';
+        th += '<td style="padding:8px 10px;">'+esc(r.periodo||'')+'</td>';
+        th += '<td style="padding:8px 10px;text-align:center;">'+eVal+'</td>';
+        th += '<td style="padding:8px 10px;text-align:center;">'+lVal+'</td>';
+        th += '<td style="padding:8px 10px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;">'+esc(r.comentariosEnps||r.comentarios||'')+'</td>';
+        th += '<td style="padding:8px 10px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;">'+esc(r.comentariosLnps||'')+'</td>';
+        th += '</tr>';
+      });
+      th += '</tbody></table>';
+      detailEl.innerHTML = th;
+    } else {
+      detailEl.innerHTML = '<div style="color:#aaa;font-size:13px;padding:20px;text-align:center;">Nenhum registro de eNPS/lNPS encontrado</div>';
+    }
+  }
 
   // Headcount & Turnover evolution
   function toMonthKey(d){
@@ -5286,6 +5442,52 @@ function renderMeetingDetail(){
           }).join('')+'</tbody></table></div></div>';
       }).join('')}
     </div>`;
+  })()}</div>
+  <div data-report-topic="clima">${(()=>{
+    // eNPS/lNPS section — area + líder scores with history
+    const areaN = normalizeStr(m.area||'');
+    const gerenteN = normalizeStr(m.gerente||'');
+    const areaRecs = (DB.enps||[]).filter(r=>r.tipo==='departamento' && normalizeStr(r.referencia||'')===areaN && !(r.semNotaEnps && r.semNotaLnps));
+    const liderRecs = (DB.enps||[]).filter(r=>r.tipo==='lider' && normalizeStr(r.referencia||'')===gerenteN && !(r.semNotaEnps && r.semNotaLnps));
+    // Also get all leaders in this area for comparison
+    const areaColabs = DB.colaboradores.filter(c=>normalizeStr(c.area||c.departamento||'')===areaN);
+    const areaLiders = [...new Set(areaColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
+    const allLiderRecs = (DB.enps||[]).filter(r=>r.tipo==='lider' && areaLiders.some(l=>normalizeStr(l)===normalizeStr(r.referencia||'')) && !(r.semNotaEnps && r.semNotaLnps));
+    const allPeriods = [...new Set([...areaRecs,...allLiderRecs].map(r=>r.periodo).filter(Boolean))].sort();
+    const last3 = allPeriods.slice(-3);
+    if(!areaRecs.length && !allLiderRecs.length) return '<div class="card" style="margin-bottom:20px;"><div class="section-title">Clima — eNPS / lNPS</div><div class="empty-state">Nenhum registro de eNPS/lNPS encontrado para esta área.</div></div>';
+    function npsColor(v){ v=Number(v); return v>=50?'#22c55e':v>=0?'#FA6914':'#ff4343'; }
+    function npsVal(r,field){ if(!r) return '<span style="color:#ccc;">—</span>'; if(r['semNota'+field.charAt(0).toUpperCase()+field.slice(1)]) return '<span style="color:#aaa;font-size:11px;">Sem nota</span>'; if(r[field]==null) return '—'; return '<span style="font-weight:800;font-size:16px;color:'+npsColor(r[field])+';">'+r[field]+'</span>'; }
+    let h = '<div class="card" style="margin-bottom:20px;"><div class="section-title">Clima — eNPS / lNPS</div>';
+    // Area score
+    if(areaRecs.length){
+      h += '<div style="margin-bottom:16px;"><div style="font-weight:600;font-size:13px;color:#555;margin-bottom:8px;">Área: '+esc(m.area||'')+'</div>';
+      h += '<div class="table-wrap"><table><thead><tr><th>Período</th><th style="text-align:center;">eNPS</th><th style="text-align:center;">lNPS</th><th>Comentários eNPS</th><th>Comentários lNPS</th></tr></thead><tbody>';
+      last3.forEach((p,i)=>{ const r=areaRecs.find(x=>x.periodo===p); h+='<tr style="'+(i%2?'background:#fafbfc;':'')+'"><td style="padding:8px 10px;">'+esc(p)+'</td><td style="padding:8px 10px;text-align:center;">'+npsVal(r,'enps')+'</td><td style="padding:8px 10px;text-align:center;">'+npsVal(r,'lnps')+'</td><td style="padding:8px 10px;font-size:12px;">'+esc(r?r.comentariosEnps||r.comentarios||'':'')+'</td><td style="padding:8px 10px;font-size:12px;">'+esc(r?r.comentariosLnps||'':'')+'</td></tr>'; });
+      h += '</tbody></table></div></div>';
+    }
+    // Leaders comparison table
+    if(allLiderRecs.length){
+      const lidersList = [...new Set(allLiderRecs.map(r=>r.referencia))].sort();
+      h += '<div style="margin-bottom:8px;"><div style="font-weight:600;font-size:13px;color:#555;margin-bottom:8px;">Líderes da área — últimos '+last3.length+' períodos</div>';
+      h += '<div class="table-wrap"><table><thead><tr><th>Líder</th>';
+      last3.forEach(p=>{ h+='<th style="text-align:center;" colspan="2">'+esc(p)+'</th>'; });
+      h += '</tr><tr><th></th>';
+      last3.forEach(()=>{ h+='<th style="text-align:center;font-size:11px;color:#888;">eNPS</th><th style="text-align:center;font-size:11px;color:#888;">lNPS</th>'; });
+      h += '</tr></thead><tbody>';
+      lidersList.forEach((lider,i)=>{
+        const isCurrentGerente = normalizeStr(lider)===gerenteN;
+        h += '<tr style="'+(i%2?'background:#fafbfc;':'')+(isCurrentGerente?'font-weight:600;border-left:3px solid #962DFF;':'')+'"><td style="padding:8px 10px;">'+esc(lider)+(isCurrentGerente?' <span style="font-size:10px;background:#962DFF;color:#fff;padding:1px 6px;border-radius:8px;margin-left:4px;">atual</span>':'')+'</td>';
+        last3.forEach(p=>{
+          const r = allLiderRecs.find(x=>normalizeStr(x.referencia||'')===normalizeStr(lider)&&x.periodo===p);
+          h += '<td style="padding:8px 10px;text-align:center;">'+npsVal(r,'enps')+'</td><td style="padding:8px 10px;text-align:center;">'+npsVal(r,'lnps')+'</td>';
+        });
+        h += '</tr>';
+      });
+      h += '</tbody></table></div></div>';
+    }
+    h += '</div>';
+    return h;
   })()}</div>
   <div data-report-topic="riscos"><div class="card" style="margin-bottom:20px;">
     <div class="section-title">Riscos e Pendências</div>
@@ -7654,6 +7856,53 @@ function exportMeetingPDF(meetingId){
       headStyles:hStyle, alternateRowStyles:altRow, margin:marg
     });
     y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === CLIMA — eNPS / lNPS ===
+  {
+    const _areaN = normalizeStr(m.area||'');
+    const _gerenteN = normalizeStr(m.gerente||'');
+    const _areaRecs = (DB.enps||[]).filter(r=>r.tipo==='departamento' && normalizeStr(r.referencia||'')===_areaN && !(r.semNotaEnps && r.semNotaLnps));
+    const _areaColabs = DB.colaboradores.filter(c=>normalizeStr(c.area||c.departamento||'')===_areaN);
+    const _areaLiders = [...new Set(_areaColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
+    const _allLiderRecs = (DB.enps||[]).filter(r=>r.tipo==='lider' && _areaLiders.some(l=>normalizeStr(l)===normalizeStr(r.referencia||'')) && !(r.semNotaEnps && r.semNotaLnps));
+    const _allPeriods = [...new Set([..._areaRecs,..._allLiderRecs].map(r=>r.periodo).filter(Boolean))].sort();
+    const _last3 = _allPeriods.slice(-3);
+    if(_areaRecs.length || _allLiderRecs.length){
+      y = checkPage(y, 30);
+      y = secTitle('Clima — eNPS / lNPS', y);
+      function _nv(r,f){ if(!r) return '—'; if(r['semNota'+f.charAt(0).toUpperCase()+f.slice(1)]) return 'Sem nota'; return r[f]!=null ? String(r[f]) : '—'; }
+      // Area table
+      if(_areaRecs.length && _last3.length){
+        doc.setFontSize(9); doc.setTextColor(80); doc.text('Área: '+(m.area||''), 14, y); y+=5;
+        doc.autoTable({
+          startY:y,
+          head:[['Período','eNPS','lNPS','Comentários eNPS','Comentários lNPS']],
+          body: _last3.map(p=>{ const r=_areaRecs.find(x=>x.periodo===p); return [p, _nv(r,'enps'), _nv(r,'lnps'), r?(r.comentariosEnps||r.comentarios||''):'', r?(r.comentariosLnps||''):'']; }),
+          styles:{fontSize:8,cellPadding:3}, headStyles:hStyle, alternateRowStyles:altRow, margin:marg
+        });
+        y = doc.lastAutoTable.finalY + 6;
+      }
+      // Leaders comparison
+      if(_allLiderRecs.length && _last3.length){
+        const _lidersList = [...new Set(_allLiderRecs.map(r=>r.referencia))].sort();
+        y = checkPage(y, 20);
+        doc.setFontSize(9); doc.setTextColor(80); doc.text('Líderes da área — últimos '+_last3.length+' períodos:', 14, y); y+=5;
+        const lHead = ['Líder'];
+        _last3.forEach(p=>{ lHead.push('eNPS '+p); lHead.push('lNPS '+p); });
+        doc.autoTable({
+          startY:y,
+          head:[lHead],
+          body: _lidersList.map(l=>{
+            const row = [l+(normalizeStr(l)===_gerenteN?' (atual)':'')];
+            _last3.forEach(p=>{ const r=_allLiderRecs.find(x=>normalizeStr(x.referencia||'')===normalizeStr(l)&&x.periodo===p); row.push(_nv(r,'enps')); row.push(_nv(r,'lnps')); });
+            return row;
+          }),
+          styles:{fontSize:7,cellPadding:2}, headStyles:{...hStyle,fontSize:7}, alternateRowStyles:altRow, margin:marg
+        });
+        y = doc.lastAutoTable.finalY + 8;
+      }
+    }
   }
 
   // === AÇÕES DO PERÍODO ===
