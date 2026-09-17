@@ -5495,9 +5495,18 @@ function renderMeetingDetail(){
     const gerenteN = normalizeStr(m.gerente||'');
     const areaRecs = (DB.enps||[]).filter(r=>r.tipo==='departamento' && normalizeStr(r.referencia||'')===areaN && !(r.semNotaEnps && r.semNotaLnps));
     const liderRecs = (DB.enps||[]).filter(r=>r.tipo==='lider' && normalizeStr(r.referencia||'')===gerenteN && !(r.semNotaEnps && r.semNotaLnps));
-    // Also get all leaders in this area for comparison
-    const areaColabs = DB.colaboradores.filter(c=>normalizeStr(c.area||c.departamento||'')===areaN);
-    const areaLiders = [...new Set(areaColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
+    // Get leaders relevant to THIS gerente: if Head, all area leaders; otherwise only the gerente
+    const _isHeadMeeting = isHead(m.gerente||'');
+    let areaLiders;
+    if(_isHeadMeeting){
+      const areaColabs = DB.colaboradores.filter(c=>normalizeStr(c.area||c.departamento||'')===areaN);
+      areaLiders = [...new Set(areaColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
+    } else {
+      // Non-Head: only show the gerente's own team leaders (gerente + sub-leaders under them)
+      const teamColabs = getTeamTree(m.gerente||'');
+      const subLiders = [...new Set(teamColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
+      areaLiders = [m.gerente||'', ...subLiders.filter(l=>normalizeStr(l)!==gerenteN)];
+    }
     const allLiderRecs = (DB.enps||[]).filter(r=>r.tipo==='lider' && areaLiders.some(l=>normalizeStr(l)===normalizeStr(r.referencia||'')) && !(r.semNotaEnps && r.semNotaLnps));
     const allPeriods = [...new Set([...areaRecs,...allLiderRecs].map(r=>r.periodo).filter(Boolean))].sort();
     const last3 = allPeriods.slice(-3);
@@ -7914,8 +7923,16 @@ function exportMeetingPDF(meetingId){
     const _areaN = normalizeStr(m.area||'');
     const _gerenteN = normalizeStr(m.gerente||'');
     const _areaRecs = (DB.enps||[]).filter(r=>r.tipo==='departamento' && normalizeStr(r.referencia||'')===_areaN && !(r.semNotaEnps && r.semNotaLnps));
-    const _areaColabs = DB.colaboradores.filter(c=>normalizeStr(c.area||c.departamento||'')===_areaN);
-    const _areaLiders = [...new Set(_areaColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
+    const _isHeadMtg = isHead(m.gerente||'');
+    let _areaLiders;
+    if(_isHeadMtg){
+      const _areaColabs = DB.colaboradores.filter(c=>normalizeStr(c.area||c.departamento||'')===_areaN);
+      _areaLiders = [...new Set(_areaColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
+    } else {
+      const _teamColabs = getTeamTree(m.gerente||'');
+      const _subLiders = [...new Set(_teamColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
+      _areaLiders = [m.gerente||'', ..._subLiders.filter(l=>normalizeStr(l)!==_gerenteN)];
+    }
     const _allLiderRecs = (DB.enps||[]).filter(r=>r.tipo==='lider' && _areaLiders.some(l=>normalizeStr(l)===normalizeStr(r.referencia||'')) && !(r.semNotaEnps && r.semNotaLnps));
     const _allPeriods = [...new Set([..._areaRecs,..._allLiderRecs].map(r=>r.periodo).filter(Boolean))].sort();
     const _last3 = _allPeriods.slice(-3);
