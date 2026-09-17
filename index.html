@@ -1757,23 +1757,21 @@ function applyPromocoes(){
 ========================================================= */
 function getUltimaPromocao(nome){
   const nk = normalizeStr(nome);
-  let bestDate = null, bestCargoDe='', bestCargoPara='', bestPct=null;
-  // 1) Check DB.promocoes
+  // Collect ALL promotions from both sources with dates, cargo, salary
+  const allPromos = [];
+  // 1) DB.promocoes
   DB.promocoes.filter(p=> normalizeStr(p.nome)===nk && p.mesDate && isPromoSalarial(p)).forEach(p=>{
     const d = p.mesDate instanceof Date ? p.mesDate : new Date(p.mesDate);
-    if(!isNaN(d) && (!bestDate || d > bestDate)){ bestDate=d; bestCargoDe=p.cargoAtual||''; bestCargoPara=p.cargoAprovado||''; bestPct=p.pct; }
+    if(!isNaN(d)) allPromos.push({date:d, cargoDe:p.cargoAtual||'', cargoPara:p.cargoAprovado||'', salDe:parseBRL(p.salarioAtual||p.valorAtual||'0'), salPara:parseBRL(p.valorAprovado||'0'), pct:p.pct, src:'db'});
   });
-  // 2) Check inline promocoes field on colaborador (e.g. "08/2026;Analista III C;R$4.125,04")
+  // 2) Inline promocoes field (e.g. "08/2026;Analista III C;R$4.125,04")
   const colab = DB.colaboradores.find(c=> normalizeStr(c.nome||c.Nome||'')===nk);
   if(colab && colab.promocoes){
-    // Split by newlines, or detect multiple MM/YYYY entries on one line
-    let promoStr = String(colab.promocoes);
-    // Normalize line separators
-    promoStr = promoStr.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
-    // If no newline but multiple date patterns, split before each date (except the first)
+    let promoStr = String(colab.promocoes).replace(/\r\n/g,'\n').replace(/\r/g,'\n');
     if(!promoStr.includes('\n') && (promoStr.match(/\d{1,2}\/\d{4}/g)||[]).length > 1){
       promoStr = promoStr.replace(/\s+(\d{1,2}\/\d{4})/g, '\n$1');
     }
+    const inlineEntries = [];
     promoStr.split('\n').filter(Boolean).forEach(line=>{
       const parts = line.trim().split(';');
       if(parts.length>=2){
@@ -1782,27 +1780,46 @@ function getUltimaPromocao(nome){
         const mmyyyy = raw.match(/^(\d{1,2})\/(\d{4})$/);
         if(mmyyyy) d = new Date(parseInt(mmyyyy[2]), parseInt(mmyyyy[1])-1, 1);
         if(!d || isNaN(d)) d = parseExcelDate(raw);
-        if(d && !isNaN(d) && (!bestDate || d > bestDate)){ bestDate=d; bestCargoDe=''; bestCargoPara=parts[1].trim(); bestPct=null; }
+        if(d && !isNaN(d)){
+          const cargo = (parts[1]||'').trim();
+          const salStr = (parts[2]||'').trim();
+          const sal = parseBRL(salStr);
+          inlineEntries.push({date:d, cargo, sal});
+        }
       }
     });
+    // Sort inline entries chronologically to build cargo anterior from previous entry
+    inlineEntries.sort((a,b)=>a.date-b.date);
+    inlineEntries.forEach((entry,idx)=>{
+      const prevCargo = idx > 0 ? inlineEntries[idx-1].cargo : (colab.cargoAdmissao||colab.cargo_admissao||colab['Cargo Admissão']||'');
+      const prevSal = idx > 0 ? inlineEntries[idx-1].sal : parseBRL(colab.salarioAdmissao||colab.salario_admissao||colab['Salário Admissão']||'0');
+      const pct = (prevSal > 0 && entry.sal > 0) ? ((entry.sal - prevSal) / prevSal) : null;
+      allPromos.push({date:entry.date, cargoDe:prevCargo, cargoPara:entry.cargo, salDe:prevSal, salPara:entry.sal, pct, src:'inline'});
+    });
   }
-  // 3) No promotion: use admission date as reference
-  if(!bestDate && colab){
-    const adm = colab.admissao;
-    if(adm){ const admDate = adm instanceof Date ? adm : new Date(adm); if(!isNaN(admDate)) return mkPromoResult(admDate, '', '', null, true); }
+  if(!allPromos.length){
+    // No promotion: use admission date as reference
+    if(colab){
+      const adm = colab.admissao;
+      if(adm){ const admDate = adm instanceof Date ? adm : new Date(adm); if(!isNaN(admDate)) return mkPromoResult(admDate, '', '', null, null, null, true); }
+    }
     return null;
   }
-  if(!bestDate) return null;
-  return mkPromoResult(bestDate, bestCargoDe, bestCargoPara, bestPct, false);
+  // Pick the latest
+  allPromos.sort((a,b)=>b.date-a.date);
+  const best = allPromos[0];
+  const pctFmt = best.pct!=null ? fmtPct(best.pct*100) : null;
+  const reajFmt = (best.salDe>0 && best.salPara>0) ? 'R$ '+(best.salPara-best.salDe).toLocaleString('pt-BR',{minimumFractionDigits:2}) : null;
+  return mkPromoResult(best.date, best.cargoDe, best.cargoPara, pctFmt, reajFmt, best.salPara, false);
 }
-function mkPromoResult(dt, de, para, pct, semPromo){
+function mkPromoResult(dt, de, para, pct, reajuste, salNovo, semPromo){
   const now = new Date();
   const diffDays = Math.floor((now - dt) / 86400000);
   let tempoStr;
   if(diffDays < 30) tempoStr = diffDays + ' dias';
   else if(diffDays < 365) tempoStr = Math.floor(diffDays/30) + ' meses';
   else { const anos = Math.floor(diffDays/365); const meses = Math.floor((diffDays%365)/30); tempoStr = anos + (anos===1?' ano':' anos') + (meses>0 ? ' e '+meses+(meses===1?' mês':' meses') : ''); }
-  return { cargoAnterior: de, cargoNovo: para, data: dt, dataFmt: fmtDate(dt), tempoStr, pct, semPromocao: semPromo };
+  return { cargoAnterior: de, cargoNovo: para, data: dt, dataFmt: fmtDate(dt), tempoStr, pct, reajuste, salNovo, semPromocao: semPromo };
 }
 function isHead(liderName){
   if(!liderName) return false;
@@ -7256,7 +7273,10 @@ function renderColaboradorDetail(){
     ${(()=>{
       const promo = getUltimaPromocao(nome);
       if(!promo) return '';
-      return '<div class="card" style="margin-bottom:20px;border-left:4px solid var(--primary);"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><span style="font-size:18px;">&#127942;</span><span style="font-weight:700;font-size:15px;">Última Promoção</span><span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:6px;font-size:12px;font-weight:600;margin-left:auto;">há '+promo.tempoStr+'</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">'+[["De",promo.cargoAnterior],["Para",promo.cargoNovo],["Data",promo.dataFmt],["Reajuste",promo.pct||"—"]].map(function(x){return '<div style="background:#EAF3EE;border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600;margin-bottom:2px;">'+x[0]+'</div><div style="font-size:14px;font-weight:600;">'+esc(String(x[1]))+'</div></div>';}).join('')+'</div></div>';
+      const promoFields = [["De",promo.cargoAnterior||"—"],["Para",promo.cargoNovo||"—"],["Data",promo.dataFmt],["Reajuste",promo.reajuste||(promo.pct?promo.pct:"—")]];
+      if(promo.salNovo) promoFields.push(["Salário Novo","R$ "+Number(promo.salNovo).toLocaleString('pt-BR',{minimumFractionDigits:2})]);
+      if(promo.pct && promo.reajuste) promoFields.push(["%",promo.pct]);
+      return '<div class="card" style="margin-bottom:20px;border-left:4px solid var(--primary);"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><span style="font-size:18px;">&#127942;</span><span style="font-weight:700;font-size:15px;">Última Promoção</span><span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:6px;font-size:12px;font-weight:600;margin-left:auto;">há '+promo.tempoStr+'</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">'+promoFields.map(function(x){return '<div style="background:#EAF3EE;border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:#888;text-transform:uppercase;font-weight:600;margin-bottom:2px;">'+x[0]+'</div><div style="font-size:14px;font-weight:600;">'+esc(String(x[1]))+'</div></div>';}).join('')+'</div></div>';
     })()}
 
     <!-- Milestones -->
