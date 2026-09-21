@@ -7970,6 +7970,10 @@ function fmtSalarioPDF(v){
 }
 
 function exportMeetingPDF(meetingId){
+  try{ _exportMeetingPDFInner(meetingId); }
+  catch(e){ console.error('PDF export error:', e); alert('Erro ao gerar PDF: '+e.message); }
+}
+function _exportMeetingPDFInner(meetingId){
   const m = DB.meetings.find(x=>x.id===meetingId);
   if(!m){ alert('Reunião não encontrada.'); return; }
   const {jsPDF} = window.jspdf;
@@ -7981,13 +7985,15 @@ function exportMeetingPDF(meetingId){
   const hStyle = {fillColor:teal, textColor:255, fontStyle:'bold', fontSize:8};
   const altRow = {fillColor:[248,250,252]};
   const marg = {left:14, right:14};
+  // Safe roundedRect fallback
+  function rRect(x,y,w,h,rx,ry,style){ if(doc.roundedRect) doc.roundedRect(x,y,w,h,rx,ry,style); else doc.rect(x,y,w,h,style); }
   const maxW = pw - 28;
 
   function stripHtml(html){ return (html||'').replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#039;/g,"'").replace(/&nbsp;/g,' '); }
   function secTitle(text, yPos){
     yPos = checkPage(yPos, 20);
     doc.setFillColor(245,247,250);
-    doc.roundedRect(14, yPos-5, maxW, 9, 2, 2, 'F');
+    rRect(14, yPos-5, maxW, 9, 2, 2, 'F');
     doc.setFontSize(11); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
     doc.text(text, 18, yPos+1);
     doc.setFont(undefined,'normal');
@@ -8011,15 +8017,15 @@ function exportMeetingPDF(meetingId){
     const o = opts||{};
     doc.setFillColor(255,255,255);
     doc.setDrawColor(230,230,230);
-    doc.roundedRect(x, y, w, h, 2, 2, 'FD');
-    doc.setFontSize(16); doc.setTextColor(o.color||[27,27,47]); doc.setFont(undefined,'bold');
+    rRect(x, y, w, h, 2, 2, 'FD');
+    const tc = o.color||[27,27,47]; doc.setFontSize(16); doc.setTextColor(tc[0],tc[1],tc[2]); doc.setFont(undefined,'bold');
     doc.text(String(value), x+w/2, y+h/2-1, {align:'center'});
     doc.setFontSize(7); doc.setTextColor(130); doc.setFont(undefined,'normal');
     doc.text(label, x+w/2, y+h/2+5, {align:'center'});
     if(o.badge){
       const bw = doc.getTextWidth(o.badge)+8;
-      doc.setFillColor(o.badgeColor||[0,191,165]);
-      doc.roundedRect(x+w/2-bw/2, y+3, bw, 6, 2, 2, 'F');
+      const bc = o.badgeColor||[0,191,165]; doc.setFillColor(bc[0],bc[1],bc[2]);
+      rRect(x+w/2-bw/2, y+3, bw, 6, 2, 2, 'F');
       doc.setFontSize(7); doc.setTextColor(255); doc.setFont(undefined,'bold');
       doc.text(o.badge, x+w/2, y+7.5, {align:'center'});
       doc.setFont(undefined,'normal');
@@ -8032,7 +8038,7 @@ function exportMeetingPDF(meetingId){
     const headerH = 8;
     const totalH = headerH + rows.length*rowH + 4;
     doc.setDrawColor(230,230,230); doc.setFillColor(255,255,255);
-    doc.roundedRect(x, y, w, totalH, 2, 2, 'FD');
+    rRect(x, y, w, totalH, 2, 2, 'FD');
     doc.setFontSize(9); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
     doc.text(title, x+6, y+6);
     doc.setFont(undefined,'normal');
@@ -8122,11 +8128,11 @@ function exportMeetingPDF(meetingId){
       const eVal = r.enps!=null ? String(r.enps) : '—';
       const lVal = r.lnps!=null ? String(r.lnps) : '—';
       const badgeX = 14 + doc.getTextWidth(nameStr) + 6;
-      doc.setFillColor(0,191,165); doc.roundedRect(badgeX, y-4, 22, 6, 1.5, 1.5, 'F');
+      doc.setFillColor(0,191,165); rRect(badgeX, y-4, 22, 6, 1.5, 1.5, 'F');
       doc.setFontSize(7); doc.setTextColor(255); doc.setFont(undefined,'bold');
       doc.text('eNPS '+eVal, badgeX+11, y-0.5, {align:'center'});
       if(r.lnps!=null){
-        doc.setFillColor(150,45,255); doc.roundedRect(badgeX+24, y-4, 22, 6, 1.5, 1.5, 'F');
+        doc.setFillColor(150,45,255); rRect(badgeX+24, y-4, 22, 6, 1.5, 1.5, 'F');
         doc.text('lNPS '+lVal, badgeX+35, y-0.5, {align:'center'});
       }
       doc.setFont(undefined,'normal');
@@ -8134,7 +8140,7 @@ function exportMeetingPDF(meetingId){
       // eNPS comment with green left border
       if(eC){
         doc.setFillColor(240,253,244);
-        doc.roundedRect(16, y-1, maxW-4, eCLines.length*3.8+4, 1.5, 1.5, 'F');
+        rRect(16, y-1, maxW-4, eCLines.length*3.8+4, 1.5, 1.5, 'F');
         doc.setFillColor(34,197,94); doc.rect(16, y-1, 1.2, eCLines.length*3.8+4, 'F');
         doc.setFontSize(6); doc.setTextColor(100); doc.setFont(undefined,'bold');
         doc.text('eNPS', 20, y+2); doc.setFont(undefined,'normal');
@@ -8145,7 +8151,7 @@ function exportMeetingPDF(meetingId){
       // lNPS comment with purple left border
       if(lC){
         doc.setFillColor(245,243,255);
-        doc.roundedRect(16, y-1, maxW-4, lCLines.length*3.8+4, 1.5, 1.5, 'F');
+        rRect(16, y-1, maxW-4, lCLines.length*3.8+4, 1.5, 1.5, 'F');
         doc.setFillColor(150,45,255); doc.rect(16, y-1, 1.2, lCLines.length*3.8+4, 'F');
         doc.setFontSize(6); doc.setTextColor(100); doc.setFont(undefined,'bold');
         doc.text('lNPS', 20, y+2); doc.setFont(undefined,'normal');
@@ -8357,7 +8363,7 @@ function exportMeetingPDF(meetingId){
         const boxH = totalLines*4 + 6;
         y = checkPage(y, boxH+4);
         doc.setDrawColor(230,230,230); doc.setFillColor(252,252,252);
-        doc.roundedRect(14, y-2, maxW, boxH, 2, 2, 'FD');
+        rRect(14, y-2, maxW, boxH, 2, 2, 'FD');
         doc.setFontSize(8); doc.setTextColor(50);
         let iy = y + 2;
         itemLines.forEach(lines=>{
@@ -8371,7 +8377,7 @@ function exportMeetingPDF(meetingId){
         const boxH = plLines.length*4.2+6;
         y = checkPage(y, boxH+4);
         doc.setDrawColor(230,230,230); doc.setFillColor(252,252,252);
-        doc.roundedRect(14, y-2, maxW, boxH, 2, 2, 'FD');
+        rRect(14, y-2, maxW, boxH, 2, 2, 'FD');
         doc.text(plLines, 18, y+2);
         y += boxH + 4;
       }
