@@ -2858,8 +2858,74 @@ function renderLiderDashboard(ct){
   // Empty team diagnostic
   const _teamEmptyMsg = totalHC===0 ? '<div class="card" style="margin-bottom:20px;padding:24px;border-left:4px solid #f59e0b;background:#fef9c3;"><div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#92400e;">Nenhum colaborador encontrado na sua equipe</div><div style="font-size:13px;color:#92400e;">Verifique com o BP se o campo "Líder" dos colaboradores está preenchido corretamente com o seu nome: <strong>'+esc(SESSION.liderNome)+'</strong></div></div>' : '';
 
+  // ---- Acompanhamentos 45/90 dias — lembretes Qulture.Rocks ----
+  const _acomp4590 = (()=>{
+    const today = new Date(); today.setHours(0,0,0,0);
+    const results = [];
+    myColabs.forEach(c=>{
+      const admRaw = c.admissao||c['Data de admissão']||c['data de admissao']||c['data_admissao']||'';
+      if(!admRaw) return;
+      const adm = admRaw instanceof Date ? admRaw : new Date(admRaw);
+      if(isNaN(adm)) return;
+      [45,90].forEach(dias=>{
+        const target = new Date(adm.getTime()+dias*86400000);
+        const diff = Math.round((target - today) / 86400000);
+        // Show if within -3 to +10 days of the milestone
+        if(diff >= -3 && diff <= 10){
+          const nome = c.nome||c.Nome||'';
+          const cargo = c.cargo||c.Cargo||'';
+          const area = c.area||c.departamento||'';
+          const dataStr = target.toLocaleDateString('pt-BR');
+          let status = 'pendente';
+          let statusLabel = '';
+          if(diff < 0){ status = 'atrasado'; statusLabel = Math.abs(diff)+' dia'+(Math.abs(diff)>1?'s':'')+' atrasado'; }
+          else if(diff === 0){ status = 'hoje'; statusLabel = 'Hoje!'; }
+          else if(diff <= 3){ status = 'urgente'; statusLabel = 'em '+diff+' dia'+(diff>1?'s':''); }
+          else { status = 'proximo'; statusLabel = 'em '+diff+' dias'; }
+          // Check if already done in acompanhamentos
+          const jaDone = (DB.acompanhamentos||[]).some(a=>{
+            return normalizeStr(a.colaborador||a.nome||'')===normalizeStr(nome) &&
+                   ((dias===45 && (a.tipo||'').toLowerCase().includes('45')) || (dias===90 && (a.tipo||'').toLowerCase().includes('90'))) &&
+                   normalizeStr(a.status||'')==='realizado';
+          });
+          if(!jaDone) results.push({nome, cargo, area, dias, dataStr, diff, status, statusLabel});
+        }
+      });
+    });
+    results.sort((a,b)=>a.diff-b.diff);
+    return results;
+  })();
+
+  const _acompHtml = _acomp4590.length ? `
+    <div class="card" style="margin-bottom:20px;padding:0;overflow:hidden;border:1px solid #e5e7eb;">
+      <div style="background:linear-gradient(135deg,#1b1b2f,#2d2d5e);padding:16px 20px;display:flex;align-items:center;gap:10px;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00bfa5" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span style="color:#fff;font-weight:700;font-size:15px;">Acompanhamentos Pendentes</span>
+        <span style="background:#00bfa5;color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:10px;margin-left:auto;">${_acomp4590.length}</span>
+      </div>
+      <div style="padding:16px 20px;">
+        <div style="font-size:12px;color:#888;margin-bottom:12px;">Responda a avaliação na <strong style="color:#7c3aed;">Qulture.Rocks</strong></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;">
+        ${_acomp4590.map(a=>{
+          const colors = {atrasado:['#fef2f2','#ff4343','#991b1b'], hoje:['#fef3c7','#f59e0b','#92400e'], urgente:['#fff7ed','#FA6914','#9a3412'], proximo:['#f0fdf4','#22c55e','#166534']};
+          const [bg,accent,txt] = colors[a.status]||colors.proximo;
+          return `<div style="background:${bg};border:1px solid ${accent}33;border-left:4px solid ${accent};border-radius:10px;padding:14px 16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <span style="font-weight:700;font-size:14px;color:${txt};">${a.dias} dias</span>
+              <span style="font-size:11px;font-weight:700;color:${accent};background:${accent}18;padding:2px 8px;border-radius:8px;">${a.statusLabel}</span>
+            </div>
+            <div style="font-weight:600;font-size:13px;color:#333;">${esc(a.nome)}</div>
+            <div style="font-size:11px;color:#888;margin-top:2px;">${esc(a.cargo)}${a.area?' · '+esc(a.area):''}</div>
+            <div style="font-size:11px;color:#aaa;margin-top:4px;">Prazo: ${a.dataStr}</div>
+          </div>`;
+        }).join('')}
+        </div>
+      </div>
+    </div>` : '';
+
   ct.innerHTML = `
     ${_teamEmptyMsg}
+    ${_acompHtml}
     <!-- KPI Cards Row 1 -->
     <div class="grid grid-4" style="margin-bottom:20px;">
       <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.users}</div></div><div class="kpi-value">${totalHC}</div><div class="kpi-label">Total na Equipe</div></div>
@@ -5665,9 +5731,17 @@ function renderMeetingDetail(){
       areaLiders = [...new Set(areaColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
     } else {
       // Non-Head: only show the gerente's own team leaders (gerente + sub-leaders under them)
+      // IMPORTANT: also filter sub-leaders to only those who belong to the SAME area as the meeting
       const teamColabs = getTeamTree(m.gerente||'');
       const subLiders = [...new Set(teamColabs.map(c=>(c.lider||c['Líder']||c.Lider||'').trim()).filter(Boolean))];
-      areaLiders = [m.gerente||'', ...subLiders.filter(l=>normalizeStr(l)!==gerenteN)];
+      // Filter: only include leaders who are actually from this area
+      const filteredSubLiders = subLiders.filter(l=>{
+        if(normalizeStr(l)===gerenteN) return false;
+        const lColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===normalizeStr(l));
+        if(!lColab) return true; // keep if we can't verify (might be in enps but not in colabs)
+        return normalizeStr(lColab.area||lColab.departamento||'')===areaN;
+      });
+      areaLiders = [m.gerente||'', ...filteredSubLiders];
     }
     const allLiderRecs = (DB.enps||[]).filter(r=>r.tipo==='lider' && areaLiders.some(l=>normalizeStr(l)===normalizeStr(r.referencia||'')) && !(r.semNotaEnps && r.semNotaLnps));
     const allPeriods = [...new Set([...areaRecs,...allLiderRecs].map(r=>r.periodo).filter(Boolean))].sort();
