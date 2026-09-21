@@ -2821,11 +2821,25 @@ function renderLiderDashboard(ct){
         ${_latestEnps.lnps!=null?`<span style="background:${enpsColor(_latestEnps.lnps)}22;color:${enpsColor(_latestEnps.lnps)};font-weight:700;padding:6px 16px;border-radius:10px;font-size:15px;">lNPS: ${_latestEnps.lnps}${_prevEnps?_eDelta(_latestEnps.lnps,_prevEnps.lnps):''}</span>`:''}
         ${_prevEnps?'<span style="font-size:11px;color:#aaa;">vs '+esc(_prevEnps.periodo||'')+'</span>':''}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
-        <div style="background:#E0FBF0;border-radius:10px;padding:14px;text-align:center;"><div style="font-weight:800;font-size:22px;color:#22c55e;">${_latestEnps.promotores||0}</div><div style="font-size:11px;color:#888;margin-top:2px;">Promotores</div></div>
-        <div style="background:#fef9c3;border-radius:10px;padding:14px;text-align:center;"><div style="font-weight:800;font-size:22px;color:#f59e0b;">${_latestEnps.neutros||0}</div><div style="font-size:11px;color:#888;margin-top:2px;">Neutros</div></div>
-        <div style="background:#fef2f2;border-radius:10px;padding:14px;text-align:center;"><div style="font-weight:800;font-size:22px;color:#ff4343;">${_latestEnps.detratores||0}</div><div style="font-size:11px;color:#888;margin-top:2px;">Detratores</div></div>
-        <div style="background:#f3f4f6;border-radius:10px;padding:14px;text-align:center;"><div style="font-weight:800;font-size:22px;">${(_latestEnps.promotores||0)+(_latestEnps.neutros||0)+(_latestEnps.detratores||0)}</div><div style="font-size:11px;color:#888;margin-top:2px;">Total Respostas</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div style="background:#f0fdf4;border-radius:10px;padding:14px;border:1px solid #bbf7d0;">
+          <div style="font-weight:700;font-size:12px;color:#16a34a;margin-bottom:8px;">eNPS</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+            <div style="text-align:center;"><div style="font-weight:800;font-size:18px;color:#22c55e;">${_latestEnps.promotores||0}</div><div style="font-size:10px;color:#888;">Promotores</div></div>
+            <div style="text-align:center;"><div style="font-weight:800;font-size:18px;color:#f59e0b;">${_latestEnps.neutros||0}</div><div style="font-size:10px;color:#888;">Neutros</div></div>
+            <div style="text-align:center;"><div style="font-weight:800;font-size:18px;color:#ff4343;">${_latestEnps.detratores||0}</div><div style="font-size:10px;color:#888;">Detratores</div></div>
+            <div style="text-align:center;"><div style="font-weight:800;font-size:18px;">${(_latestEnps.promotores||0)+(_latestEnps.neutros||0)+(_latestEnps.detratores||0)}</div><div style="font-size:10px;color:#888;">Total</div></div>
+          </div>
+        </div>
+        <div style="background:#eff6ff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;">
+          <div style="font-weight:700;font-size:12px;color:#2563eb;margin-bottom:8px;">lNPS</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+            <div style="text-align:center;"><div style="font-weight:800;font-size:18px;color:#22c55e;">${_latestEnps.lnpsPromotores||0}</div><div style="font-size:10px;color:#888;">Promotores</div></div>
+            <div style="text-align:center;"><div style="font-weight:800;font-size:18px;color:#f59e0b;">${_latestEnps.lnpsNeutros||0}</div><div style="font-size:10px;color:#888;">Neutros</div></div>
+            <div style="text-align:center;"><div style="font-weight:800;font-size:18px;color:#ff4343;">${_latestEnps.lnpsDetratores||0}</div><div style="font-size:10px;color:#888;">Detratores</div></div>
+            <div style="text-align:center;"><div style="font-weight:800;font-size:18px;">${(_latestEnps.lnpsPromotores||0)+(_latestEnps.lnpsNeutros||0)+(_latestEnps.lnpsDetratores||0)}</div><div style="font-size:10px;color:#888;">Total</div></div>
+          </div>
+        </div>
       </div>
       ${((_latestEnps.comentariosEnps||_latestEnps.comentarios||'').trim() || (_latestEnps.comentariosLnps||'').trim()) ? `<div style="margin-bottom:8px;">
         ${(_latestEnps.comentariosEnps||_latestEnps.comentarios||'').trim() ? '<div style="background:#f9fafb;border-radius:8px;padding:12px 16px;margin-bottom:8px;border-left:3px solid #22c55e;"><div style="font-size:10px;font-weight:700;color:#888;margin-bottom:4px;">COMENTÁRIOS eNPS</div><div style="font-size:12px;color:#333;line-height:1.5;">'+esc((_latestEnps.comentariosEnps||_latestEnps.comentarios||'').trim())+'</div></div>' : ''}
@@ -2834,12 +2848,14 @@ function renderLiderDashboard(ct){
       ${_myEnpsRecs.length>1 ? `<div style="margin-top:14px;"><div style="font-weight:600;font-size:12px;color:#888;margin-bottom:6px;">HISTÓRICO</div>
         <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
-            <th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Período</th>
-            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">eNPS</th>
-            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">lNPS</th>
-            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Prom.</th>
-            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Neut.</th>
-            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Detr.</th>
+            <th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;" rowspan="2">Período</th>
+            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;" rowspan="2">eNPS</th>
+            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;" rowspan="2">lNPS</th>
+            <th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#16a34a;border-bottom:1px solid #e5e7eb;" colspan="3">eNPS</th>
+            <th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#2563eb;border-bottom:1px solid #e5e7eb;" colspan="3">lNPS</th>
+          </tr><tr style="background:#f9fafb;">
+            <th style="padding:4px 6px;text-align:center;font-size:9px;color:#888;">Prom.</th><th style="padding:4px 6px;text-align:center;font-size:9px;color:#888;">Neut.</th><th style="padding:4px 6px;text-align:center;font-size:9px;color:#888;">Detr.</th>
+            <th style="padding:4px 6px;text-align:center;font-size:9px;color:#888;">Prom.</th><th style="padding:4px 6px;text-align:center;font-size:9px;color:#888;">Neut.</th><th style="padding:4px 6px;text-align:center;font-size:9px;color:#888;">Detr.</th>
           </tr></thead><tbody>` +
           _myEnpsRecs.map((rec,ri)=>{
             const pr = ri>0 ? _myEnpsRecs[ri-1] : null;
@@ -2847,9 +2863,12 @@ function renderLiderDashboard(ct){
               '<td style="padding:6px 10px;">'+esc(rec.periodo||'')+'</td>' +
               '<td style="padding:6px 10px;text-align:center;font-weight:700;color:'+enpsColor(rec.enps)+';">'+(rec.enps!=null?rec.enps:'—')+(pr&&rec.enps!=null&&pr.enps!=null?_eDelta(rec.enps,pr.enps):'')+'</td>' +
               '<td style="padding:6px 10px;text-align:center;font-weight:700;color:'+enpsColor(rec.lnps)+';">'+(rec.lnps!=null?rec.lnps:'—')+(pr&&rec.lnps!=null&&pr.lnps!=null?_eDelta(rec.lnps,pr.lnps):'')+'</td>' +
-              '<td style="padding:6px 10px;text-align:center;color:#22c55e;font-weight:600;">'+(rec.promotores||0)+'</td>' +
-              '<td style="padding:6px 10px;text-align:center;color:#f59e0b;font-weight:600;">'+(rec.neutros||0)+'</td>' +
-              '<td style="padding:6px 10px;text-align:center;color:#ff4343;font-weight:600;">'+(rec.detratores||0)+'</td></tr>';
+              '<td style="padding:4px 6px;text-align:center;color:#22c55e;font-weight:600;">'+(rec.promotores||0)+'</td>' +
+              '<td style="padding:4px 6px;text-align:center;color:#f59e0b;font-weight:600;">'+(rec.neutros||0)+'</td>' +
+              '<td style="padding:4px 6px;text-align:center;color:#ff4343;font-weight:600;">'+(rec.detratores||0)+'</td>' +
+              '<td style="padding:4px 6px;text-align:center;color:#22c55e;font-weight:600;">'+(rec.lnpsPromotores||0)+'</td>' +
+              '<td style="padding:4px 6px;text-align:center;color:#f59e0b;font-weight:600;">'+(rec.lnpsNeutros||0)+'</td>' +
+              '<td style="padding:4px 6px;text-align:center;color:#ff4343;font-weight:600;">'+(rec.lnpsDetratores||0)+'</td></tr>';
           }).join('') +
         `</tbody></table></div></div>` : ''}
     </div>` : ''}
@@ -6636,15 +6655,33 @@ function renderLideresPage(){
         if(latestE.lnps!=null) html += '<span style="background:'+enpsColor(latestE.lnps)+'22;color:'+enpsColor(latestE.lnps)+';font-weight:700;padding:4px 12px;border-radius:10px;font-size:13px;">lNPS: '+latestE.lnps+(prevE?_enpsDelta(latestE.lnps,prevE.lnps):'')+'</span>';
         html += '<span style="font-size:11px;color:#888;">Período: '+esc(latestE.periodo||'')+'</span>';
         html += '</div>';
-        // Promotores / Neutros / Detratores cards
-        const prom = latestE.promotores||0, neut = latestE.neutros||0, detr = latestE.detratores||0;
-        const totalResp = prom+neut+detr;
-        if(totalResp>0){
-          html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
-          html += '<div style="background:#E0FBF0;border-radius:10px;padding:10px;text-align:center;"><div style="font-weight:800;font-size:18px;color:#22c55e;">'+prom+'</div><div style="font-size:10px;color:#888;">Promotores</div></div>';
-          html += '<div style="background:#fef9c3;border-radius:10px;padding:10px;text-align:center;"><div style="font-weight:800;font-size:18px;color:#f59e0b;">'+neut+'</div><div style="font-size:10px;color:#888;">Neutros</div></div>';
-          html += '<div style="background:#fef2f2;border-radius:10px;padding:10px;text-align:center;"><div style="font-weight:800;font-size:18px;color:#ff4343;">'+detr+'</div><div style="font-size:10px;color:#888;">Detratores</div></div>';
-          html += '<div style="background:#f3f4f6;border-radius:10px;padding:10px;text-align:center;"><div style="font-weight:800;font-size:18px;">'+totalResp+'</div><div style="font-size:10px;color:#888;">Total Respostas</div></div>';
+        // Promotores / Neutros / Detratores — separado por eNPS e lNPS
+        const eProm = latestE.promotores||0, eNeut = latestE.neutros||0, eDetr = latestE.detratores||0;
+        const lProm = latestE.lnpsPromotores||0, lNeut = latestE.lnpsNeutros||0, lDetr = latestE.lnpsDetratores||0;
+        const eTotalResp = eProm+eNeut+eDetr;
+        const lTotalResp = lProm+lNeut+lDetr;
+        if(eTotalResp>0 || lTotalResp>0){
+          html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">';
+          if(eTotalResp>0){
+            html += '<div style="background:#f0fdf4;border-radius:10px;padding:10px;border:1px solid #bbf7d0;">';
+            html += '<div style="font-weight:700;font-size:11px;color:#16a34a;margin-bottom:6px;">eNPS</div>';
+            html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">';
+            html += '<div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:#22c55e;">'+eProm+'</div><div style="font-size:9px;color:#888;">Prom.</div></div>';
+            html += '<div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:#f59e0b;">'+eNeut+'</div><div style="font-size:9px;color:#888;">Neut.</div></div>';
+            html += '<div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:#ff4343;">'+eDetr+'</div><div style="font-size:9px;color:#888;">Detr.</div></div>';
+            html += '<div style="text-align:center;"><div style="font-weight:800;font-size:16px;">'+eTotalResp+'</div><div style="font-size:9px;color:#888;">Total</div></div>';
+            html += '</div></div>';
+          }
+          if(lTotalResp>0){
+            html += '<div style="background:#eff6ff;border-radius:10px;padding:10px;border:1px solid #bfdbfe;">';
+            html += '<div style="font-weight:700;font-size:11px;color:#2563eb;margin-bottom:6px;">lNPS</div>';
+            html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">';
+            html += '<div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:#22c55e;">'+lProm+'</div><div style="font-size:9px;color:#888;">Prom.</div></div>';
+            html += '<div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:#f59e0b;">'+lNeut+'</div><div style="font-size:9px;color:#888;">Neut.</div></div>';
+            html += '<div style="text-align:center;"><div style="font-weight:800;font-size:16px;color:#ff4343;">'+lDetr+'</div><div style="font-size:9px;color:#888;">Detr.</div></div>';
+            html += '<div style="text-align:center;"><div style="font-weight:800;font-size:16px;">'+lTotalResp+'</div><div style="font-size:9px;color:#888;">Total</div></div>';
+            html += '</div></div>';
+          }
           html += '</div>';
         }
         // Comments
@@ -6659,7 +6696,7 @@ function renderLideresPage(){
         // History table if multiple periods
         if(liderEnpsRecords.length>1){
           html += '<div style="overflow-x:auto;margin-bottom:12px;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
-          html += '<thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Período</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">eNPS</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">lNPS</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Prom.</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Neut.</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Detr.</th></tr></thead><tbody>';
+          html += '<thead><tr style="background:#f9fafb;border-bottom:1px solid #e5e7eb;"><th rowspan="2" style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Período</th><th rowspan="2" style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">eNPS</th><th rowspan="2" style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">lNPS</th><th colspan="3" style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#16a34a;border-bottom:2px solid #bbf7d0;">eNPS</th><th colspan="3" style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#2563eb;border-bottom:2px solid #bfdbfe;">lNPS</th></tr><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#888;">Prom.</th><th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#888;">Neut.</th><th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#888;">Detr.</th><th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#888;">Prom.</th><th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#888;">Neut.</th><th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#888;">Detr.</th></tr></thead><tbody>';
           liderEnpsRecords.forEach((rec,ri)=>{
             const pr = ri>0 ? liderEnpsRecords[ri-1] : null;
             const eD = pr && rec.enps!=null && pr.enps!=null ? _enpsDelta(rec.enps,pr.enps) : '';
@@ -6671,6 +6708,9 @@ function renderLideresPage(){
             html += '<td style="padding:6px 10px;text-align:center;color:#22c55e;font-weight:600;">'+(rec.promotores||0)+'</td>';
             html += '<td style="padding:6px 10px;text-align:center;color:#f59e0b;font-weight:600;">'+(rec.neutros||0)+'</td>';
             html += '<td style="padding:6px 10px;text-align:center;color:#ff4343;font-weight:600;">'+(rec.detratores||0)+'</td>';
+            html += '<td style="padding:6px 10px;text-align:center;color:#22c55e;font-weight:600;">'+(rec.lnpsPromotores||0)+'</td>';
+            html += '<td style="padding:6px 10px;text-align:center;color:#f59e0b;font-weight:600;">'+(rec.lnpsNeutros||0)+'</td>';
+            html += '<td style="padding:6px 10px;text-align:center;color:#ff4343;font-weight:600;">'+(rec.lnpsDetratores||0)+'</td>';
             html += '</tr>';
           });
           html += '</tbody></table></div>';
