@@ -7902,13 +7902,40 @@ function bindIndicadores(){}
 /* =========================================================
    PDF EXPORT
 ========================================================= */
-function pdfHeader(doc, title, subtitle){
+function pdfHeader(doc, title, subtitle, options){
   const pw = doc.internal.pageSize.getWidth();
-  // Logo
+  const opt = options||{};
+  if(opt.banner){
+    // Dark banner style matching the web UI
+    const bannerH = opt.bannerText ? 52 : 38;
+    doc.setFillColor(27,27,47);
+    doc.rect(0, 0, pw, bannerH, 'F');
+    // Teal accent line at bottom
+    doc.setFillColor(0,191,165);
+    doc.rect(0, bannerH, pw, 1.5, 'F');
+    // Logo
+    try{ doc.addImage(PLANNING_LOGO, 'PNG', 14, 6, 30, 6); } catch(e){}
+    // Right label
+    doc.setFontSize(7); doc.setTextColor(180,180,180);
+    doc.text('BP Gestão · Relatório de Reunião', pw-14, 10, {align:'right'});
+    // Title
+    doc.setFontSize(14); doc.setTextColor(255,255,255); doc.setFont(undefined,'bold');
+    doc.text(title, 14, 22);
+    doc.setFont(undefined,'normal');
+    // Subtitle
+    if(subtitle){ doc.setFontSize(8); doc.setTextColor(200,200,200); doc.text(subtitle, 14, 28); }
+    // Banner body text (summary)
+    if(opt.bannerText){
+      doc.setFontSize(7.5); doc.setTextColor(210,210,210);
+      const btLines = doc.splitTextToSize(opt.bannerText, pw-28);
+      doc.text(btLines.slice(0,3), 14, 34);
+    }
+    return bannerH + 8;
+  }
+  // Simple header (for continuation pages and other PDFs)
   try{ doc.addImage(PLANNING_LOGO, 'PNG', 14, 10, 40, 8); } catch(e){}
   doc.setFontSize(8); doc.setTextColor(150);
   doc.text('BP Gestão', pw-14, 16, {align:'right'});
-  // Title
   doc.setFontSize(16); doc.setTextColor(27,27,47);
   doc.text(title, 14, 30);
   if(subtitle){ doc.setFontSize(9); doc.setTextColor(120); doc.text(subtitle, 14, 36); }
@@ -7948,7 +7975,9 @@ function exportMeetingPDF(meetingId){
   const {jsPDF} = window.jspdf;
   const doc = new jsPDF();
   const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
   const teal = [0,191,165];
+  const darkBg = [27,27,47];
   const hStyle = {fillColor:teal, textColor:255, fontStyle:'bold', fontSize:8};
   const altRow = {fillColor:[248,250,252]};
   const marg = {left:14, right:14};
@@ -7956,59 +7985,110 @@ function exportMeetingPDF(meetingId){
 
   function stripHtml(html){ return (html||'').replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#039;/g,"'").replace(/&nbsp;/g,' '); }
   function secTitle(text, yPos){
-    if(yPos > doc.internal.pageSize.getHeight()-40){ doc.addPage(); yPos = pdfHeader(doc, 'Relatório de Reunião', m.area+' · '+m.period); }
-    doc.setFontSize(12); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
-    doc.text(text, 14, yPos);
+    yPos = checkPage(yPos, 20);
+    doc.setFillColor(245,247,250);
+    doc.roundedRect(14, yPos-5, maxW, 9, 2, 2, 'F');
+    doc.setFontSize(11); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
+    doc.text(text, 18, yPos+1);
     doc.setFont(undefined,'normal');
-    return yPos + 6;
+    return yPos + 8;
   }
   function checkPage(y, need){
-    if(y+need > doc.internal.pageSize.getHeight()-20){ doc.addPage(); return pdfHeader(doc, 'Relatório de Reunião', m.area+' · '+m.period); }
+    if(y+need > ph-20){ doc.addPage(); return pdfContinuation(doc, m); }
     return y;
   }
+  function pdfContinuation(d, mt){
+    d.setFillColor(27,27,47); d.rect(0,0,pw,14,'F');
+    d.setFillColor(0,191,165); d.rect(0,14,pw,1,'F');
+    d.setFontSize(8); d.setTextColor(255);
+    d.text('Reunião — '+(mt.area||'')+' · '+(mt.period||''), 14, 10);
+    d.setTextColor(180); d.text('BP Gestão', pw-14, 10, {align:'right'});
+    return 22;
+  }
 
-  // === HEADER ===
-  let y = pdfHeader(doc, 'Relatório de Reunião', m.area+' · '+m.period+' · '+(m.gerente||''));
+  // Helper to draw a KPI card box
+  function drawKpiCard(x, y, w, h, value, label, opts){
+    const o = opts||{};
+    doc.setFillColor(255,255,255);
+    doc.setDrawColor(230,230,230);
+    doc.roundedRect(x, y, w, h, 2, 2, 'FD');
+    doc.setFontSize(16); doc.setTextColor(o.color||[27,27,47]); doc.setFont(undefined,'bold');
+    doc.text(String(value), x+w/2, y+h/2-1, {align:'center'});
+    doc.setFontSize(7); doc.setTextColor(130); doc.setFont(undefined,'normal');
+    doc.text(label, x+w/2, y+h/2+5, {align:'center'});
+    if(o.badge){
+      const bw = doc.getTextWidth(o.badge)+8;
+      doc.setFillColor(o.badgeColor||[0,191,165]);
+      doc.roundedRect(x+w/2-bw/2, y+3, bw, 6, 2, 2, 'F');
+      doc.setFontSize(7); doc.setTextColor(255); doc.setFont(undefined,'bold');
+      doc.text(o.badge, x+w/2, y+7.5, {align:'center'});
+      doc.setFont(undefined,'normal');
+    }
+  }
 
-  // === RESUMO EXECUTIVO ===
-  const resumoText = 'Na área de '+m.area+', referente ao período '+m.period+', o headcount registrado é de '+(m.headcount||0)+' colaboradores, com turnover de '+(m.turnover||0)+'%. Foram identificadas '+(m.admissoesCount||0)+' admissões e '+(m.desligamentosCount||0)+' desligamentos no período. O eNPS apurado foi de '+m.enps+' pontos. Reunião conduzida com '+(m.gerente||'líder não informado')+', status: '+meetingStatus(m)+'.';
-  doc.setFontSize(9); doc.setTextColor(80);
-  const lines = doc.splitTextToSize(resumoText, maxW);
-  doc.text(lines, 14, y);
-  y += lines.length * 4.5 + 6;
+  // Helper to draw a 3-column section card
+  function drawSectionBox(x, y, w, title, rows){
+    const rowH = 5.5;
+    const headerH = 8;
+    const totalH = headerH + rows.length*rowH + 4;
+    doc.setDrawColor(230,230,230); doc.setFillColor(255,255,255);
+    doc.roundedRect(x, y, w, totalH, 2, 2, 'FD');
+    doc.setFontSize(9); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
+    doc.text(title, x+6, y+6);
+    doc.setFont(undefined,'normal');
+    doc.setDrawColor(240,240,240); doc.line(x+2, y+headerH, x+w-2, y+headerH);
+    rows.forEach((r,i)=>{
+      const ry = y + headerH + 3 + i*rowH;
+      doc.setFontSize(8); doc.setTextColor(80);
+      doc.text(r.label, x+6, ry);
+      doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
+      const valStr = String(r.value);
+      doc.text(valStr, x+w-6, ry, {align:'right'});
+      doc.setFont(undefined,'normal');
+    });
+    return totalH;
+  }
 
-  // === KPIs ===
-  doc.autoTable({
-    startY: y,
-    head:[['Headcount','Turnover','Admissões','Desligamentos','eNPS','lNPS','Status']],
-    body:[[String(m.headcount||0), (m.turnover||0)+'%', String(m.admissoesCount||0), String(m.desligamentosCount||0),
-      (m.semNota||m.semNotaEnps)?'Sem nota':String(m.enps||0), (m.semNota||m.semNotaLnps)?'Sem nota':String(m.lnps!=null?m.lnps:'—'), meetingStatus(m)]],
-    styles:{fontSize:9, cellPadding:4, halign:'center'},
-    headStyles:hStyle,
-    margin:marg
-  });
-  y = doc.lastAutoTable.finalY + 8;
+  // === BANNER HEADER ===
+  const resumoText = 'Na área de '+m.area+', referente ao período '+m.period+', o headcount registrado é de '+(m.headcount||0)+' colaboradores, com turnover de '+(m.turnover||0)+'%. Foram identificadas '+(m.admissoesCount||0)+' admissões e '+(m.desligamentosCount||0)+' desligamentos no período. O eNPS apurado foi de '+((m.semNota||m.semNotaEnps)?'Sem nota':m.enps)+' pontos. Reunião conduzida com '+(m.gerente||'líder não informado')+', status atual: '+meetingStatus(m)+'.';
+  let y = pdfHeader(doc, 'Resumo Executivo — '+m.area+' · '+m.period, m.area+' · '+m.period+' · '+(m.gerente||''), {banner:true, bannerText:resumoText});
 
-  // === QUADRO DE PESSOAL + DESENVOLVIMENTO + CLIMA ===
-  doc.autoTable({
-    startY: y,
-    head:[['Indicador','Valor']],
-    body:[
-      ['Vagas abertas', String(m.vagasAbertas||0)],
-      ['Movimentações internas', String(m.movimentacoes||0)],
-      ['Período de experiência', String(m.experienciaCount||0)],
-      ['PDIs ativos', String(m.pdis||0)],
-      ['Potenciais sucessores', String(m.sucessores||0)],
-      ['Talentos em destaque', String(m.talentos||0)],
-      ['Banco horas positivo', (m.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('+')).length+' colaboradores'],
-      ['Banco horas negativo', (m.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('-')).length+' colaboradores']
-    ],
-    styles:{fontSize:9, cellPadding:3},
-    headStyles:hStyle,
-    columnStyles:{0:{fontStyle:'bold',cellWidth:60}},
-    margin:marg
-  });
-  y = doc.lastAutoTable.finalY + 8;
+  // === KPI CARDS ROW ===
+  const cardW = (maxW - 9) / 4;
+  const cardH = 22;
+  const enpsDisplay = (m.semNota||m.semNotaEnps) ? 'S/N' : String(m.enps||0);
+  const statusLabel = meetingStatus(m);
+  const statusColor = statusLabel==='Concluída'?[0,191,165]:statusLabel==='Em andamento'?[250,105,20]:[150,150,150];
+  drawKpiCard(14, y, cardW, cardH, String(m.headcount||0), 'Headcount');
+  drawKpiCard(14+cardW+3, y, cardW, cardH, (m.turnover||0)+'%', 'Turnover');
+  drawKpiCard(14+(cardW+3)*2, y, cardW, cardH, enpsDisplay, 'eNPS');
+  drawKpiCard(14+(cardW+3)*3, y, cardW, cardH, '', 'Status', {badge:statusLabel, badgeColor:statusColor});
+  y += cardH + 8;
+
+  // === THREE COLUMN SECTIONS ===
+  const colW = (maxW - 6) / 3;
+  const bhPos = (m.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('+')).length;
+  const bhNeg = (m.bancoHorasTable||[]).filter(r=>(r.horas||'').toString().trim().startsWith('-')).length;
+  const h1 = drawSectionBox(14, y, colW, 'Quadro de Pessoal', [
+    {label:'Admissões', value:m.admissoesCount||0},
+    {label:'Desligamentos', value:m.desligamentosCount||0},
+    {label:'Vagas abertas', value:m.vagasAbertas||0},
+    {label:'Movimentações internas', value:m.movimentacoes||0},
+    {label:'Período de experiência', value:m.experienciaCount||0}
+  ]);
+  const h2 = drawSectionBox(14+colW+3, y, colW, 'Desenvolvimento', [
+    {label:'PDIs ativos', value:m.pdis||0},
+    {label:'Potenciais sucessores', value:m.sucessores||0},
+    {label:'Talentos em destaque', value:m.talentos||0}
+  ]);
+  const lnpsDisplay = (m.semNota||m.semNotaLnps) ? 'Sem nota' : (m.lnps!=null?m.lnps:'—');
+  const h3 = drawSectionBox(14+(colW+3)*2, y, colW, 'Clima e Riscos', [
+    {label:'eNPS', value:enpsDisplay},
+    {label:'lNPS', value:lnpsDisplay},
+    {label:'Banco horas positivo', value:bhPos+' colab.'},
+    {label:'Banco horas negativo', value:bhNeg+' colab.'}
+  ]);
+  y += Math.max(h1,h2,h3) + 8;
 
   // === eNPS/lNPS COMMENTS ===
   const gerenteN = normalizeStr(m.gerente||'');
@@ -8025,24 +8105,57 @@ function exportMeetingPDF(meetingId){
   const comentRows = Object.values(latest);
   if(comentRows.length){
     y = secTitle('Comentários eNPS / lNPS', y);
-    const cBody = comentRows.map(r=>{
+    comentRows.forEach(r=>{
       const eC = stripHtml(r.comentariosEnps||r.comentarios||'').trim();
       const lC = stripHtml(r.comentariosLnps||'').trim();
-      let txt = '';
-      if(eC) txt += 'eNPS: '+eC;
-      if(lC) txt += (txt?'\n':'')+'lNPS: '+lC;
-      return [r.referencia||'', r.periodo||'', String(r.enps!=null?r.enps:'—'), String(r.lnps!=null?r.lnps:'—'), txt];
+      const nameStr = (r.referencia||'') + ' (' + (r.periodo||'') + ')';
+      // Calculate height needed
+      const eCLines = eC ? doc.splitTextToSize('eNPS: '+eC, maxW-16) : [];
+      const lCLines = lC ? doc.splitTextToSize('lNPS: '+lC, maxW-16) : [];
+      const blockH = 10 + eCLines.length*3.8 + (eC&&lC?4:0) + lCLines.length*3.8 + 4;
+      y = checkPage(y, blockH);
+      // Leader name + scores badge
+      doc.setFontSize(9); doc.setTextColor(27,27,47); doc.setFont(undefined,'bold');
+      doc.text(nameStr, 14, y);
+      doc.setFont(undefined,'normal');
+      // eNPS/lNPS badges
+      const eVal = r.enps!=null ? String(r.enps) : '—';
+      const lVal = r.lnps!=null ? String(r.lnps) : '—';
+      const badgeX = 14 + doc.getTextWidth(nameStr) + 6;
+      doc.setFillColor(0,191,165); doc.roundedRect(badgeX, y-4, 22, 6, 1.5, 1.5, 'F');
+      doc.setFontSize(7); doc.setTextColor(255); doc.setFont(undefined,'bold');
+      doc.text('eNPS '+eVal, badgeX+11, y-0.5, {align:'center'});
+      if(r.lnps!=null){
+        doc.setFillColor(150,45,255); doc.roundedRect(badgeX+24, y-4, 22, 6, 1.5, 1.5, 'F');
+        doc.text('lNPS '+lVal, badgeX+35, y-0.5, {align:'center'});
+      }
+      doc.setFont(undefined,'normal');
+      y += 4;
+      // eNPS comment with green left border
+      if(eC){
+        doc.setFillColor(240,253,244);
+        doc.roundedRect(16, y-1, maxW-4, eCLines.length*3.8+4, 1.5, 1.5, 'F');
+        doc.setFillColor(34,197,94); doc.rect(16, y-1, 1.2, eCLines.length*3.8+4, 'F');
+        doc.setFontSize(6); doc.setTextColor(100); doc.setFont(undefined,'bold');
+        doc.text('eNPS', 20, y+2); doc.setFont(undefined,'normal');
+        doc.setFontSize(7); doc.setTextColor(60);
+        doc.text(eCLines, 20, y+5.5);
+        y += eCLines.length*3.8 + 6;
+      }
+      // lNPS comment with purple left border
+      if(lC){
+        doc.setFillColor(245,243,255);
+        doc.roundedRect(16, y-1, maxW-4, lCLines.length*3.8+4, 1.5, 1.5, 'F');
+        doc.setFillColor(150,45,255); doc.rect(16, y-1, 1.2, lCLines.length*3.8+4, 'F');
+        doc.setFontSize(6); doc.setTextColor(100); doc.setFont(undefined,'bold');
+        doc.text('lNPS', 20, y+2); doc.setFont(undefined,'normal');
+        doc.setFontSize(7); doc.setTextColor(60);
+        doc.text(lCLines, 20, y+5.5);
+        y += lCLines.length*3.8 + 6;
+      }
+      y += 2;
     });
-    doc.autoTable({
-      startY: y,
-      head:[['Líder','Período','eNPS','lNPS','Comentários']],
-      body: cBody,
-      styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
-      headStyles:hStyle,
-      columnStyles:{0:{cellWidth:35},1:{cellWidth:18},2:{cellWidth:14,halign:'center'},3:{cellWidth:14,halign:'center'},4:{cellWidth:maxW-81}},
-      margin:marg
-    });
-    y = doc.lastAutoTable.finalY + 8;
+    y += 4;
   }
 
   // === ADMISSÕES ===
@@ -8235,11 +8348,33 @@ function exportMeetingPDF(meetingId){
     y = checkPage(y, 30);
     y = secTitle('Plano de Ação', y);
     if(plano){
-      doc.setFontSize(9); doc.setTextColor(60);
-      const plLines = doc.splitTextToSize(plano, maxW);
-      y = checkPage(y, plLines.length*4.5);
-      doc.text(plLines, 14, y);
-      y += plLines.length * 4.5 + 6;
+      // Split by semicolons or newlines into bullet items
+      const items = plano.split(/[;\n]+/).map(s=>s.trim()).filter(Boolean);
+      if(items.length > 1){
+        // Render as numbered items in a bordered box
+        const itemLines = items.map((it,i)=>doc.splitTextToSize((i+1)+'. '+it, maxW-12));
+        const totalLines = itemLines.reduce((s,l)=>s+l.length, 0);
+        const boxH = totalLines*4 + 6;
+        y = checkPage(y, boxH+4);
+        doc.setDrawColor(230,230,230); doc.setFillColor(252,252,252);
+        doc.roundedRect(14, y-2, maxW, boxH, 2, 2, 'FD');
+        doc.setFontSize(8); doc.setTextColor(50);
+        let iy = y + 2;
+        itemLines.forEach(lines=>{
+          doc.text(lines, 18, iy);
+          iy += lines.length * 4;
+        });
+        y += boxH + 4;
+      } else {
+        doc.setFontSize(9); doc.setTextColor(60);
+        const plLines = doc.splitTextToSize(plano, maxW-4);
+        const boxH = plLines.length*4.2+6;
+        y = checkPage(y, boxH+4);
+        doc.setDrawColor(230,230,230); doc.setFillColor(252,252,252);
+        doc.roundedRect(14, y-2, maxW, boxH, 2, 2, 'FD');
+        doc.text(plLines, 18, y+2);
+        y += boxH + 4;
+      }
     }
     if(obs){
       y = checkPage(y, 20);
