@@ -2157,10 +2157,50 @@ function doLogout(){
 let liderPage = 'lider-dashboard';
 let liderDetailColab = null;
 
+// Resolve all name aliases for a leader — finds all variants used in the lider field that refer to the same person
+function _resolveLiderAliases(nome){
+  const nk = normalizeStr(nome);
+  const aliases = new Set([nk]);
+  // 1) Check if nome matches any lider field value exactly
+  DB.colaboradores.forEach(c=>{
+    const cLider = normalizeStr(c.lider||c['Líder']||c.Lider||'');
+    if(cLider===nk) aliases.add(cLider);
+  });
+  // 2) Fuzzy: first+last name match across all lider field values
+  const myParts = nk.split(/\s+/);
+  if(myParts.length>=2){
+    const allLiderValues = [...new Set(DB.colaboradores.map(c=>normalizeStr(c.lider||c['Líder']||c.Lider||'')).filter(Boolean))];
+    allLiderValues.forEach(lv=>{
+      if(aliases.has(lv)) return;
+      const lParts = lv.split(/\s+/);
+      if(lParts.length>=2 && myParts[0]===lParts[0] && myParts[myParts.length-1]===lParts[lParts.length-1]) aliases.add(lv);
+    });
+  }
+  // 3) Check if the leader's own nome in DB.colaboradores has a different normalized form used in lider fields
+  const myColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
+  if(myColab){
+    const myArea = normalizeStr(myColab.area||myColab.departamento||'');
+    if(myArea){
+      // Find lider field values in same area that partially contain or are contained in the name
+      DB.colaboradores.forEach(c=>{
+        const cArea = normalizeStr(c.area||c.departamento||'');
+        if(cArea!==myArea) return;
+        const cLider = normalizeStr(c.lider||c['Líder']||c.Lider||'');
+        if(!cLider || aliases.has(cLider)) return;
+        // Check: lider field contains the nome or vice versa
+        if(nk.includes(cLider) || cLider.includes(nk)) aliases.add(cLider);
+      });
+    }
+  }
+  return aliases;
+}
+
 function getLiderTeam(){
   if(!isLiderSession()) return [];
   const nome = SESSION.liderNome;
   const nk = normalizeStr(nome);
+  const aliases = _resolveLiderAliases(nome);
+
   // Heads see ALL collaborators in their area(s), not just direct tree
   if(isHead(nome)){
     const headColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
@@ -2173,31 +2213,50 @@ function getLiderTeam(){
       return areaTeam;
     }
   }
-  // Try direct tree first
-  let team = getTeamTree(nome);
-  // Fallback: if no direct reports found, try matching by area (for leaders whose name might not be exactly in the lider field)
+
+  // Try direct tree with all aliases
+  let team = [];
+  aliases.forEach(alias=>{
+    const t = getTeamTree(alias);
+    const seen = new Set(team.map(c=>normalizeStr(c.nome||c.Nome||'')));
+    t.forEach(c=>{ if(!seen.has(normalizeStr(c.nome||c.Nome||''))) team.push(c); });
+  });
+
+  // Fallback: if still empty, try area-based matching
   if(!team.length){
     const myColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
     if(myColab){
       const myArea = normalizeStr(myColab.area||myColab.departamento||'');
       if(myArea){
-        // Get all people in same area who list this person's name (fuzzy) OR same area subordinates
         team = DB.colaboradores.filter(c=>{
-          if(normalizeStr(c.nome||c.Nome||'')===nk) return false; // exclude self
+          if(normalizeStr(c.nome||c.Nome||'')===nk) return false;
           const cArea = normalizeStr(c.area||c.departamento||'');
           const cLider = normalizeStr(c.lider||c['Líder']||c.Lider||'');
-          // Match: same area AND (lider field contains part of my name OR my name contains part of lider field)
-          if(cArea===myArea && cLider){
-            // Fuzzy match: check if the lider field matches closely
-            if(cLider===nk) return true;
-            // Check if first+last name match
-            const myParts = nk.split(/\s+/);
-            const lParts = cLider.split(/\s+/);
-            if(myParts.length>=2 && lParts.length>=2 && myParts[0]===lParts[0] && myParts[myParts.length-1]===lParts[lParts.length-1]) return true;
-          }
+          if(cArea!==myArea) return false;
+          // Match any alias
+          if(aliases.has(cLider)) return true;
+          // Partial name match
+          if(cLider && (nk.includes(cLider) || cLider.includes(nk))) return true;
           return false;
         });
       }
+    }
+  }
+
+  // For gerentes (non-Head): also include sub-leaders' teams
+  if(team.length && isCargoLideranca(nome)){
+    const myColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
+    const myCargo = normalizeStr(myColab ? (myColab.cargo||myColab.Cargo||'') : '');
+    if(/(gerente|coordenador|supervisor)/i.test(myCargo)){
+      // Find sub-leaders in the team and add their teams too
+      const subLiders = team.filter(c=>isCargoLideranca(c.cargo||c.Cargo||''));
+      const seen = new Set(team.map(c=>normalizeStr(c.nome||c.Nome||'')));
+      seen.add(nk);
+      subLiders.forEach(sl=>{
+        const slNome = sl.nome||sl.Nome||'';
+        const slTree = getTeamTree(slNome);
+        slTree.forEach(c=>{ const cn = normalizeStr(c.nome||c.Nome||''); if(!seen.has(cn)){ team.push(c); seen.add(cn); }});
+      });
     }
   }
   return team;
@@ -2412,17 +2471,18 @@ function renderLiderRelatorio(ct){
   const teamNames = getLiderTeamNames();
   const nome = SESSION.liderNome;
 
-  // Data — Heads also match desligamentos/promoções by area
+  // Data — match by team names + area for desligamentos/promoções + aliases for lider field
   const ativos = team.filter(c=>(c.status||'Ativo')==='Ativo');
   const inativos = team.filter(c=>(c.status||'Ativo')!=='Ativo');
-  const _isH2 = isHead(nome);
-  const _hA2 = _isH2 ? [...new Set(team.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))] : [];
-  const deslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')) || (_isH2 && _hA2.includes(normalizeStr(d.area||d.departamentoRaw||d.departamento||''))));
-  const acomp = DB.acompanhamentos.filter(r=> teamNames.includes(normalizeStr(r.colaborador||r.Colaborador||'')));
-  const oneones = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
-  const pdis = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
-  const promos = DB.promocoes.filter(p=> (teamNames.includes(normalizeStr(p.nome||p.Nome||'')) || (_isH2 && _hA2.includes(normalizeStr(p.area||'')))) && isPromoSalarial(p));
-  const banco = (DB.bancoHorasImport||[]).filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')));
+  const _relAreas = [...new Set(team.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))];
+  const _relAliases = _resolveLiderAliases(nome);
+  const _relMatch = r => { const n=normalizeStr(r.nome||r.Nome||r.colaborador||r.Colaborador||''); if(teamNames.includes(n)) return true; const rl=normalizeStr(r.lider||r['Líder']||r.Lider||r.responsavel||''); if(rl && _relAliases.has(rl)) return true; return false; };
+  const deslig = DB.desligamentos.filter(d=> _relMatch(d) || _relAreas.includes(normalizeStr(d.area||d.departamentoRaw||d.departamento||'')));
+  const acomp = DB.acompanhamentos.filter(r=> _relMatch(r));
+  const oneones = DB.oneOnOnes.filter(r=> _relMatch(r));
+  const pdis = DB.pdis.filter(r=> _relMatch(r));
+  const promos = DB.promocoes.filter(p=> (_relMatch(p) || _relAreas.includes(normalizeStr(p.area||''))) && isPromoSalarial(p));
+  const banco = (DB.bancoHorasImport||[]).filter(r=> _relMatch(r));
 
   // Sort acompanhamentos by date desc
   acomp.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
@@ -2671,14 +2731,15 @@ function renderLiderDashboard(ct){
     return html;
   }
 
-  // Data filtered by team — Heads also match by area for desligamentos/promoções (people who left aren't in team)
+  // Data filtered by team — also match by area for desligamentos/promoções (people who left aren't in team)
   const myColabs = team;
   const _isHeadUser = isHead(SESSION.liderNome);
-  const _headAreas = _isHeadUser ? [...new Set(myColabs.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))] : [];
-  const myDeslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')) || (_isHeadUser && _headAreas.includes(normalizeStr(d.area||d.departamentoRaw||d.departamento||''))));
-  const myPromos = DB.promocoes.filter(p=> (teamNames.includes(normalizeStr(p.nome||p.Nome||'')) || (_isHeadUser && _headAreas.includes(normalizeStr(p.area||'')))) && isPromoSalarial(p));
-  const pdisCount = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
-  const oneOnOnesCount = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||''))).length;
+  const _teamAreas = [...new Set(myColabs.map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))];
+  const _dashAliases = _resolveLiderAliases(SESSION.liderNome);
+  const myDeslig = DB.desligamentos.filter(d=> teamNames.includes(normalizeStr(d.nome||d.Nome||'')) || _teamAreas.includes(normalizeStr(d.area||d.departamentoRaw||d.departamento||'')));
+  const myPromos = DB.promocoes.filter(p=> (teamNames.includes(normalizeStr(p.nome||p.Nome||'')) || _teamAreas.includes(normalizeStr(p.area||''))) && isPromoSalarial(p));
+  const pdisCount = DB.pdis.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')) || _dashAliases.has(normalizeStr(r.lider||r['Líder']||r.Lider||''))).length;
+  const oneOnOnesCount = DB.oneOnOnes.filter(r=> teamNames.includes(normalizeStr(r.nome||r.Nome||'')) || _dashAliases.has(normalizeStr(r.lider||r['Líder']||r.Lider||''))).length;
 
   // KPIs
   const totalHC = myColabs.length;
@@ -3123,14 +3184,18 @@ function renderLiderDashboard(ct){
 function renderLiderDataPage(ct, dbKey, fields, labels){
   const teamNames = getLiderTeamNames();
   const _isH = isHead(SESSION.liderNome);
-  const _hAreas = _isH ? [...new Set(getLiderTeam().map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))] : [];
+  const _teamAreas = [...new Set(getLiderTeam().map(c=>normalizeStr(c.area||c.departamento||'')).filter(Boolean))];
+  const _aliases = _resolveLiderAliases(SESSION.liderNome);
   const nameField = fields[0];
   const data = (DB[dbKey]||[]).filter(r=>{
     const n = normalizeStr(r[nameField]||r.nome||r.Nome||r.colaborador||r.Colaborador||'');
     if(teamNames.includes(n)) return true;
-    // Heads: also match by area (for desligamentos/promoções of people no longer in team)
-    if(_isH && (dbKey==='desligamentos'||dbKey==='promocoes')){
-      return _hAreas.includes(normalizeStr(r.area||r.departamentoRaw||r.departamento||''));
+    // Also match records where lider field matches leader's aliases
+    const rLider = normalizeStr(r.lider||r['Líder']||r.Lider||r.responsavel||'');
+    if(rLider && _aliases.has(rLider)) return true;
+    // For desligamentos/promoções: also match by area (people who left aren't in team anymore)
+    if(dbKey==='desligamentos'||dbKey==='promocoes'){
+      if(_teamAreas.includes(normalizeStr(r.area||r.departamentoRaw||r.departamento||''))) return true;
     }
     return false;
   });
