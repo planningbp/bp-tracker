@@ -833,7 +833,7 @@ try {
             if(c2){ c2.innerHTML = renderSolicitacoes(); bindSolicitacoes(); }
           }
           if(SESSION && SESSION.type==='lider'){
-            var ct = document.getElementById('lider-content');
+            var ct = document.getElementById('liderContent');
             if(ct && ct.querySelector('#formSol')){ renderLiderForms(ct); }
           }
         }
@@ -2160,21 +2160,47 @@ let liderDetailColab = null;
 function getLiderTeam(){
   if(!isLiderSession()) return [];
   const nome = SESSION.liderNome;
+  const nk = normalizeStr(nome);
   // Heads see ALL collaborators in their area(s), not just direct tree
   if(isHead(nome)){
-    const headColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===normalizeStr(nome));
+    const headColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
     const headArea = headColab ? normalizeStr(headColab.area||headColab.departamento||'') : '';
     if(headArea){
-      // All collaborators in the same area (except the head themselves)
-      const areaTeam = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamento||'')===headArea && normalizeStr(c.nome||c.Nome||'')!==normalizeStr(nome));
-      // Also include anyone in the tree that might be in a different area
+      const areaTeam = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamento||'')===headArea && normalizeStr(c.nome||c.Nome||'')!==nk);
       const treeTeam = getTeamTree(nome);
       const seen = new Set(areaTeam.map(c=>normalizeStr(c.nome||c.Nome||'')));
       treeTeam.forEach(c=>{ if(!seen.has(normalizeStr(c.nome||c.Nome||''))) areaTeam.push(c); });
       return areaTeam;
     }
   }
-  return getTeamTree(nome);
+  // Try direct tree first
+  let team = getTeamTree(nome);
+  // Fallback: if no direct reports found, try matching by area (for leaders whose name might not be exactly in the lider field)
+  if(!team.length){
+    const myColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===nk);
+    if(myColab){
+      const myArea = normalizeStr(myColab.area||myColab.departamento||'');
+      if(myArea){
+        // Get all people in same area who list this person's name (fuzzy) OR same area subordinates
+        team = DB.colaboradores.filter(c=>{
+          if(normalizeStr(c.nome||c.Nome||'')===nk) return false; // exclude self
+          const cArea = normalizeStr(c.area||c.departamento||'');
+          const cLider = normalizeStr(c.lider||c['Líder']||c.Lider||'');
+          // Match: same area AND (lider field contains part of my name OR my name contains part of lider field)
+          if(cArea===myArea && cLider){
+            // Fuzzy match: check if the lider field matches closely
+            if(cLider===nk) return true;
+            // Check if first+last name match
+            const myParts = nk.split(/\s+/);
+            const lParts = cLider.split(/\s+/);
+            if(myParts.length>=2 && lParts.length>=2 && myParts[0]===lParts[0] && myParts[myParts.length-1]===lParts[lParts.length-1]) return true;
+          }
+          return false;
+        });
+      }
+    }
+  }
+  return team;
 }
 
 function getLiderTeamNames(){
@@ -2761,7 +2787,18 @@ function renderLiderDashboard(ct){
     return ' <span style="font-size:10px;color:'+color+';font-weight:600;">'+arrow+(d>0?'+':'')+d+'</span>';
   }
 
+  // Build eNPS detail section — my own latest record with promotores/neutros/detratores + comments
+  const _myEnpsRecs = (DB.enps||[]).filter(r=>r.tipo==='lider' && normalizeStr(r.referencia||'')===liderN);
+  _myEnpsRecs.sort((a,b)=>(a.periodo||'').localeCompare(b.periodo||''));
+  const _latestEnps = _myEnpsRecs.length ? _myEnpsRecs[_myEnpsRecs.length-1] : null;
+  const _prevEnps = _myEnpsRecs.length>=2 ? _myEnpsRecs[_myEnpsRecs.length-2] : null;
+  function _eDelta(curr,prev){ if(curr==null||prev==null) return ''; const d=Number(curr)-Number(prev); if(d===0) return ' <span style="font-size:10px;color:#888;">=</span>'; const c=d>0?'#22c55e':'#ff4343'; const a=d>0?'&#9650;':'&#9660;'; return ' <span style="font-size:10px;color:'+c+';font-weight:600;">'+a+(d>0?'+':'')+d+'</span>'; }
+
+  // Empty team diagnostic
+  const _teamEmptyMsg = totalHC===0 ? '<div class="card" style="margin-bottom:20px;padding:24px;border-left:4px solid #f59e0b;background:#fef9c3;"><div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#92400e;">Nenhum colaborador encontrado na sua equipe</div><div style="font-size:13px;color:#92400e;">Verifique com o BP se o campo "Líder" dos colaboradores está preenchido corretamente com o seu nome: <strong>'+esc(SESSION.liderNome)+'</strong></div></div>' : '';
+
   ct.innerHTML = `
+    ${_teamEmptyMsg}
     <!-- KPI Cards Row 1 -->
     <div class="grid grid-4" style="margin-bottom:20px;">
       <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.users}</div></div><div class="kpi-value">${totalHC}</div><div class="kpi-label">Total na Equipe</div></div>
@@ -2775,6 +2812,47 @@ function renderLiderDashboard(ct){
       <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#f3e8ff;">${ICONS.promo}</div></div><div class="kpi-value">${totalPromos}</div><div class="kpi-label">Promoções</div></div>
       <div class="card kpi-card"><div class="kpi-top"><div class="kpi-icon" style="background:#fff6e6;">${ICONS.pdi}</div></div><div class="kpi-value">${pdisCount}</div><div class="kpi-label">PDIs ativos</div></div>
     </div>
+
+    <!-- eNPS/lNPS Detail Section -->
+    ${_latestEnps ? `<div class="card" style="margin-bottom:20px;">
+      <div class="section-title">Detalhamento eNPS / lNPS — ${esc(_latestEnps.periodo||'')}</div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <span style="background:${enpsColor(_latestEnps.enps)}22;color:${enpsColor(_latestEnps.enps)};font-weight:700;padding:6px 16px;border-radius:10px;font-size:15px;">eNPS: ${_latestEnps.enps!=null?_latestEnps.enps:'—'}${_prevEnps?_eDelta(_latestEnps.enps,_prevEnps.enps):''}</span>
+        ${_latestEnps.lnps!=null?`<span style="background:${enpsColor(_latestEnps.lnps)}22;color:${enpsColor(_latestEnps.lnps)};font-weight:700;padding:6px 16px;border-radius:10px;font-size:15px;">lNPS: ${_latestEnps.lnps}${_prevEnps?_eDelta(_latestEnps.lnps,_prevEnps.lnps):''}</span>`:''}
+        ${_prevEnps?'<span style="font-size:11px;color:#aaa;">vs '+esc(_prevEnps.periodo||'')+'</span>':''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+        <div style="background:#E0FBF0;border-radius:10px;padding:14px;text-align:center;"><div style="font-weight:800;font-size:22px;color:#22c55e;">${_latestEnps.promotores||0}</div><div style="font-size:11px;color:#888;margin-top:2px;">Promotores</div></div>
+        <div style="background:#fef9c3;border-radius:10px;padding:14px;text-align:center;"><div style="font-weight:800;font-size:22px;color:#f59e0b;">${_latestEnps.neutros||0}</div><div style="font-size:11px;color:#888;margin-top:2px;">Neutros</div></div>
+        <div style="background:#fef2f2;border-radius:10px;padding:14px;text-align:center;"><div style="font-weight:800;font-size:22px;color:#ff4343;">${_latestEnps.detratores||0}</div><div style="font-size:11px;color:#888;margin-top:2px;">Detratores</div></div>
+        <div style="background:#f3f4f6;border-radius:10px;padding:14px;text-align:center;"><div style="font-weight:800;font-size:22px;">${(_latestEnps.promotores||0)+(_latestEnps.neutros||0)+(_latestEnps.detratores||0)}</div><div style="font-size:11px;color:#888;margin-top:2px;">Total Respostas</div></div>
+      </div>
+      ${((_latestEnps.comentariosEnps||_latestEnps.comentarios||'').trim() || (_latestEnps.comentariosLnps||'').trim()) ? `<div style="margin-bottom:8px;">
+        ${(_latestEnps.comentariosEnps||_latestEnps.comentarios||'').trim() ? '<div style="background:#f9fafb;border-radius:8px;padding:12px 16px;margin-bottom:8px;border-left:3px solid #22c55e;"><div style="font-size:10px;font-weight:700;color:#888;margin-bottom:4px;">COMENTÁRIOS eNPS</div><div style="font-size:12px;color:#333;line-height:1.5;">'+esc((_latestEnps.comentariosEnps||_latestEnps.comentarios||'').trim())+'</div></div>' : ''}
+        ${(_latestEnps.comentariosLnps||'').trim() ? '<div style="background:#f9fafb;border-radius:8px;padding:12px 16px;border-left:3px solid #962DFF;"><div style="font-size:10px;font-weight:700;color:#888;margin-bottom:4px;">COMENTÁRIOS lNPS</div><div style="font-size:12px;color:#333;line-height:1.5;">'+esc((_latestEnps.comentariosLnps||'').trim())+'</div></div>' : ''}
+      </div>` : ''}
+      ${_myEnpsRecs.length>1 ? `<div style="margin-top:14px;"><div style="font-weight:600;font-size:12px;color:#888;margin-bottom:6px;">HISTÓRICO</div>
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+            <th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Período</th>
+            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">eNPS</th>
+            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">lNPS</th>
+            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Prom.</th>
+            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Neut.</th>
+            <th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Detr.</th>
+          </tr></thead><tbody>` +
+          _myEnpsRecs.map((rec,ri)=>{
+            const pr = ri>0 ? _myEnpsRecs[ri-1] : null;
+            return '<tr style="border-bottom:1px solid #f0f0f0;'+(ri%2?'background:#fafbfc;':'')+'">' +
+              '<td style="padding:6px 10px;">'+esc(rec.periodo||'')+'</td>' +
+              '<td style="padding:6px 10px;text-align:center;font-weight:700;color:'+enpsColor(rec.enps)+';">'+(rec.enps!=null?rec.enps:'—')+(pr&&rec.enps!=null&&pr.enps!=null?_eDelta(rec.enps,pr.enps):'')+'</td>' +
+              '<td style="padding:6px 10px;text-align:center;font-weight:700;color:'+enpsColor(rec.lnps)+';">'+(rec.lnps!=null?rec.lnps:'—')+(pr&&rec.lnps!=null&&pr.lnps!=null?_eDelta(rec.lnps,pr.lnps):'')+'</td>' +
+              '<td style="padding:6px 10px;text-align:center;color:#22c55e;font-weight:600;">'+(rec.promotores||0)+'</td>' +
+              '<td style="padding:6px 10px;text-align:center;color:#f59e0b;font-weight:600;">'+(rec.neutros||0)+'</td>' +
+              '<td style="padding:6px 10px;text-align:center;color:#ff4343;font-weight:600;">'+(rec.detratores||0)+'</td></tr>';
+          }).join('') +
+        `</tbody></table></div></div>` : ''}
+    </div>` : ''}
 
     <!-- Charts row 1 -->
     <div class="grid grid-2" style="margin-bottom:20px;">
