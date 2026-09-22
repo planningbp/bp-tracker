@@ -531,28 +531,84 @@ function allAreas(){
 function bpForArea(area){ return CONFIG.bps.find(bp=>getBPAreas(bp).includes(area)); }
 function bpById(id){ return CONFIG.bps.find(b=>b.id===Number(id)); }
 
+/* _resolveHeadName: fuzzy match a head name from config to actual DB names.
+   Tries: exact match → first+last name match → partial/contains match.
+   Returns all matching full names from DB. */
+function _resolveHeadName(shortName){
+  const nk = normalizeStr(shortName);
+  const results = new Set();
+  // 1) Exact match on nome
+  DB.colaboradores.forEach(c=>{
+    if(normalizeStr(c.nome||c.Nome||'')===nk) results.add(c.nome||c.Nome||'');
+  });
+  if(results.size) return [...results];
+  // 2) First+last name match
+  const parts = nk.split(/\s+/);
+  if(parts.length>=2){
+    const first = parts[0], last = parts[parts.length-1];
+    DB.colaboradores.forEach(c=>{
+      const cn = normalizeStr(c.nome||c.Nome||'');
+      const cp = cn.split(/\s+/);
+      if(cp.length>=2 && cp[0]===first && cp[cp.length-1]===last) results.add(c.nome||c.Nome||'');
+    });
+  }
+  if(results.size) return [...results];
+  // 3) Contains match (config name is substring of DB name or vice-versa)
+  DB.colaboradores.forEach(c=>{
+    const cn = normalizeStr(c.nome||c.Nome||'');
+    if(cn.includes(nk) || nk.includes(cn)) results.add(c.nome||c.Nome||'');
+  });
+  if(results.size) return [...results];
+  // 4) Also check lider field values (head might not be in colaboradores but appears as lider)
+  const liderValues = new Set();
+  DB.colaboradores.forEach(c=>{
+    const l = (c.lider||c['Líder']||c.Lider||'').trim();
+    if(l) liderValues.add(l);
+  });
+  liderValues.forEach(l=>{
+    const ln = normalizeStr(l);
+    if(ln===nk) results.add(l);
+    else {
+      const lp = ln.split(/\s+/);
+      if(parts.length>=2 && lp.length>=2 && parts[0]===lp[0] && parts[parts.length-1]===lp[lp.length-1]) results.add(l);
+      else if(ln.includes(nk) || nk.includes(ln)) results.add(l);
+    }
+  });
+  return results.size ? [...results] : [shortName]; // fallback to original
+}
+
 /* getBPAreas: resolve areas for a BP — static list OR computed from heads' team trees */
 let _bpAreasCache = {};
 function _invalidateBPAreasCache(){ _bpAreasCache = {}; }
 function getBPAreas(bp){
   if(!bp) return [];
   if(bp.areas && bp.areas.length) return bp.areas;
-  // heads-based: compute from team trees
   if(!bp.heads || !bp.heads.length) return [];
   const ck = 'bp_'+bp.id;
   if(_bpAreasCache[ck]) return _bpAreasCache[ck];
   const areaSet = new Set();
   bp.heads.forEach(h=>{
-    // Include the head's own area
-    const headColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===normalizeStr(h));
-    if(headColab){
-      const a = headColab.area||headColab.departamento||'';
-      if(a) areaSet.add(a);
-    }
-    // Include areas of all people under the head
-    getTeamTree(h).forEach(c=>{
-      const a = c.area||c.departamento||'';
-      if(a) areaSet.add(a);
+    const resolvedNames = _resolveHeadName(h);
+    resolvedNames.forEach(fullName=>{
+      // Include the head's own area
+      const headColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===normalizeStr(fullName));
+      if(headColab){
+        const a = headColab.area||headColab.departamento||'';
+        if(a) areaSet.add(a);
+      }
+      // Include areas of all people under the head
+      getTeamTree(fullName).forEach(c=>{
+        const a = c.area||c.departamento||'';
+        if(a) areaSet.add(a);
+      });
+      // Also try aliases for lider field matching
+      const aliases = _resolveLiderAliases(fullName);
+      aliases.forEach(alias=>{
+        getTeamTree(alias).forEach(c=>{
+          const a = c.area||c.departamento||'';
+          if(a) areaSet.add(a);
+        });
+      });
     });
   });
   const result = [...areaSet].sort();
@@ -565,10 +621,17 @@ function getBPColabs(bp){
   if(bp.heads && bp.heads.length){
     const nameSet = new Set();
     bp.heads.forEach(h=>{
-      // Include the head themselves
-      const hk = normalizeStr(h);
-      nameSet.add(hk);
-      getTeamTree(h).forEach(c=> nameSet.add(normalizeStr(c.nome||c.Nome||'')));
+      const resolvedNames = _resolveHeadName(h);
+      resolvedNames.forEach(fullName=>{
+        nameSet.add(normalizeStr(fullName));
+        getTeamTree(fullName).forEach(c=> nameSet.add(normalizeStr(c.nome||c.Nome||'')));
+        // Also try aliases
+        const aliases = _resolveLiderAliases(fullName);
+        aliases.forEach(alias=>{
+          nameSet.add(alias);
+          getTeamTree(alias).forEach(c=> nameSet.add(normalizeStr(c.nome||c.Nome||'')));
+        });
+      });
     });
     return DB.colaboradores.filter(c=> nameSet.has(normalizeStr(c.nome||c.Nome||'')));
   }
@@ -7120,13 +7183,21 @@ function getMyColaboradores(){
   if(_myColabsCache) return _myColabsCache;
   const bp = currentBP();
 
-  // Heads-based BP: start from head's tree
+  // Heads-based BP: start from head's tree (with fuzzy name resolution)
   if(bp.heads && bp.heads.length){
     const allNames = new Set();
     bp.heads.forEach(h=>{
-      const hk = normalizeStr(h);
-      allNames.add(hk);
-      getTeamTree(h).forEach(c=> allNames.add(normalizeStr(c.nome||c.Nome||'')));
+      const resolvedNames = _resolveHeadName(h);
+      resolvedNames.forEach(fullName=>{
+        allNames.add(normalizeStr(fullName));
+        getTeamTree(fullName).forEach(c=> allNames.add(normalizeStr(c.nome||c.Nome||'')));
+        // Also try aliases to catch name variants in lider field
+        const aliases = _resolveLiderAliases(fullName);
+        aliases.forEach(alias=>{
+          allNames.add(alias);
+          getTeamTree(alias).forEach(c=> allNames.add(normalizeStr(c.nome||c.Nome||'')));
+        });
+      });
     });
     _myColabsCache = DB.colaboradores.filter(c=> allNames.has(normalizeStr(c.nome||c.Nome||'')));
     _myColabNamesCache = allNames;
