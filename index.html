@@ -457,8 +457,8 @@ tr:last-child td{border-bottom:none;}
 ========================================================= */
 const CONFIG = {
   bps: [
-    { id:1, name:"Carolina Lira", email:"carolina.lira@planning.com.br", avatar:"CL",
-      areas:["Contábil","Contábil/Fiscal","Consultoria","Construção Civil","Gestão de Risco"] },
+    { id:1, name:"Gabriella Azevedo", email:"gabriella.azevedo@planning.com.br", avatar:"GA",
+      heads:["Raianny Pereira da Silva"], areas:[] },
     { id:2, name:"Julia Soares", email:"julia.soares@planning.com.br", avatar:"JS",
       areas:["Contábil","Contábil/Fiscal","Fiscal","Folha de Pagamento","Seguros","Societário","DOC","Integração de Novos Clientes"] },
     { id:3, name:"Maryanna Moura", email:"maryanna.moura@planning.com.br", avatar:"MM",
@@ -525,11 +525,57 @@ function fmtNum(n){ return (n==null?0:n).toLocaleString('pt-BR'); }
 function esc(s){ return (s==null?'':s.toString()).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function allAreas(){
-  const set=[]; CONFIG.bps.forEach(bp=>bp.areas.forEach(a=>{ if(!set.includes(a)) set.push(a); }));
+  const set=[]; CONFIG.bps.forEach(bp=>getBPAreas(bp).forEach(a=>{ if(!set.includes(a)) set.push(a); }));
   return set;
 }
-function bpForArea(area){ return CONFIG.bps.find(bp=>bp.areas.includes(area)); }
+function bpForArea(area){ return CONFIG.bps.find(bp=>getBPAreas(bp).includes(area)); }
 function bpById(id){ return CONFIG.bps.find(b=>b.id===Number(id)); }
+
+/* getBPAreas: resolve areas for a BP — static list OR computed from heads' team trees */
+let _bpAreasCache = {};
+function _invalidateBPAreasCache(){ _bpAreasCache = {}; }
+function getBPAreas(bp){
+  if(!bp) return [];
+  if(bp.areas && bp.areas.length) return bp.areas;
+  // heads-based: compute from team trees
+  if(!bp.heads || !bp.heads.length) return [];
+  const ck = 'bp_'+bp.id;
+  if(_bpAreasCache[ck]) return _bpAreasCache[ck];
+  const areaSet = new Set();
+  bp.heads.forEach(h=>{
+    // Include the head's own area
+    const headColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===normalizeStr(h));
+    if(headColab){
+      const a = headColab.area||headColab.departamento||'';
+      if(a) areaSet.add(a);
+    }
+    // Include areas of all people under the head
+    getTeamTree(h).forEach(c=>{
+      const a = c.area||c.departamento||'';
+      if(a) areaSet.add(a);
+    });
+  });
+  const result = [...areaSet].sort();
+  _bpAreasCache[ck] = result;
+  return result;
+}
+/* getBPColabs: get all collaborators for a BP (heads-based or area-based) */
+function getBPColabs(bp){
+  if(!bp) return [];
+  if(bp.heads && bp.heads.length){
+    const nameSet = new Set();
+    bp.heads.forEach(h=>{
+      // Include the head themselves
+      const hk = normalizeStr(h);
+      nameSet.add(hk);
+      getTeamTree(h).forEach(c=> nameSet.add(normalizeStr(c.nome||c.Nome||'')));
+    });
+    return DB.colaboradores.filter(c=> nameSet.has(normalizeStr(c.nome||c.Nome||'')));
+  }
+  // area-based (existing behavior)
+  const bpAreas = (getBPAreas(bp)||[]).map(a=>normalizeStr(a));
+  return DB.colaboradores.filter(c=> bpAreas.includes(normalizeStr(c.area||c.departamento||'')));
+}
 
 function matchArea(deptRaw){
   const n = normalizeStr(deptRaw);
@@ -987,7 +1033,7 @@ function seedIfNeeded(){
   const gerentes = ["Ana Ribeiro","Bruno Castro","Camila Duarte","Diego Farias","Elisa Nogueira","Fábio Teixeira","Gustavo Prado","Helena Vidal","Igor Salles","Juliana Amaral"];
   let gi=0;
   CONFIG.bps.forEach(bp=>{
-    bp.areas.forEach(area=>{
+    getBPAreas(bp).forEach(area=>{
       seedPeriods.forEach(period=>{
         const hc = 8+Math.floor(Math.random()*22);
         const deslig = Math.floor(Math.random()*3);
@@ -3506,7 +3552,7 @@ function renderPageContent(){
    DASHBOARD
 ========================================================= */
 function latestMeetingsByArea(bp, period){
-  const areas = bp.areas;
+  const areas = getBPAreas(bp);
   return areas.map(area=>{
     let list = DB.meetings.filter(m=>m.bpId===bp.id && m.area===area);
     if(period) list = list.filter(m=>m.period===period);
@@ -3516,7 +3562,7 @@ function latestMeetingsByArea(bp, period){
 }
 function renderDashboard(){
   const bp = currentBP();
-  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+  const bpAreas = getBPAreas(bp).map(a=>normalizeStr(a));
   // Date range defaults: last 12 months
   const now = new Date();
   if(!UI.dashDateFrom){
@@ -3833,7 +3879,7 @@ function renderDashboard(){
         </div>
         <div class="field" id="sc_area_wrap"><label>Área</label>
           <select id="sc_area" class="select">
-            ${bp.areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}
+            ${getBPAreas(bp).map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('')}
           </select>
         </div>
         <div class="field" id="sc_lider_wrap" style="display:none;"><label>Líder</label>
@@ -3862,7 +3908,7 @@ function renderDashboard(){
     </div>
 
     ${(()=>{
-      const scBpAreas = bp.areas.map(a=>normalizeStr(a));
+      const scBpAreas = getBPAreas(bp).map(a=>normalizeStr(a));
       const bpScores = DB.scores.filter(s=> s.tipo==='empresa' || scBpAreas.includes(normalizeStr(s.area||'')) || scBpAreas.includes(normalizeStr(s.liderArea||'')));
       const filtered = fArea ? bpScores.filter(s=> s.tipo==='empresa' || (s.area||'')===fArea || (s.liderArea||'')===fArea) : bpScores;
       filtered.sort((a,b)=> (b.period||'').localeCompare(a.period||'') || (a.tipo||'area').localeCompare(b.tipo||'area') || (a.area||'').localeCompare(b.area||''));
@@ -4536,7 +4582,7 @@ function bindImportPreview(){
 }
 function openAddModal(db){
   const bp = currentBP();
-  const allAreas = bp.areas;
+  const allAreas = getBPAreas(bp);
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
   let title='', fields='';
@@ -4758,7 +4804,7 @@ const FORM_SECTIONS = [
 ];
 function blankMeeting(bp){
   return {
-    id: uid(), bpId: bp.id, area: bp.areas[0], gerente:'', date: fmtDate(new Date()), period: currentPeriodGuess(),
+    id: uid(), bpId: bp.id, area: getBPAreas(bp)[0], gerente:'', date: fmtDate(new Date()), period: currentPeriodGuess(),
     status:'Não iniciada',
     dataInicio:'', dataFim:'',
     headcount:0, admissoesCount:0, desligamentosCount:0, turnover:0, vagasAbertas:0, movimentacoes:0, experienciaCount:0,
@@ -4973,7 +5019,7 @@ function renderMeetingForm(){
         <div class="form-section ${UI.formSection===0?'active':''}" data-panel="0">
           <div class="section-title">Dados Gerais</div>
           <div class="field-grid">
-            <div class="field"><label>Área</label><select id="f_area">${bp.areas.map(a=>`<option value="${a}" ${fd.area===a?'selected':''}>${a}</option>`).join('')}</select></div>
+            <div class="field"><label>Área</label><select id="f_area">${getBPAreas(bp).map(a=>`<option value="${a}" ${fd.area===a?'selected':''}>${a}</option>`).join('')}</select></div>
             <div class="field"><label>Líder responsável</label><select id="f_gerente"><option value="">Selecione...</option>${[...new Set(DB.colaboradores.filter(c=>c.area===fd.area && c.lider).map(c=>c.lider))].sort().map(l=>`<option value="${l}" ${fd.gerente===l?'selected':''}>${l}</option>`).join('')}${fd.gerente && ![...new Set(DB.colaboradores.filter(c=>c.area===fd.area && c.lider).map(c=>c.lider))].includes(fd.gerente)?`<option value="${esc(fd.gerente)}" selected>${esc(fd.gerente)}</option>`:''}</select></div>
             <div class="field"><label>Data da reunião</label><input id="f_date" type="text" value="${esc(fd.date)}" placeholder="dd/mm/aaaa"></div>
             <div class="field"><label>Período</label><select id="f_period">${CONFIG.periods.map(p=>`<option value="${p}" ${fd.period===p?'selected':''}>${p}</option>`).join('')}</select></div>
@@ -5925,7 +5971,7 @@ function bindHistory(){
 ========================================================= */
 function getAcompanhamentoRecords(){
   const bp = currentBP();
-  const colabs = DB.colaboradores.filter(c => bp.areas.map(a=>normalizeStr(a)).includes(normalizeStr(c.area||c.departamento||'')));
+  const colabs = DB.colaboradores.filter(c => getBPAreas(bp).map(a=>normalizeStr(a)).includes(normalizeStr(c.area||c.departamento||'')));
   const milestones = [7,15,45,90];
   const records = [];
   const today = new Date(); today.setHours(0,0,0,0);
@@ -6138,7 +6184,7 @@ function renderAcompanhamentos(){
               <option value="">Selecione...</option>
               ${(()=>{
                 const bp = currentBP();
-                const colabs = DB.colaboradores.filter(c => bp.areas.map(a=>normalizeStr(a)).includes(normalizeStr(c.area||c.departamento||'')));
+                const colabs = DB.colaboradores.filter(c => getBPAreas(bp).map(a=>normalizeStr(a)).includes(normalizeStr(c.area||c.departamento||'')));
                 return colabs.map(c=>{
                   const nome = c.nome || c.Nome || '';
                   return '<option value="'+esc(nome)+'">'+esc(nome)+'</option>';
@@ -6305,7 +6351,7 @@ const KANBAN_COLS = [
 function renderKanban(){
   const acoes = DB.acoes||[];
   const bp = currentBP();
-  const areas = bp ? bp.areas : [];
+  const areas = bp ? getBPAreas(bp) : [];
   const liders = [...new Set(getMyColaboradores().map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))].sort();
 
   return `
@@ -6630,7 +6676,7 @@ function renderLideresPage(){
   const fArea = UI.lideresArea||'';
   const fSearch = (UI.lideresSearch||'').toLowerCase();
   const bp = currentBP();
-  const areas = bp ? bp.areas.slice().sort() : [];
+  const areas = bp ? getBPAreas(bp).slice().sort() : [];
 
   // Get unique leaders from my collaborators
   const liderSet = new Set();
@@ -7068,12 +7114,33 @@ function bindLideresPage(){
 var _myColabsCache = null;
 var _myColabNamesCache = null;
 var _myExpandedAreasCache = null;
-function clearMyColabsCache(){ _myColabsCache=null; _myColabNamesCache=null; _myExpandedAreasCache=null; }
+function clearMyColabsCache(){ _myColabsCache=null; _myColabNamesCache=null; _myExpandedAreasCache=null; _invalidateBPAreasCache(); }
 
 function getMyColaboradores(){
   if(_myColabsCache) return _myColabsCache;
   const bp = currentBP();
-  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+
+  // Heads-based BP: start from head's tree
+  if(bp.heads && bp.heads.length){
+    const allNames = new Set();
+    bp.heads.forEach(h=>{
+      const hk = normalizeStr(h);
+      allNames.add(hk);
+      getTeamTree(h).forEach(c=> allNames.add(normalizeStr(c.nome||c.Nome||'')));
+    });
+    _myColabsCache = DB.colaboradores.filter(c=> allNames.has(normalizeStr(c.nome||c.Nome||'')));
+    _myColabNamesCache = allNames;
+    const expandedAreas = new Set();
+    _myColabsCache.forEach(c=>{
+      const a = normalizeStr(c.area||c.departamento||'');
+      if(a) expandedAreas.add(a);
+    });
+    _myExpandedAreasCache = expandedAreas;
+    return _myColabsCache;
+  }
+
+  // Area-based BP (existing behavior)
+  const bpAreas = getBPAreas(bp).map(a=>normalizeStr(a));
   // 1) All collaborators whose area matches BP areas
   const byArea = DB.colaboradores.filter(c => {
     const cArea = normalizeStr(c.area||c.departamento||'');
@@ -7120,7 +7187,7 @@ function renderColaboradoresPage(){
   const colabs = getMyColaboradores();
   const bp = currentBP();
   const colabAreas = colabs.map(c=>c.area||c.departamento||'').filter(Boolean);
-  const areas = [...new Set([...(bp?bp.areas:[]), ...colabAreas])].sort();
+  const areas = [...new Set([...(bp?getBPAreas(bp):[]), ...colabAreas])].sort();
   const fArea = UI.colabFilterArea || '';
   const fSearch = (UI.colabSearch || '').toLowerCase();
   const fTag = UI.colabFilterTag || '';
@@ -7953,7 +8020,7 @@ function countByMonth(items, dateField, months){
 
 function getIndicadoresData(filterArea){
   const bp = currentBP();
-  const bpAreas = bp.areas.map(a=>normalizeStr(a));
+  const bpAreas = getBPAreas(bp).map(a=>normalizeStr(a));
   const ea = getMyExpandedAreas();
   const cn = getMyColabNames();
   let myColabs = getMyColaboradores();
@@ -8897,7 +8964,7 @@ if(!UI.orgCollapsed) UI.orgCollapsed={};
 
 function renderOrganograma(){
   const bp=currentBP();
-  const areas=bp?bp.areas:[];
+  const areas=bp?getBPAreas(bp):[];
   const colabs=getMyColaboradores();
 
   function getLider(c){return c.lider||c['Líder']||c.Lider||'';}
@@ -9043,7 +9110,7 @@ function parseSalary(val){
 
 function renderEquidade(){
   const bp=currentBP();
-  const areas=bp?bp.areas:[];
+  const areas=bp?getBPAreas(bp):[];
   let colabs=getMyColaboradores();
   if(UI.equidadeArea) colabs=colabs.filter(c=>normalizeStr(c.area||c.departamento||'')===normalizeStr(UI.equidadeArea));
 
@@ -9189,7 +9256,7 @@ if(!UI.agendaDays) UI.agendaDays=30;
 
 function renderAgendaBP(){
   const bp=currentBP();
-  const areas=bp?bp.areas:[];
+  const areas=bp?getBPAreas(bp):[];
   const colabs=getMyColaboradores();
   const acoes=DB.acoes||[];
   const acomps=DB.acompanhamentos||[];
@@ -9335,7 +9402,7 @@ function renderSettings(){
     </div>
     <div class="card">
       <div class="section-title">Áreas sob responsabilidade</div>
-      ${bp.areas.map(a=>`<div class="area-row"><div class="area-name">${a}</div><span class="badge badge-green">Ativa</span></div>`).join('')}
+      ${getBPAreas(bp).map(a=>`<div class="area-row"><div class="area-name">${a}</div><span class="badge badge-green">Ativa</span></div>`).join('')}
     </div>
   </div>
   <div class="card" style="margin-top:20px;">
@@ -9751,7 +9818,7 @@ function renderEnpsPage(){
     const lideres = [...new Set(colabs.map(c=>c.lider||c['Líder']||c.Lider||'').filter(Boolean))].sort();
     refOptions = lideres.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('');
   } else if(tab==='departamento'){
-    const areas = (bp?bp.areas:[]).slice().sort();
+    const areas = (bp?getBPAreas(bp):[]).slice().sort();
     refOptions = areas.map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('');
   }
 
