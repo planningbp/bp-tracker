@@ -5012,6 +5012,19 @@ function handleImportFile(type, file){
       syncPromocoesFromText();
       statusEl.textContent = parsed.length+' colaboradores importados (base substituída)';
     } else {
+      // For desligamentos/promocoes: assign bpId based on líder belonging to a BP's hierarchy
+      if(type==='desligamentos' || type==='promocoes'){
+        const bpMap = _buildAllBpNamesMap();
+        let skipped = 0;
+        parsed = parsed.filter(p=>{
+          const liderField = p.lider || p.gestor || '';
+          const bpId = _findBpIdForLider(liderField, bpMap);
+          if(bpId == null){ skipped++; return false; }
+          p.bpId = bpId;
+          return true;
+        });
+        if(skipped > 0) console.log('[Import] '+skipped+' registros descartados (líder não encontrado em nenhuma BP)');
+      }
       const existing = DB[type]||[];
       function dedupKey(r){
         if(type==='desligamentos') return normalizeStr(r.nome)+'|'+(r.mesRaw||'');
@@ -7531,6 +7544,53 @@ function getMyColaboradores(){
 function getMyColabNames(){
   if(!_myColabNamesCache) getMyColaboradores();
   return _myColabNamesCache;
+}
+
+// Build map: normalizedName → bpId for ALL BPs (used on import to assign bpId)
+function _buildAllBpNamesMap(){
+  const map = new Map(); // name → bpId
+  CONFIG.bps.forEach(bp=>{
+    const names = new Set();
+    // By bpResponsavel field
+    DB.colaboradores.forEach(c=>{
+      if(normalizeStr(c.bpResponsavel||'')=== normalizeStr(bp.name)){
+        names.add(normalizeStr(c.nome||c.Nome||''));
+      }
+    });
+    // By heads hierarchy
+    if(bp.heads && bp.heads.length){
+      bp.heads.forEach(h=>{
+        const resolvedNames = _resolveHeadName(h);
+        resolvedNames.forEach(fullName=>{
+          names.add(normalizeStr(fullName));
+          getTeamTree(fullName).forEach(c=> names.add(normalizeStr(c.nome||c.Nome||'')));
+          const aliases = _resolveLiderAliases(fullName);
+          aliases.forEach(alias=>{
+            names.add(alias);
+            getTeamTree(alias).forEach(c=> names.add(normalizeStr(c.nome||c.Nome||'')));
+          });
+        });
+      });
+    }
+    // By areas (for area-based BPs like Maryanna)
+    if((!bp.heads || !bp.heads.length) && bp.areas && bp.areas.length){
+      const bpAreas = bp.areas.map(a=>normalizeStr(a));
+      DB.colaboradores.forEach(c=>{
+        const cArea = normalizeStr(c.area||c.departamento||'');
+        if(cArea && bpAreas.includes(cArea)) names.add(normalizeStr(c.nome||c.Nome||''));
+      });
+    }
+    names.forEach(n=>{ if(n && !map.has(n)) map.set(n, bp.id); });
+  });
+  return map;
+}
+
+// Find bpId for a given lider name by checking which BP owns that lider
+function _findBpIdForLider(liderName, bpNamesMap){
+  if(!liderName || liderName==='#N/A' || liderName==='N/A') return null;
+  const ln = normalizeStr(liderName);
+  if(!ln) return null;
+  return bpNamesMap.has(ln) ? bpNamesMap.get(ln) : null;
 }
 function getMyExpandedAreas(){
   if(!_myExpandedAreasCache) getMyColaboradores();
