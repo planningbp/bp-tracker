@@ -790,6 +790,7 @@ const LS = {
   session:'planning_session',
   seeded:'planning_seeded_v1',
   liderPasswords:'planning_lider_passwords',
+  bpPasswords:'planning_bp_passwords',
   solicitacoes:'planning_solicitacoes',
   tags:'planning_tags',
   colabTags:'planning_colab_tags',
@@ -942,6 +943,14 @@ try {
       if(data && typeof data === 'object'){
         LIDER_PASSWORDS = data;
         saveJSON(LS.liderPasswords, LIDER_PASSWORDS);
+      }
+    });
+    /* Sync BP passwords from Firebase */
+    fbDB.ref('bpPasswords').on('value', function(snap){
+      var data = snap.val();
+      if(data && typeof data === 'object'){
+        BP_PASSWORDS = data;
+        saveJSON(LS.bpPasswords, BP_PASSWORDS);
       }
     });
     /* Sync all shared data keys from Firebase */
@@ -2104,6 +2113,13 @@ function saveLiderPasswords(){
   if(typeof fbDB!=='undefined' && fbDB) fbDB.ref('liderPasswords').set(LIDER_PASSWORDS).catch(function(){});
 }
 
+// Senhas das BPs
+let BP_PASSWORDS = loadJSON(LS.bpPasswords, {});
+function saveBpPasswords(){
+  saveJSON(LS.bpPasswords, BP_PASSWORDS);
+  if(typeof fbDB!=='undefined' && fbDB) fbDB.ref('bpPasswords').set(BP_PASSWORDS).catch(function(){});
+}
+
 // Session helpers
 function isLiderSession(){ return SESSION && SESSION.type==='lider'; }
 function isBPSession(){ return SESSION && !SESSION.type; }
@@ -2259,17 +2275,13 @@ function renderLogin(){
         <form id="loginForm">
           <div class="field"><label>E-mail</label><input type="email" id="loginEmail" placeholder="seu.email@planning.com.br" required></div>
           <div class="field"><label>Senha</label><input type="password" id="loginPass" placeholder="••••••••" required></div>
+          <div id="bpNewPassWrap" style="display:none;">
+            <div style="background:#fef3c7;color:#92400e;padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:12px;">Primeiro acesso! Crie sua senha.</div>
+            <div class="field"><label>Criar senha</label><input type="password" id="bpNewPass" placeholder="Crie sua senha (mín. 4 caracteres)"></div>
+            <div class="field"><label>Confirmar senha</label><input type="password" id="bpNewPass2" placeholder="Confirme a senha"></div>
+          </div>
           <button type="submit" class="btn btn-primary">Entrar como BP</button>
         </form>
-        <div class="divider">acesso rápido</div>
-        <div class="quick-access">
-          ${CONFIG.bps.map(bp=>`
-            <button type="button" class="quick-btn" data-quick="${bp.id}">
-              <span class="avatar" style="width:26px;height:26px;font-size:11px;">${bp.avatar}</span>
-              <span>${bp.name}</span>
-            </button>
-          `).join('')}
-        </div>
       </div>
 
       <div id="panelLider" style="display:${loginTab==='lider'?'block':'none'};">
@@ -2296,21 +2308,58 @@ function bindLogin(){
   document.getElementById('tabBP').addEventListener('click', ()=>{ loginTab='bp'; render(); });
   document.getElementById('tabLider').addEventListener('click', ()=>{ loginTab='lider'; render(); });
 
-  // BP login
+  // BP login — com senhas individuais por BP
   const loginForm = document.getElementById('loginForm');
+  const loginEmail = document.getElementById('loginEmail');
+  const bpNewPassWrap = document.getElementById('bpNewPassWrap');
+  const loginPassField = document.getElementById('loginPass');
+  // Detectar primeiro acesso ao digitar e-mail
+  if(loginEmail) loginEmail.addEventListener('blur', function(){
+    const email = loginEmail.value.trim().toLowerCase();
+    const bp = CONFIG.bps.find(b=>b.email.toLowerCase()===email);
+    if(!bp){ bpNewPassWrap.style.display='none'; loginPassField.style.display='block'; loginPassField.placeholder='Sua senha'; return; }
+    const key = String(bp.id);
+    if(BP_PASSWORDS[key]){
+      bpNewPassWrap.style.display='none';
+      loginPassField.style.display='block';
+      loginPassField.placeholder='Sua senha';
+    } else {
+      bpNewPassWrap.style.display='block';
+      loginPassField.style.display='none';
+    }
+  });
   if(loginForm) loginForm.addEventListener('submit', function(e){
     e.preventDefault();
     const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-    const pass = document.getElementById('loginPass').value;
     const bp = CONFIG.bps.find(b=>b.email.toLowerCase()===email);
-    if(!bp || pass!=='123'){
-      document.getElementById('loginErr').innerHTML = '<div class="login-err">E-mail ou senha inválidos. Dica: a senha padrão é "123".</div>';
+    if(!bp){
+      document.getElementById('loginErr').innerHTML = '<div class="login-err">E-mail não encontrado.</div>';
       return;
     }
+    const key = String(bp.id);
+    if(BP_PASSWORDS[key]){
+      // Já tem senha — verificar
+      const pass = document.getElementById('loginPass').value;
+      if(pass !== BP_PASSWORDS[key]){
+        document.getElementById('loginErr').innerHTML = '<div class="login-err">Senha incorreta.</div>';
+        return;
+      }
+    } else {
+      // Primeiro acesso — criar senha
+      const p1 = (document.getElementById('bpNewPass')||{}).value;
+      const p2 = (document.getElementById('bpNewPass2')||{}).value;
+      if(!p1 || p1.length < 4){
+        document.getElementById('loginErr').innerHTML = '<div class="login-err">A senha deve ter pelo menos 4 caracteres.</div>';
+        return;
+      }
+      if(p1 !== p2){
+        document.getElementById('loginErr').innerHTML = '<div class="login-err">As senhas não coincidem.</div>';
+        return;
+      }
+      BP_PASSWORDS[key] = p1;
+      saveBpPasswords();
+    }
     doLogin(bp.id);
-  });
-  document.querySelectorAll('[data-quick]').forEach(btn=>{
-    btn.addEventListener('click', ()=> doLogin(Number(btn.getAttribute('data-quick'))) );
   });
 
   // Líder login
@@ -9818,6 +9867,8 @@ function bindSettings(){
     if(DB.meetings && DB.meetings.length > 0) promises.push(fbDB.ref('meetings').set(JSON.parse(JSON.stringify(DB.meetings))));
     var liderPw = loadJSON(LS.liderPasswords||'planning_lider_passwords', null);
     if(liderPw) promises.push(fbDB.ref('liderPasswords').set(liderPw));
+    var bpPw = loadJSON(LS.bpPasswords||'planning_bp_passwords', null);
+    if(bpPw) promises.push(fbDB.ref('bpPasswords').set(bpPw));
     Promise.all(promises).then(function(){
       if(status) status.innerHTML='<span style="color:#22c55e;">Todos os dados sincronizados com sucesso!</span>';
     }).catch(function(e){
