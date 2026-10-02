@@ -3873,7 +3873,253 @@ function renderPageContent(){
   else if(UI.page==='solicitacoes'){ c.innerHTML = renderSolicitacoes(); bindSolicitacoes(); }
   else if(UI.page==='enps'){ c.innerHTML = renderEnpsPage(); bindEnpsPage(); }
   else if(UI.page==='cronograma'){ c.innerHTML = renderCronogramaPage(); bindCronogramaPage(); }
+  else if(UI.page==='pdis'){ c.innerHTML = renderPDIsPage(); bindPDIsPage(); }
   else if(CRUD_PAGES[UI.page]){ c.innerHTML = renderCrudPage(UI.page); bindCrudPage(UI.page); }
+}
+
+/* =========================================================
+   PDIs — CUSTOM PAGE
+========================================================= */
+if(!UI.pdiSearch) UI.pdiSearch = '';
+if(!UI.pdiFilterLider) UI.pdiFilterLider = '';
+if(!UI.pdiFilterProgresso) UI.pdiFilterProgresso = '';
+if(!UI.pdiExpandedIds) UI.pdiExpandedIds = new Set();
+
+function renderPDIsPage(){
+  const allData = DB.pdis || [];
+  const bp = currentBP();
+  const _bpId = bp ? Number(bp.id) : null;
+  // Filter by BP
+  let data = allData;
+  if(SESSION && SESSION.bpId && bp){
+    const myNames = getMyColabNames();
+    data = data.filter(r=>{
+      if(r.bpId != null) return Number(r.bpId) === _bpId;
+      const rn = normalizeStr(r.nome||'');
+      return rn && myNames && myNames.has(rn);
+    });
+  }
+  // Filters
+  const search = (UI.pdiSearch||'').toLowerCase();
+  if(search) data = data.filter(r=> (r.nome||'').toLowerCase().includes(search) || (r.lider||'').toLowerCase().includes(search) || (r.acoes||[]).some(a=>(a.areaDesenvolvimento||'').toLowerCase().includes(search)||(a.descricao||'').toLowerCase().includes(search)));
+  if(UI.pdiFilterLider) data = data.filter(r=> normalizeStr(r.lider||'')===normalizeStr(UI.pdiFilterLider));
+  if(UI.pdiFilterProgresso){
+    const fp = normalizeStr(UI.pdiFilterProgresso);
+    data = data.filter(r=> r.acoes && r.acoes.some(a=> normalizeStr(a.progresso||'').includes(fp)));
+  }
+
+  // KPIs
+  const totalPessoas = data.length;
+  const totalAcoes = data.reduce((s,r)=>s+(r.totalAreas||0),0);
+  const totalFin = data.reduce((s,r)=>s+(r.finalizada||0),0);
+  const totalProg = data.reduce((s,r)=>s+(r.emProgresso||0),0);
+  const totalNaoIni = data.reduce((s,r)=>s+(r.naoIniciada||0),0);
+  const pctFin = totalAcoes ? Math.round(totalFin/totalAcoes*100) : 0;
+
+  // Unique leaders and progresso values for filters
+  const liders = [...new Set(allData.map(r=>(r.lider||'').trim()).filter(Boolean))].sort();
+  const progressoOpts = ['Não iniciada','Em progresso','Finalizada'];
+
+  // Build cards HTML
+  const cardsHtml = data.map((r,idx)=>{
+    const hasAcoes = r.acoes && r.acoes.length;
+    const isExpanded = UI.pdiExpandedIds.has(r.id);
+    const progBar = r.totalAreas ? `<div style="display:flex;gap:2px;height:6px;border-radius:3px;overflow:hidden;flex:1;min-width:80px;background:#f1f5f9;">
+      ${r.finalizada?'<div style="width:'+Math.round(r.finalizada/r.totalAreas*100)+'%;background:#22c55e;"></div>':''}
+      ${r.emProgresso?'<div style="width:'+Math.round(r.emProgresso/r.totalAreas*100)+'%;background:#f59e0b;"></div>':''}
+      ${r.naoIniciada?'<div style="width:'+Math.round(r.naoIniciada/r.totalAreas*100)+'%;background:#cbd5e1;"></div>':''}
+    </div>` : '';
+
+    let acoesHtml = '';
+    if(hasAcoes && isExpanded){
+      acoesHtml = '<div style="margin-top:12px;border-top:1px solid #e5e7eb;padding-top:12px;display:flex;flex-direction:column;gap:10px;">'
+        + r.acoes.map(a=>{
+          const pc = normalizeStr(a.progresso||'');
+          const pColor = pc.includes('finalizada')?'#22c55e':pc.includes('progresso')||pc.includes('andamento')?'#f59e0b':'#94a3b8';
+          const pBg = pc.includes('finalizada')?'#f0fdf4':pc.includes('progresso')||pc.includes('andamento')?'#fffbeb':'#f8fafc';
+          const pIcon = pc.includes('finalizada')?'&#10003;':pc.includes('progresso')||pc.includes('andamento')?'&#9679;':'&#9675;';
+          return `<div style="background:${pBg};border:1px solid ${pColor}33;border-radius:10px;padding:12px 16px;border-left:4px solid ${pColor};">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:200px;">
+                <div style="font-weight:700;font-size:13px;color:#1B1B2F;margin-bottom:2px;">${esc(a.areaDesenvolvimento||'Ação')}</div>
+                ${a.categoria?'<span style="display:inline-block;background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;margin-top:2px;">'+esc(a.categoria)+'</span>':''}
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="color:${pColor};font-size:12px;">${pIcon}</span>
+                <span style="font-size:12px;font-weight:600;color:${pColor};">${esc(a.progresso||'Sem status')}</span>
+              </div>
+            </div>
+            ${a.descricao?'<div style="font-size:12px;color:#555;margin-top:8px;line-height:1.6;white-space:pre-wrap;">'+esc(a.descricao)+'</div>':''}
+            <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:#999;">
+              <span>Criado: ${esc(a.criadoEm||'—')}</span>
+              <span>Atualizado: ${esc(a.atualizadoEm||'—')}</span>
+              ${a.totalAcoes?'<span>Sub-ações: '+a.totalAcoes+' ('+a.finalizada+' finalizadas)</span>':''}
+            </div>
+          </div>`;
+        }).join('')
+        + '</div>';
+    }
+
+    return `<div class="card" style="margin-bottom:12px;padding:16px 20px;transition:box-shadow .2s;" data-pdi-card="${r.id}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;cursor:pointer;" class="pdiCardHeader" data-pdi-id="${r.id}">
+        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:200px;">
+          <span class="pdiCardArrow" style="font-size:11px;color:#999;transition:transform .2s;${isExpanded?'transform:rotate(90deg);':''}">${hasAcoes?'&#9654;':''}</span>
+          <div>
+            <div style="font-weight:700;font-size:14px;color:#1B1B2F;">${esc(r.nome)}</div>
+            <div style="font-size:12px;color:#888;">Líder: ${esc(r.lider||'—')} ${r.area?'· '+esc(r.area):''}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;min-width:200px;">
+            ${progBar}
+            <span style="font-size:11px;color:#888;white-space:nowrap;">${r.finalizada||0}/${r.totalAreas||0}</span>
+          </div>
+          <div style="display:flex;gap:8px;">
+            ${r.naoIniciada?'<span style="background:#f1f5f9;color:#64748b;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;" title="Não iniciada">'+r.naoIniciada+' pendente'+(r.naoIniciada>1?'s':'')+'</span>':''}
+            ${r.emProgresso?'<span style="background:#fef3c7;color:#d97706;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;" title="Em progresso">'+r.emProgresso+' em andamento</span>':''}
+            ${r.finalizada?'<span style="background:#dcfce7;color:#16a34a;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;" title="Finalizada">'+r.finalizada+' finalizada'+(r.finalizada>1?'s':'')+'</span>':''}
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="pdiDelBtn" data-pdi-id="${r.id}" style="background:none;border:none;cursor:pointer;color:#ff4343;font-size:14px;padding:4px 6px;" title="Excluir">&#128465;</button>
+          </div>
+        </div>
+      </div>
+      ${acoesHtml}
+    </div>`;
+  }).join('');
+
+  return `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h2 style="margin:0;font-size:22px;display:flex;align-items:center;gap:10px;">${ICONS.pdi||''} PDIs — Planos de Desenvolvimento Individual</h2>
+        <p style="margin:4px 0 0;font-size:13px;color:#888;">${totalPessoas} colaboradores · ${totalAcoes} ações de desenvolvimento</p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="pdiSearchInput" placeholder="Buscar colaborador, líder ou ação..." value="${esc(UI.pdiSearch||'')}" style="padding:8px 14px;border:1px solid #ddd;border-radius:8px;font-size:13px;min-width:260px;">
+        <button class="btn btn-outline" id="pdiDeleteAll" style="width:auto;background:#fdecec;color:#ff4343;border-color:#fcc;font-size:12px;">&#128465; Apagar tudo</button>
+        <label class="btn btn-outline" style="width:auto;display:flex;align-items:center;gap:6px;cursor:pointer;">${ICONS.import} Importar<input type="file" id="pdiImportFile" accept=".xlsx,.xls,.csv,.pdf" style="display:none;"></label>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;">
+      <div class="card" style="text-align:center;padding:14px 10px;"><span style="font-size:24px;font-weight:800;color:#962DFF;">${totalPessoas}</span><div style="font-size:11px;color:#888;margin-top:2px;">Colaboradores</div></div>
+      <div class="card" style="text-align:center;padding:14px 10px;"><span style="font-size:24px;font-weight:800;color:#1B1B2F;">${totalAcoes}</span><div style="font-size:11px;color:#888;margin-top:2px;">Total de Ações</div></div>
+      <div class="card" style="text-align:center;padding:14px 10px;"><span style="font-size:24px;font-weight:800;color:#94a3b8;">${totalNaoIni}</span><div style="font-size:11px;color:#888;margin-top:2px;">Não Iniciadas</div></div>
+      <div class="card" style="text-align:center;padding:14px 10px;"><span style="font-size:24px;font-weight:800;color:#f59e0b;">${totalProg}</span><div style="font-size:11px;color:#888;margin-top:2px;">Em Progresso</div></div>
+      <div class="card" style="text-align:center;padding:14px 10px;"><span style="font-size:24px;font-weight:800;color:#22c55e;">${totalFin}</span><div style="font-size:11px;color:#888;margin-top:2px;">Finalizadas (${pctFin}%)</div></div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <select id="pdiFilterLider" class="select" style="min-width:180px;font-size:12px;padding:6px 10px;">
+        <option value="">Líder: Todos</option>
+        ${liders.map(l=>'<option value="'+esc(l)+'" '+(UI.pdiFilterLider===l?'selected':'')+'>'+esc(l)+'</option>').join('')}
+      </select>
+      <select id="pdiFilterProgresso" class="select" style="min-width:180px;font-size:12px;padding:6px 10px;">
+        <option value="">Progresso: Todos</option>
+        ${progressoOpts.map(o=>'<option value="'+esc(o)+'" '+(UI.pdiFilterProgresso===o?'selected':'')+'>'+esc(o)+'</option>').join('')}
+      </select>
+      <button class="btn btn-outline" id="pdiExpandAll" style="width:auto;font-size:12px;">Expandir todos</button>
+      <button class="btn btn-outline" id="pdiCollapseAll" style="width:auto;font-size:12px;">Recolher todos</button>
+    </div>
+
+    <div id="pdiCardsList">
+      ${data.length===0?'<div class="card" style="padding:40px;text-align:center;color:#aaa;">Nenhum PDI encontrado.</div>':cardsHtml}
+    </div>
+  `;
+}
+
+function bindPDIsPage(){
+  const rerender = ()=>{ const c=document.getElementById('content'); c.innerHTML=renderPDIsPage(); bindPDIsPage(); };
+
+  // Search
+  const searchInp = document.getElementById('pdiSearchInput');
+  if(searchInp){ let t; searchInp.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(()=>{ UI.pdiSearch=searchInp.value; rerender(); },300); }); searchInp.focus(); searchInp.setSelectionRange(searchInp.value.length,searchInp.value.length); }
+
+  // Filters
+  const fLider = document.getElementById('pdiFilterLider');
+  if(fLider) fLider.addEventListener('change',()=>{ UI.pdiFilterLider=fLider.value; rerender(); });
+  const fProg = document.getElementById('pdiFilterProgresso');
+  if(fProg) fProg.addEventListener('change',()=>{ UI.pdiFilterProgresso=fProg.value; rerender(); });
+
+  // Expand/Collapse all
+  document.getElementById('pdiExpandAll')?.addEventListener('click',()=>{
+    (DB.pdis||[]).forEach(r=>{ if(r.acoes && r.acoes.length) UI.pdiExpandedIds.add(r.id); });
+    rerender();
+  });
+  document.getElementById('pdiCollapseAll')?.addEventListener('click',()=>{
+    UI.pdiExpandedIds.clear();
+    rerender();
+  });
+
+  // Card expand/collapse
+  document.querySelectorAll('.pdiCardHeader').forEach(hdr=>{
+    hdr.addEventListener('click', (e)=>{
+      if(e.target.closest('.pdiDelBtn')) return;
+      const id = hdr.getAttribute('data-pdi-id');
+      if(UI.pdiExpandedIds.has(id)) UI.pdiExpandedIds.delete(id);
+      else UI.pdiExpandedIds.add(id);
+      rerender();
+    });
+  });
+
+  // Delete single
+  document.querySelectorAll('.pdiDelBtn').forEach(btn=>{
+    btn.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-pdi-id');
+      if(confirm('Excluir este PDI?')){
+        DB.pdis = DB.pdis.filter(r=>r.id!==id);
+        persist('pdis');
+        rerender();
+      }
+    });
+  });
+
+  // Delete all
+  document.getElementById('pdiDeleteAll')?.addEventListener('click',()=>{
+    const bp = currentBP();
+    const _bpId = bp?Number(bp.id):null;
+    const myRecs = DB.pdis.filter(r=> !r.bpId || Number(r.bpId)===_bpId);
+    if(!myRecs.length){ alert('Nenhum registro para excluir.'); return; }
+    if(confirm('Excluir TODOS os seus '+myRecs.length+' PDIs? Esta ação não pode ser desfeita.')){
+      DB.pdis = DB.pdis.filter(r=> r.bpId && Number(r.bpId)!==_bpId);
+      persist('pdis');
+      rerender();
+    }
+  });
+
+  // Import
+  const impInp = document.getElementById('pdiImportFile');
+  if(impInp) impInp.addEventListener('change', e=>{
+    const file = e.target.files[0]; if(!file) return;
+    readWorkbookFile(file, function(err, rows){
+      if(err){ alert('Erro ao ler arquivo.'); return; }
+      let parsed = parsePDIs(rows);
+      // Assign bpId via líder hierarchy
+      const bpMap = _buildAllBpNamesMap();
+      parsed.forEach(p=>{
+        const liderN = normalizeStr(p.lider||'');
+        const nomeN = normalizeStr(p.nome||'');
+        if(liderN && bpMap.has(liderN)) p.bpId = bpMap.get(liderN);
+        else if(nomeN && bpMap.has(nomeN)) p.bpId = bpMap.get(nomeN);
+        else { const bp = currentBP(); if(bp) p.bpId = bp.id; }
+      });
+      // Merge
+      const existing = DB.pdis||[];
+      const keyFn = r=>normalizeStr(r.nome||'');
+      let added=0, updated=0;
+      parsed.forEach(p=>{
+        const k=keyFn(p);
+        const idx=existing.findIndex(e=>keyFn(e)===k);
+        if(idx>=0){ const id=existing[idx].id; existing[idx]={...p,id}; updated++; }
+        else { existing.push(p); added++; }
+      });
+      DB.pdis = existing;
+      persist('pdis');
+      alert('Importação: '+added+' novos, '+updated+' atualizados — total: '+existing.length);
+      rerender();
+    });
+  });
 }
 
 /* =========================================================
