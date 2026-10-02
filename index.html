@@ -1342,12 +1342,72 @@ function parsePDIs(rows){
   const iNome = colIdx(['nome','colaborador']);
   const iStatus = colIdx(['status']);
   const iLider = colIdx(['lider','líder']);
-  const iAprovado = colIdx(['aprovado']);
-  const iTotal = colIdx(['total','areas de desenvolvimento','áreas de desenvolvimento']);
+  const iAreaDev = colIdx(['area de desenvolvimento','área de desenvolvimento']);
+  const iDescricao = colIdx(['descricao','descrição']);
+  const iCategoria = colIdx(['categoria']);
+  const iCriado = colIdx(['criado']);
   const iAtualizado = colIdx(['atualizado']);
+  const iProgresso = colIdx(['progresso']);
+  const iTotalAcoes = colIdx(['total de acoes','total de ações','total']);
+  const iFinalizada = colIdx(['finalizada','concluida','concluída']);
+  // Legacy columns (old summary format)
+  const iAprovado = colIdx(['aprovado']);
   const iNaoIniciada = colIdx(['nao iniciada','não iniciada']);
   const iEmProgresso = colIdx(['em progresso','andamento']);
-  const iFinalizada = colIdx(['finalizada','concluida','concluída']);
+
+  // Detect format: detailed (has "área de desenvolvimento" or "descrição") vs summary
+  const isDetailed = iAreaDev >= 0 || iDescricao >= 0;
+
+  if(isDetailed){
+    // DETAILED FORMAT: multiple rows per person, each row = one action
+    const acoesByPerson = {};
+    for(let i=1;i<rows.length;i++){
+      const r = rows[i]; if(!r) continue;
+      const nome = (r[iNome>=0?iNome:0]||'').toString().trim();
+      if(!nome) continue;
+      const acao = {
+        areaDesenvolvimento: iAreaDev>=0 ? (r[iAreaDev]||'').toString().trim() : '',
+        descricao: iDescricao>=0 ? (r[iDescricao]||'').toString().trim() : '',
+        categoria: iCategoria>=0 ? (r[iCategoria]||'').toString().trim() : '',
+        criadoEm: iCriado>=0 ? (r[iCriado]||'').toString().trim() : '',
+        atualizadoEm: iAtualizado>=0 ? (r[iAtualizado]||'').toString().trim() : '',
+        progresso: iProgresso>=0 ? (r[iProgresso]||'').toString().trim() : '',
+        totalAcoes: iTotalAcoes>=0 ? Number(r[iTotalAcoes])||0 : 0,
+        finalizada: iFinalizada>=0 ? Number(r[iFinalizada])||0 : 0
+      };
+      const key = normalizeStr(nome);
+      if(!acoesByPerson[key]){
+        acoesByPerson[key] = {
+          nome, key,
+          status: iStatus>=0 ? (r[iStatus]||'').toString().trim() : '',
+          lider: iLider>=0 ? (r[iLider]||'').toString().trim() : '',
+          acoes: []
+        };
+      }
+      acoesByPerson[key].acoes.push(acao);
+    }
+    const out = [];
+    Object.values(acoesByPerson).forEach(p=>{
+      const colabMatch = DB.colaboradores.find(c=> normalizeStr(c.nome)===p.key);
+      const totalAcoes = p.acoes.length;
+      const fin = p.acoes.filter(a=>normalizeStr(a.progresso).includes('finalizada')).length;
+      const prog = p.acoes.filter(a=>normalizeStr(a.progresso).includes('progresso') || normalizeStr(a.progresso).includes('andamento')).length;
+      const naoIni = p.acoes.filter(a=>normalizeStr(a.progresso).includes('nao iniciada') || normalizeStr(a.progresso).includes('não iniciada')).length;
+      out.push({
+        id: uid(), nome: p.nome,
+        status: p.status,
+        lider: p.lider || (colabMatch ? (colabMatch.lider||colabMatch['Líder']||colabMatch.Lider||'') : ''),
+        totalAreas: totalAcoes,
+        atualizadoEm: p.acoes.map(a=>a.atualizadoEm).filter(Boolean).sort().pop()||'',
+        naoIniciada: naoIni, emProgresso: prog, finalizada: fin,
+        area: colabMatch ? (colabMatch.area||colabMatch.departamentoRaw||'') : '',
+        acoes: p.acoes // detailed actions array
+      });
+    });
+    return out;
+  }
+
+  // LEGACY SUMMARY FORMAT: one row per person with counts
   const out=[];
   for(let i=1;i<rows.length;i++){
     const r = rows[i]; if(!r) continue;
@@ -1359,7 +1419,7 @@ function parsePDIs(rows){
       status: iStatus>=0 ? (r[iStatus]||'').toString().trim() : '',
       lider: iLider>=0 ? (r[iLider]||'').toString().trim() : (colabMatch ? (colabMatch.lider||colabMatch['Líder']||colabMatch.Lider||'') : ''),
       aprovado: iAprovado>=0 ? (r[iAprovado]||'').toString().trim() : '',
-      totalAreas: Number(r[iTotal>=0?iTotal:1])||0,
+      totalAreas: Number(r[iTotalAcoes>=0?iTotalAcoes:1])||0,
       atualizadoEm: iAtualizado>=0 ? (r[iAtualizado]||'').toString().trim() : '',
       naoIniciada: Number(r[iNaoIniciada>=0?iNaoIniciada:2])||0,
       emProgresso: Number(r[iEmProgresso>=0?iEmProgresso:3])||0,
@@ -1490,9 +1550,9 @@ const CRUD_PAGES = {
     parser:'parsePDIs', pageTitle:['PDIs','Planos de Desenvolvimento Individual — importar, adicionar, editar e remover'],
     cols:[
       {key:'nome',label:'Nome',type:'text'},{key:'status',label:'Status',type:'text'},{key:'lider',label:'Líder',type:'text'},
-      {key:'aprovado',label:'Aprovado',type:'select',options:['Sim','Não']},{key:'totalAreas',label:'Total áreas',type:'number'},
-      {key:'atualizadoEm',label:'Atualizado em',type:'text'},
+      {key:'totalAreas',label:'Ações',type:'number'},
       {key:'naoIniciada',label:'Não iniciada',type:'number'},{key:'emProgresso',label:'Em progresso',type:'number'},{key:'finalizada',label:'Finalizada',type:'number'},
+      {key:'atualizadoEm',label:'Atualizado em',type:'text'},
       {key:'area',label:'Área',type:'text'}
     ]
   },
@@ -1700,16 +1760,41 @@ function renderCrudPage(pageKey){
           ${filtered.length===0 ? '<tr><td colspan="'+(visibleCols.length+1)+'" style="padding:40px;text-align:center;color:#aaa;">Nenhum registro encontrado.</td></tr>' :
           filtered.map((r,i)=>{
             const rid = r.id||i;
-            return '<tr data-crud-id="'+rid+'" style="border-bottom:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'">'
+            const hasAcoes = pageKey==='pdis' && r.acoes && r.acoes.length;
+            let rowHtml = '<tr data-crud-id="'+rid+'" style="border-bottom:1px solid #f0f0f0;'+(i%2?'background:#fafbfc;':'')+'">'
               + visibleCols.map(c=>{
                 let val = r[c.key]||'';
                 if(val instanceof Date && !isNaN(val)) val = val.toLocaleDateString('pt-BR');
+                // For PDI nome column, add expand toggle
+                if(c.key==='nome' && hasAcoes){
+                  return '<td style="padding:10px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" title="Clique para ver ações" class="pdiExpandToggle" data-pdi-idx="'+i+'"><span style="font-size:10px;margin-right:6px;" class="pdiArrow">&#9654;</span><strong>'+esc(String(val))+'</strong></td>';
+                }
                 return '<td style="padding:10px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(String(val))+'">'+esc(String(val))+'</td>';
               }).join('')
               + '<td style="padding:10px 12px;text-align:center;white-space:nowrap;">'
               + '<button class="crudEditBtn" data-crud-page="'+pageKey+'" data-crud-idx="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:13px;padding:4px 8px;" title="Editar">&#9998;</button>'
               + '<button class="crudDelBtn" data-crud-page="'+pageKey+'" data-crud-idx="'+i+'" style="background:none;border:none;cursor:pointer;color:#ff4343;font-size:13px;padding:4px 8px;" title="Excluir">&#128465;</button>'
               + '</td></tr>';
+            // Add expandable detail row for PDI actions
+            if(hasAcoes){
+              const progressColor = (p)=>{ const pn=normalizeStr(p); return pn.includes('finalizada')?'#22c55e':pn.includes('progresso')||pn.includes('andamento')?'#f59e0b':'#94a3b8'; };
+              rowHtml += '<tr class="pdiDetailRow" data-pdi-detail="'+i+'" style="display:none;"><td colspan="'+(visibleCols.length+1)+'" style="padding:0 12px 16px 32px;background:#f8faf9;">'
+                + '<div style="margin-top:8px;border-left:3px solid var(--primary);padding-left:16px;">'
+                + r.acoes.map((a,ai)=>{
+                  const catBadge = a.categoria ? '<span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">'+esc(a.categoria)+'</span>' : '';
+                  const progBadge = '<span style="background:'+progressColor(a.progresso)+'22;color:'+progressColor(a.progresso)+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">'+esc(a.progresso||'Sem status')+'</span>';
+                  return '<div style="margin-bottom:12px;padding:10px 14px;background:#fff;border-radius:8px;border:1px solid #e5e7eb;">'
+                    + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px;">'
+                    + '<strong style="font-size:13px;">'+esc(a.areaDesenvolvimento||'Ação '+(ai+1))+'</strong>'
+                    + '<div style="display:flex;gap:6px;">'+catBadge+progBadge+'</div>'
+                    + '</div>'
+                    + (a.descricao ? '<div style="font-size:12px;color:#555;margin-top:6px;white-space:pre-wrap;line-height:1.5;">'+esc(a.descricao)+'</div>' : '')
+                    + '<div style="font-size:11px;color:#aaa;margin-top:6px;">Criado: '+esc(a.criadoEm||'—')+' · Atualizado: '+esc(a.atualizadoEm||'—')+'</div>'
+                    + '</div>';
+                }).join('')
+                + '</div></td></tr>';
+            }
+            return rowHtml;
           }).join('')}
         </tbody>
       </table>
@@ -1881,6 +1966,20 @@ function bindCrudPage(pageKey){
       };
       reader.readAsArrayBuffer(file);
     }
+  });
+
+  // PDI expand/collapse
+  document.querySelectorAll('.pdiExpandToggle').forEach(td=>{
+    td.addEventListener('click', ()=>{
+      const idx = td.getAttribute('data-pdi-idx');
+      const detailRow = document.querySelector('.pdiDetailRow[data-pdi-detail="'+idx+'"]');
+      const arrow = td.querySelector('.pdiArrow');
+      if(detailRow){
+        const isOpen = detailRow.style.display !== 'none';
+        detailRow.style.display = isOpen ? 'none' : 'table-row';
+        if(arrow) arrow.innerHTML = isOpen ? '&#9654;' : '&#9660;';
+      }
+    });
   });
 
   // Delete
@@ -5415,7 +5514,7 @@ function renderMeetingForm(){
               const team = byLider[lider];
               return '<div style="margin-top:14px;"><div style="font-size:13px;font-weight:700;color:#1B1B2F;margin-bottom:6px;padding:6px 10px;background:#f1f5f9;border-radius:6px;">Equipe '+esc(lider)+' <span style="font-size:11px;color:#888;font-weight:400;">('+team.length+' pessoas)</span></div>'+
                 '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'+
-                '<thead><tr style="border-bottom:1px solid #e5e7eb;"><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Aprovado?</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Áreas</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Não iniciada</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Em progresso</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Finalizada</th></tr></thead>'+
+                '<thead><tr style="border-bottom:1px solid #e5e7eb;"><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Ações</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Não iniciada</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Em progresso</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Finalizada</th></tr></thead>'+
                 '<tbody>'+team.map((p,i)=>{
                   const apColor = p.aprovado==='Sim'?'#14C8FA':'#FA6914';
                   return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'"><td style="padding:6px 10px;">'+esc(p.nome)+'</td><td style="padding:6px 10px;text-align:center;"><span style="color:'+apColor+';font-weight:700;">'+esc(p.aprovado)+'</span></td><td style="padding:6px 10px;text-align:center;font-weight:700;">'+p.totalAreas+'</td><td style="padding:6px 10px;text-align:center;color:#ff4343;font-weight:600;">'+(p.naoIniciada||0)+'</td><td style="padding:6px 10px;text-align:center;color:#FA6914;font-weight:600;">'+(p.emProgresso||0)+'</td><td style="padding:6px 10px;text-align:center;color:#14C8FA;font-weight:600;">'+(p.finalizada||0)+'</td></tr>';
@@ -6056,16 +6155,27 @@ function renderMeetingDetail(){
         const team = byLider[lider];
         return '<div style="margin-bottom:14px;"><div style="font-size:13px;font-weight:700;color:#1B1B2F;margin-bottom:6px;padding:6px 10px;background:#f1f5f9;border-radius:6px;">Equipe '+esc(lider)+' <span style="font-size:11px;color:#888;font-weight:400;">('+team.length+' pessoas)</span></div>'+
           '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'+
-          '<thead><tr style="border-bottom:1px solid #e5e7eb;"><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Aprovado?</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Áreas</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Não iniciada</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Em progresso</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Finalizada</th></tr></thead>'+
+          '<thead><tr style="border-bottom:1px solid #e5e7eb;"><th style="padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Nome</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Ações</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Não iniciada</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Em progresso</th><th style="padding:6px 10px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Finalizada</th></tr></thead>'+
           '<tbody>'+team.map((p,i)=>{
-            const apColor = p.aprovado==='Sim'?'#14C8FA':'#FA6914';
-            return '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
-              '<td style="padding:6px 10px;">'+esc(p.nome)+'</td>'+
-              '<td style="padding:6px 10px;text-align:center;"><span style="color:'+apColor+';font-weight:700;">'+esc(p.aprovado)+'</span></td>'+
+            const hasAcoes = p.acoes && p.acoes.length;
+            const progColor = (pg)=>{ const n=normalizeStr(pg); return n.includes('finalizada')?'#22c55e':n.includes('progresso')||n.includes('andamento')?'#f59e0b':'#94a3b8'; };
+            let rows = '<tr style="border-bottom:1px solid #f0f0f0;'+(i%2===1?'background:#fafbfc;':'')+'">'+
+              '<td style="padding:6px 10px;font-weight:600;">'+esc(p.nome)+'</td>'+
               '<td style="padding:6px 10px;text-align:center;font-weight:700;">'+p.totalAreas+'</td>'+
               '<td style="padding:6px 10px;text-align:center;color:#ff4343;font-weight:600;">'+(p.naoIniciada||0)+'</td>'+
               '<td style="padding:6px 10px;text-align:center;color:#FA6914;font-weight:600;">'+(p.emProgresso||0)+'</td>'+
               '<td style="padding:6px 10px;text-align:center;color:#14C8FA;font-weight:600;">'+(p.finalizada||0)+'</td></tr>';
+            if(hasAcoes){
+              rows += p.acoes.map(a=>{
+                const catBadge = a.categoria ? '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:8px;font-size:10px;">'+esc(a.categoria)+'</span> ' : '';
+                const progBadge = '<span style="color:'+progColor(a.progresso)+';font-weight:600;font-size:11px;">'+esc(a.progresso||'—')+'</span>';
+                return '<tr style="background:#f8faf9;border-bottom:1px solid #f0f0f0;">'+
+                  '<td colspan="3" style="padding:4px 10px 4px 28px;font-size:11px;">'+catBadge+'<span style="color:#555;">'+esc(a.areaDesenvolvimento||'')+'</span>'+(a.descricao?'<div style="font-size:10.5px;color:#888;margin-top:2px;white-space:pre-wrap;max-height:60px;overflow:hidden;">'+esc(a.descricao)+'</div>':'')+'</td>'+
+                  '<td style="padding:4px 10px;text-align:center;font-size:11px;">'+esc(a.atualizadoEm||'—')+'</td>'+
+                  '<td style="padding:4px 10px;text-align:center;">'+progBadge+'</td></tr>';
+              }).join('');
+            }
+            return rows;
           }).join('')+'</tbody></table></div></div>';
       }).join('')}
     </div>`;
