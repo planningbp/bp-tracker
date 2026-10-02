@@ -6829,6 +6829,16 @@ function renderAcompanhamentos(){
                 <div style="margin-top:8px;">
                   <input type="text" class="acomp-obs" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" value="${esc(r.observacao)}" placeholder="Observação..." style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#f9fafb;">
                 </div>
+                ${(r.milestone===45||r.milestone===90) ? `<div style="margin-top:8px;">
+                  ${r.anexo ? `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#EAF3EE;border:1px solid #bbf7d0;border-radius:8px;font-size:11px;">
+                    <span style="color:#14C8FA;">&#128206;</span>
+                    <a href="${r.anexo}" download="${esc(r.anexoNome||'avaliacao')}" style="color:#0f766e;font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.anexoNome||'Avaliação anexada')}</a>
+                    <button class="acomp-remove-anexo" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" style="background:none;border:none;cursor:pointer;color:#ff4343;font-size:12px;padding:2px;" title="Remover anexo">✕</button>
+                  </div>` : `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f9fafb;border:1px dashed #cbd5e1;border-radius:8px;font-size:11px;cursor:pointer;color:#888;transition:background .2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f9fafb'">
+                    <span>&#128206;</span> Anexar avaliação
+                    <input type="file" class="acomp-anexo" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx" style="display:none;">
+                  </label>`}
+                </div>` : ''}
               </div>`;
             }).join('')}
           </div>
@@ -6949,6 +6959,43 @@ function bindAcompanhamentos(){
       if(idx>=0){ DB.acompanhamentos[idx].observacao = inp.value; }
       else { DB.acompanhamentos.push({ nome, milestone, status:'Pendente', realizado:'', observacao:inp.value }); }
       persist('acompanhamentos');
+    });
+  });
+
+  // Anexo file upload (45/90 dias)
+  document.querySelectorAll('.acomp-anexo').forEach(inp=>{
+    inp.addEventListener('change', function(){
+      const file = this.files[0];
+      if(!file) return;
+      if(file.size > 5*1024*1024){ alert('Arquivo muito grande (máx 5MB).'); this.value=''; return; }
+      const nome = this.getAttribute('data-nome');
+      const milestone = parseInt(this.getAttribute('data-milestone'));
+      const reader = new FileReader();
+      reader.onload = function(e){
+        const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
+        const rec = idx>=0 ? DB.acompanhamentos[idx] : { nome, milestone, status:'Pendente', realizado:'', observacao:'' };
+        rec.anexo = e.target.result;
+        rec.anexoNome = file.name;
+        if(idx>=0) DB.acompanhamentos[idx] = rec;
+        else DB.acompanhamentos.push(rec);
+        persist('acompanhamentos');
+        rerender();
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+
+  document.querySelectorAll('.acomp-remove-anexo').forEach(btn=>{
+    btn.addEventListener('click', function(){
+      const nome = this.getAttribute('data-nome');
+      const milestone = parseInt(this.getAttribute('data-milestone'));
+      const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
+      if(idx>=0){
+        delete DB.acompanhamentos[idx].anexo;
+        delete DB.acompanhamentos[idx].anexoNome;
+        persist('acompanhamentos');
+        rerender();
+      }
     });
   });
 
