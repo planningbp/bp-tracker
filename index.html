@@ -458,7 +458,7 @@ tr:last-child td{border-bottom:none;}
 const CONFIG = {
   bps: [
     { id:1, name:"Gabriella Azevedo", email:"gabriella.azevedo@planning.com.br", avatar:"GA",
-      heads:["Raianny Pereira da Silva","Fernanda Soares"], areas:[] },
+      heads:["Raianny Pereira da Silva","Fernanda Soares dos Anjos"], areas:[] },
     { id:2, name:"Julia Soares", email:"julia.soares@planning.com.br", avatar:"JS",
       heads:["Diogo Teles","Nairim Dantas","Giovanna Verzeloni","João Nonato","Raul Dantas","Talita Araujo"], areas:[] },
     { id:3, name:"Maryanna Moura", email:"maryanna.moura@planning.com.br", avatar:"MM",
@@ -577,31 +577,62 @@ function _resolveHeadName(shortName){
   return results.size ? [...results] : [shortName]; // fallback to original
 }
 
-/* getBPAreas: resolve areas for a BP — static list OR computed from heads' team trees */
+/* _matchBPResponsavel: fuzzy match between bpResponsavel field and BP config name */
+function _matchBPResponsavel(bpRespValue, bp){
+  if(!bpRespValue || !bp || !bp.name) return false;
+  const val = normalizeStr(bpRespValue);
+  const bpName = normalizeStr(bp.name);
+  if(val === bpName) return true;
+  // Check if all parts of BP config name exist in the field value
+  // e.g. "Julia Soares" matches "Julia Soares Rodrigues"
+  const bpParts = bpName.split(/\s+/).filter(p=>p.length>2);
+  if(bpParts.length>=2 && bpParts.every(part => val.includes(part))) return true;
+  // Check reverse: all parts of field value in BP name
+  const valParts = val.split(/\s+/).filter(p=>p.length>2);
+  if(valParts.length>=2 && valParts.every(part => bpName.includes(part))) return true;
+  return false;
+}
+/* _getBPColabsByField: get collaborators that have bpResponsavel matching this BP */
+function _getBPColabsByField(bp){
+  if(!bp) return [];
+  return DB.colaboradores.filter(c=> c.bpResponsavel && _matchBPResponsavel(c.bpResponsavel, bp));
+}
+
+/* getBPAreas: resolve areas for a BP — from bpResponsavel field, static list, or heads' team trees */
 let _bpAreasCache = {};
 function _invalidateBPAreasCache(){ _bpAreasCache = {}; }
 function getBPAreas(bp){
   if(!bp) return [];
   if(bp.areas && bp.areas.length) return bp.areas;
-  if(!bp.heads || !bp.heads.length) return [];
   const ck = 'bp_'+bp.id;
-  if(_bpAreasCache[ck]) return _bpAreasCache[ck];
+  if(_bpAreasCache[ck] && _bpAreasCache[ck].length) return _bpAreasCache[ck];
+  // Try bpResponsavel field first
+  const byField = _getBPColabsByField(bp);
+  if(byField.length > 0){
+    const areaSet = new Set();
+    byField.forEach(c=>{
+      const a = c.area||c.departamento||'';
+      if(a) areaSet.add(a);
+    });
+    const result = [...areaSet].sort();
+    _bpAreasCache[ck] = result;
+    return result;
+  }
+  // Fallback: heads-based
+  if(!bp.heads || !bp.heads.length) return [];
   const areaSet = new Set();
   bp.heads.forEach(h=>{
     const resolvedNames = _resolveHeadName(h);
     resolvedNames.forEach(fullName=>{
-      // Include the head's own area
       const headColab = DB.colaboradores.find(c=>normalizeStr(c.nome||c.Nome||'')===normalizeStr(fullName));
       if(headColab){
         const a = headColab.area||headColab.departamento||'';
         if(a) areaSet.add(a);
       }
-      // Include areas of all people under the head
       getTeamTree(fullName).forEach(c=>{
         const a = c.area||c.departamento||'';
         if(a) areaSet.add(a);
       });
-      // Also try aliases for lider field matching
       const aliases = _resolveLiderAliases(fullName);
       aliases.forEach(alias=>{
         getTeamTree(alias).forEach(c=>{
@@ -615,9 +646,13 @@ function getBPAreas(bp){
   _bpAreasCache[ck] = result;
   return result;
 }
-/* getBPColabs: get all collaborators for a BP (heads-based or area-based) */
+/* getBPColabs: get all collaborators for a BP — bpResponsavel field first, then heads/area fallback */
 function getBPColabs(bp){
   if(!bp) return [];
+  // Try bpResponsavel field first
+  const byField = _getBPColabsByField(bp);
+  if(byField.length > 0) return byField;
+  // Fallback: heads-based
   if(bp.heads && bp.heads.length){
     const nameSet = new Set();
     bp.heads.forEach(h=>{
@@ -625,7 +660,6 @@ function getBPColabs(bp){
       resolvedNames.forEach(fullName=>{
         nameSet.add(normalizeStr(fullName));
         getTeamTree(fullName).forEach(c=> nameSet.add(normalizeStr(c.nome||c.Nome||'')));
-        // Also try aliases
         const aliases = _resolveLiderAliases(fullName);
         aliases.forEach(alias=>{
           nameSet.add(alias);
@@ -762,7 +796,9 @@ const LS = {
   enps:'planning_enps',
   formConfigs:'planning_form_configs',
   notificacoes:'planning_notificacoes',
-  emailjsConfig:'planning_emailjs_config'
+  emailjsConfig:'planning_emailjs_config',
+  processosBP:'planning_processos_bp',
+  processosInstancias:'planning_processos_instancias'
 };
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v?JSON.parse(v):fallback; }catch(e){ return fallback; }
@@ -862,6 +898,8 @@ let DB = {
   enps: loadJSON(LS.enps, []),
   formConfigs: loadJSON(LS.formConfigs, null) || getDefaultFormConfigs(),
   notificacoes: loadJSON(LS.notificacoes, []),
+  processosBP: loadJSON(LS.processosBP, []),
+  processosInstancias: loadJSON(LS.processosInstancias, []),
   emailjsConfig: (function(){
     var saved = loadJSON(LS.emailjsConfig, null);
     // Migrate old single-config to per-BP format
@@ -873,7 +911,7 @@ let DB = {
     return saved || {_perBp:true, templateId:'', publicKey:''};
   })()
 };
-const FB_SYNC_KEYS = ['solicitacoes','colaboradores','promocoes','desligamentos','pdis','oneOnOnes','bancoHorasImport','acompanhamentos','scores','enps'];
+const FB_SYNC_KEYS = ['solicitacoes','colaboradores','promocoes','desligamentos','pdis','oneOnOnes','bancoHorasImport','acompanhamentos','scores','enps','processosBP','processosInstancias'];
 var _fbReceiving = false;
 function persist(part){
   saveJSON(LS[part], DB[part]);
@@ -928,13 +966,18 @@ try {
         if(FB_DATE_FIELDS[key]) revive(DB[key], FB_DATE_FIELDS[key]);
         saveJSON(LS[key], DB[key]);
         _fbReceiving = false;
-        // Re-render current page if relevant
+        // Invalidate all BP/colab caches when colaboradores change (critical for first load from Firebase)
+        if(key==='colaboradores'){
+          if(typeof _invalidateBPAreasCache==='function') _invalidateBPAreasCache();
+          if(typeof clearMyColabsCache==='function') clearMyColabsCache();
+        }
+        // Re-render current page if relevant — for BP sessions, always re-render on colaboradores update
         if(isLiderSession()){
           // Líder portal: re-render on any data change so heads see updates in real-time
           fbDebouncedRender();
-        } else if(UI.page===key || UI.page==='dashboard' || UI.page==='lideres'){
+        } else if(key==='colaboradores' || UI.page===key || UI.page==='dashboard' || UI.page==='lideres'){
           var c = document.getElementById('content');
-          if(c && typeof render === 'function') render();
+          if(c && typeof render === 'function') fbDebouncedRender();
         }
         if(key==='solicitacoes'){
           if(UI.page==='solicitacoes'){
@@ -1072,10 +1115,13 @@ const ICONS = {
   kanban:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>',
   cake:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-8a2 2 0 00-2-2H6a2 2 0 00-2 2v8"/><path d="M4 16h16"/><path d="M2 21h20"/><path d="M7 8v3M12 8v3M17 8v3"/><path d="M7 4.5a1.5 1.5 0 110 3M12 4.5a1.5 1.5 0 110 3M17 4.5a1.5 1.5 0 110 3"/></svg>',
   org:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="4" rx="1"/><rect x="2" y="14" width="6" height="4" rx="1"/><rect x="9" y="14" width="6" height="4" rx="1"/><rect x="16" y="14" width="6" height="4" rx="1"/><path d="M12 6v4M5 14v-2a2 2 0 012-2h10a2 2 0 012 2v2M12 10v4"/></svg>',
+  edit:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
   salary:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>',
   calendar:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>',
   forms:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h6"/></svg>',
-  enps:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="11" r="2"/></svg>'
+  enps:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="11" r="2"/></svg>',
+  cronograma:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M7 14l2 2 4-4"/><path d="M7 18h4"/></svg>',
+  link:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>'
 };
 
 /* =========================================================
@@ -1551,6 +1597,27 @@ function renderCrudPage(pageKey){
   const colFilters = UI.crudFilters[pageKey];
 
   let filtered = data;
+  // Filter by current BP — each BP only sees their own data
+  const _crudBp = currentBP();
+  if(SESSION && SESSION.bpId && _crudBp){
+    const _bpIdNum = Number(_crudBp.id);
+    // For non-colaboradores CRUD pages: filter by bpId (each BP only sees what they entered)
+    // Records without bpId (legacy) fall back to líder/name matching
+    filtered = filtered.filter(r=>{
+      // If record has bpId, match it (Number conversion for safety)
+      if(r.bpId != null) return Number(r.bpId) === _bpIdNum;
+      // Legacy records without bpId: match by líder → BP team
+      if(r.bpResponsavel && _matchBPResponsavel(r.bpResponsavel, _bp)) return true;
+      const _crudColabNames = getMyColabNames();
+      if(_crudColabNames){
+        const rLider = normalizeStr(r.lider||r.gestor||r.coordenacao||'');
+        const rNome = normalizeStr(r.nome||r.Nome||'');
+        if(rLider && _crudColabNames.has(rLider)) return true;
+        if(rNome && _crudColabNames.has(rNome)) return true;
+      }
+      return false; // no match, hide
+    });
+  }
   // Promoções: only show records with actual salary increase
   if(pageKey==='promocoes') filtered = filtered.filter(r=> isPromoSalarial(r));
   if(fSearch) filtered = filtered.filter(r=> cfg.cols.some(c=> ((r[c.key]||'').toString().toLowerCase()).includes(fSearch)));
@@ -1664,10 +1731,13 @@ function bindCrudPage(pageKey){
   // Delete all
   const btnDeleteAll = document.getElementById('crudDeleteAll_'+pageKey);
   if(btnDeleteAll) btnDeleteAll.addEventListener('click', ()=>{
-    const count = DB[cfg.dbKey].length;
+    const _bp = currentBP();
+    const _bpDelId = _bp?Number(_bp.id):null;
+    const myRecs = DB[cfg.dbKey].filter(r=> !r.bpId || Number(r.bpId)===_bpDelId);
+    const count = myRecs.length;
     if(!count){ alert('Nenhum registro para excluir.'); return; }
-    if(confirm('Excluir TODOS os '+count+' registros de '+cfg.title+'? Esta acao nao pode ser desfeita.')){
-      DB[cfg.dbKey] = [];
+    if(confirm('Excluir TODOS os seus '+count+' registros de '+cfg.title+'? Esta ação não pode ser desfeita.')){
+      DB[cfg.dbKey] = DB[cfg.dbKey].filter(r=> r.bpId && Number(r.bpId)!==_bpDelId);
       persist(cfg.dbKey);
       rerender();
     }
@@ -1693,7 +1763,8 @@ function bindCrudPage(pageKey){
   if(btnCancelAdd) btnCancelAdd.addEventListener('click',()=>{ addForm.style.display='none'; });
   const btnSaveAdd = document.getElementById('crudSaveAdd_'+pageKey);
   if(btnSaveAdd) btnSaveAdd.addEventListener('click',()=>{
-    const rec = { id: uid() };
+    const bp = currentBP();
+    const rec = { id: uid(), bpId: bp ? bp.id : null };
     cfg.cols.filter(c=>!c.computed).forEach(c=>{ const el = document.getElementById('crudNew_'+pageKey+'_'+c.key); rec[c.key] = el ? el.value : ''; });
     DB[cfg.dbKey].push(rec);
     persist(cfg.dbKey);
@@ -1709,8 +1780,34 @@ function bindCrudPage(pageKey){
     function mergeAndSave(parsed){
       const existing = DB[cfg.dbKey]||[];
       const keyFn = r => normalizeStr(r.nome||'')+'|'+(r.mesRaw||r.data||'');
-      let added=0, updated=0;
+      // Build lookup: name → bpId (from colaboradores bpResponsavel)
+      // Maps both colaborador names AND their lider names to the BP
+      const _nameBpMap = {};
+      DB.colaboradores.forEach(c=>{
+        if(!c.bpResponsavel) return;
+        const bp = CONFIG.bps.find(b=> _matchBPResponsavel(c.bpResponsavel, b));
+        if(!bp) return;
+        const nome = normalizeStr(c.nome||c.Nome||'');
+        if(nome) _nameBpMap[nome] = bp.id;
+        // Also map the lider field so leaders themselves resolve
+        const lider = normalizeStr(c.lider||c['Líder']||c.Lider||'');
+        if(lider && !_nameBpMap[lider]) _nameBpMap[lider] = bp.id;
+      });
+      let added=0, updated=0, skipped=0;
       parsed.forEach(p=>{
+        // Find bpId from líder field
+        const liderN = normalizeStr(p.lider||p.gestor||p.coordenacao||'');
+        if(liderN && _nameBpMap[liderN]){
+          p.bpId = _nameBpMap[liderN];
+        } else if(liderN){
+          // Líder not found in any BP — skip this record
+          skipped++;
+          return;
+        } else {
+          // No líder field — assign to current BP
+          const _bp = currentBP();
+          if(_bp) p.bpId = _bp.id;
+        }
         const k = keyFn(p);
         const idx = existing.findIndex(e=> keyFn(e)===k);
         if(idx>=0){ Object.assign(existing[idx], p); updated++; }
@@ -1718,7 +1815,9 @@ function bindCrudPage(pageKey){
       });
       DB[cfg.dbKey] = existing;
       persist(cfg.dbKey);
-      alert('Importação concluída: '+added+' novos, '+updated+' atualizados.');
+      let msg = 'Importação concluída: '+added+' novos, '+updated+' atualizados.';
+      if(skipped) msg += '\n'+skipped+' registros ignorados (líder não encontrado em nenhuma BP).';
+      alert(msg);
       rerender();
     }
 
@@ -2023,25 +2122,37 @@ function computeAutoData(area, period, lider, customStart, customEnd){
     start = pb.start; end = pb.end;
   }
   const inRange = (d) => d && d>=start && d<=end;
-  // If leader is Head or no leader selected → full area; otherwise filter by leader's direct reports
+  // If leader is Head or no leader selected → full area; otherwise use full team tree (gerente sees leaders + their subordinates)
   const fullArea = !lider || isHead(lider);
   const areaN = normalizeStr(area);
   const liderN = normalizeStr(lider);
+  // Build the set of names in the gerente's full tree (includes sub-leaders and their teams)
+  let _treeNames = null;
+  if(!fullArea){
+    _treeNames = new Set([liderN]);
+    // Resolve aliases for the gerente name
+    const _aliases = _resolveLiderAliases(lider);
+    _aliases.forEach(alias=>{
+      _treeNames.add(alias);
+      getTeamTree(alias).forEach(c=> _treeNames.add(normalizeStr(c.nome||c.Nome||'')));
+    });
+    getTeamTree(lider).forEach(c=> _treeNames.add(normalizeStr(c.nome||c.Nome||'')));
+  }
   const colabs = DB.colaboradores.filter(c=>{
     if(normalizeStr(c.area||c.departamento||'')!==areaN) return false;
-    if(!fullArea) return normalizeStr(c.lider||c['Líder']||c.Lider||'')===liderN;
+    if(!fullArea) return _treeNames.has(normalizeStr(c.nome||c.Nome||''));
     return true;
   });
   const colabNames = new Set(colabs.map(c=>normalizeStr(c.nome)));
   const desligsAll = DB.desligamentos.filter(d=>{
     if(normalizeStr(d.area||'')!==areaN) return false;
-    if(!fullArea) return colabNames.has(normalizeStr(d.nome)) || normalizeStr(d.lider||'')===liderN;
+    if(!fullArea) return colabNames.has(normalizeStr(d.nome)) || _treeNames.has(normalizeStr(d.nome||''));
     return true;
   });
   const desligsPeriod = desligsAll.filter(d=> d.mesDate && inRange(d.mesDate));
   const promosPeriod = DB.promocoes.filter(p=>{
     if(normalizeStr(p.area||'')!==areaN) return false;
-    if(!fullArea) return colabNames.has(normalizeStr(p.nome));
+    if(!fullArea) return colabNames.has(normalizeStr(p.nome)) || _treeNames.has(normalizeStr(p.nome||''));
     return true;
   }).filter(p=> p.mesDate && inRange(p.mesDate) && isPromoSalarial(p));
 
@@ -3268,20 +3379,23 @@ function renderLiderDashboard(ct){
     return sc.length ? Math.round(sc.reduce((s,r)=>s+(Number(r.lnps)||0),0)/sc.length) : null;
   });
 
+  const _allEnpsLnps = [...periodEnps,...periodLnps].filter(v=>v!=null);
+  const _eLMin = Math.floor(Math.min(0,..._allEnpsLnps)/20)*20;
+  const _eLMax = Math.ceil((Math.max(..._allEnpsLnps)+10)/20)*20;
   destroyChart('chartLiderEnps');
   const elE = document.getElementById('chartLiderEnps');
   if(elE) CHARTS.chartLiderEnps = new Chart(elE, {
-    type:'line',
-    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#962DFF', backgroundColor:'rgba(150,45,255,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+    type:'bar',
+    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, backgroundColor:periodEnps.map(v=>v!=null&&v>=50?'#22c55e':'#ff4343'), borderRadius:5, barPercentage:0.4, maxBarThickness:50}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{min:_eLMin,max:_eLMax,ticks:{stepSize:20,font:{size:11}},grid:{color:'#e5e5e5'}},x:{grid:{display:false},ticks:{font:{size:11}}}}}
   });
 
   destroyChart('chartLiderLnps');
   const elL = document.getElementById('chartLiderLnps');
   if(elL) CHARTS.chartLiderLnps = new Chart(elL, {
-    type:'line',
-    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+    type:'bar',
+    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, backgroundColor:periodLnps.map(v=>v!=null&&v>=50?'#962DFF':'#ff4343'), borderRadius:5, barPercentage:0.4, maxBarThickness:50}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{min:_eLMin,max:_eLMax,ticks:{stepSize:20,font:{size:11}},grid:{color:'#e5e5e5'}},x:{grid:{display:false},ticks:{font:{size:11}}}}}
   });
 
   // Head: comparison bar charts by leader (last 3 periods)
@@ -3509,6 +3623,7 @@ const NAV_ITEMS = [
   {key:'agenda', label:'Agenda BP', icon:'calendar'},
   {key:'tags', label:'Tags', icon:'tag'},
   {key:'enps', label:'eNPS / lNPS', icon:'enps'},
+  {key:'cronograma', label:'Cronograma BP', icon:'cronograma'},
   {key:'solicitacoes', label:'Solicitações', icon:'forms'},
   {key:'import', label:'Importar Dados', icon:'import'},
   {key:'history', label:'Histórico', icon:'history'},
@@ -3537,7 +3652,8 @@ const PAGE_TITLES = {
   equidade:['Equidade Salarial','Análise comparativa de remuneração por cargo, área e regime'],
   agenda:['Agenda BP','Timeline consolidada — prazos, aniversários, ações e alertas'],
   solicitacoes:['Solicitações','Solicitações de movimentação dos líderes'],
-  enps:['eNPS / lNPS','Cadastro e evolução de eNPS e lNPS por líder, departamento e empresa']
+  enps:['eNPS / lNPS','Cadastro e evolução de eNPS e lNPS por líder, departamento e empresa'],
+  cronograma:['Cronograma BP','Cronograma operacional — processos, prazos, etapas e responsáveis']
 };
 function hasImportedData(){
   return DB.colaboradores.length>0 || DB.desligamentos.length>0 || DB.promocoes.length>0;
@@ -3608,6 +3724,7 @@ function renderPageContent(){
   else if(UI.page==='tags'){ c.innerHTML = renderTagsPage(); bindTagsPage(); }
   else if(UI.page==='solicitacoes'){ c.innerHTML = renderSolicitacoes(); bindSolicitacoes(); }
   else if(UI.page==='enps'){ c.innerHTML = renderEnpsPage(); bindEnpsPage(); }
+  else if(UI.page==='cronograma'){ c.innerHTML = renderCronogramaPage(); bindCronogramaPage(); }
   else if(CRUD_PAGES[UI.page]){ c.innerHTML = renderCrudPage(UI.page); bindCrudPage(UI.page); }
 }
 
@@ -3617,7 +3734,7 @@ function renderPageContent(){
 function latestMeetingsByArea(bp, period){
   const areas = getBPAreas(bp);
   return areas.map(area=>{
-    let list = DB.meetings.filter(m=>m.bpId===bp.id && m.area===area);
+    let list = DB.meetings.filter(m=>Number(m.bpId)===Number(bp.id) && m.area===area);
     if(period) list = list.filter(m=>m.period===period);
     list.sort((a,b)=> CONFIG.periods.indexOf(b.period)-CONFIG.periods.indexOf(a.period));
     return {area, meeting: list[0]||null};
@@ -3644,9 +3761,19 @@ function renderDashboard(){
   const expandedAreas = getMyExpandedAreas();
   const myColabNames = getMyColabNames();
   let myColabs = getMyColaboradores();
-  let myDeslig = DB.desligamentos.filter(d=> expandedAreas.has(normalizeStr(d.area||d.departamentoRaw||'')) || myColabNames.has(normalizeStr(d.nome||'')));
-  let myPromos = DB.promocoes.filter(p=> (expandedAreas.has(normalizeStr(p.area||'')) || myColabNames.has(normalizeStr(p.nome||''))) && isPromoSalarial(p));
-  let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+  const _dashBpId = bp ? Number(bp.id) : null;
+  let myDeslig = DB.desligamentos.filter(d=>{
+    if(d.bpId != null) return Number(d.bpId) === _dashBpId;
+    // Legacy: match by collaborator name only (area alone is ambiguous when shared between BPs)
+    const dn = normalizeStr(d.nome||'');
+    return dn && myColabNames.has(dn);
+  });
+  let myPromos = DB.promocoes.filter(p=>{
+    if(p.bpId != null) return Number(p.bpId) === _dashBpId && isPromoSalarial(p);
+    const pn = normalizeStr(p.nome||'');
+    return pn && myColabNames.has(pn) && isPromoSalarial(p);
+  });
+  let myMeetings = DB.meetings.filter(m=> Number(m.bpId)===Number(bp.id));
 
   // Apply area filter
   if(fArea){
@@ -3677,11 +3804,15 @@ function renderDashboard(){
   const totalDesl = desligPeriod.length;
   const turnover = totalHC > 0 ? Math.round(totalDesl/totalHC*10000)/100 : 0;
   const totalPromos = promosPeriod.length;
-  const totalPDIs = DB.pdis.filter(p=> expandedAreas.has(normalizeStr(p.area||'')) && (p.status||'')!=='Concluído').length;
+  const totalPDIs = DB.pdis.filter(p=>{
+    if(p.bpId != null) { if(Number(p.bpId) !== _dashBpId) return false; }
+    else { const pn = normalizeStr(p.nome||''); if(!pn || !myColabNames.has(pn)) return false; }
+    return (p.status||'')!=='Concluído';
+  }).length;
   const totalSolPendentes = DB.solicitacoes.filter(s=>s.status==='pendente').length;
 
   // eNPS/lNPS from scores
-  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : expandedAreas.has(normalizeStr(s.area||'')));
+  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : expandedAreas.has(normalizeStr(s.area||'')) && (s.bpId==null || Number(s.bpId)===_dashBpId));
   const avgEnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.enps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.enps||0),0)/myMeetings.length) : 0);
   const avgLnps = myScores.length ? Math.round(myScores.reduce((s,r)=>s+(r.lnps||0),0)/myScores.length) : (myMeetings.length ? Math.round(myMeetings.reduce((s,m)=>s+(m.lnps||0),0)/myMeetings.length) : 0);
 
@@ -4078,9 +4209,18 @@ function bindDashboard(){
   const fArea = UI.dashArea || '';
   const fLider = UI.dashLider || '';
   let myColabs = getMyColaboradores();
-  let myDeslig = DB.desligamentos.filter(d=> expandedAreas2.has(normalizeStr(d.area||d.departamentoRaw||'')) || myColabNames2.has(normalizeStr(d.nome||'')));
-  let myPromos = DB.promocoes.filter(p=> (expandedAreas2.has(normalizeStr(p.area||'')) || myColabNames2.has(normalizeStr(p.nome||''))) && isPromoSalarial(p));
-  let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+  const _bindBpId = bp ? Number(bp.id) : null;
+  let myDeslig = DB.desligamentos.filter(d=>{
+    if(d.bpId != null) return Number(d.bpId) === _bindBpId;
+    const dn = normalizeStr(d.nome||'');
+    return dn && myColabNames2.has(dn);
+  });
+  let myPromos = DB.promocoes.filter(p=>{
+    if(p.bpId != null) return Number(p.bpId) === _bindBpId && isPromoSalarial(p);
+    const pn = normalizeStr(p.nome||'');
+    return pn && myColabNames2.has(pn) && isPromoSalarial(p);
+  });
+  let myMeetings = DB.meetings.filter(m=> Number(m.bpId)===Number(bp.id));
   if(fArea){
     myColabs = myColabs.filter(c=>normalizeStr(c.area||c.departamento||'')===normalizeStr(fArea));
     myDeslig = myDeslig.filter(d=>normalizeStr(d.area||'')===normalizeStr(fArea));
@@ -4095,7 +4235,7 @@ function bindDashboard(){
 
   const months = buildMonthLabels(12);
   const labels = months.map(m=>m.label);
-  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : expandedAreas2.has(normalizeStr(s.area||'')));
+  const myScores = DB.scores.filter(s=>(s.tipo||'area')==='area').filter(s=> fArea ? normalizeStr(s.area)===normalizeStr(fArea) : expandedAreas2.has(normalizeStr(s.area||'')) && (s.bpId==null || Number(s.bpId)===_bindBpId));
   const periods = CONFIG.periods;
 
   // Admissões vs Desligamentos
@@ -4193,20 +4333,23 @@ function bindDashboard(){
     return null;
   });
 
+  const _allDashEL = [...periodEnps,...periodLnps].filter(v=>v!=null);
+  const _dMin = _allDashEL.length ? Math.floor(Math.min(0,..._allDashEL)/20)*20 : 0;
+  const _dMax = _allDashEL.length ? Math.ceil((Math.max(..._allDashEL)+10)/20)*20 : 100;
   destroyChart('chartDashEnps');
   const elEnps = document.getElementById('chartDashEnps');
   if(elEnps) CHARTS.chartDashEnps = new Chart(elEnps, {
-    type:'line',
-    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, borderColor:'#962DFF', backgroundColor:'rgba(150,45,255,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+    type:'bar',
+    data:{labels:periods, datasets:[{label:'eNPS', data:periodEnps, backgroundColor:periodEnps.map(v=>v!=null&&v>=50?'#22c55e':'#ff4343'), borderRadius:5, barPercentage:0.4, maxBarThickness:50}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{min:_dMin,max:_dMax,ticks:{stepSize:20,font:{size:11}},grid:{color:'#e5e5e5'}},x:{grid:{display:false},ticks:{font:{size:11}}}}}
   });
 
   destroyChart('chartDashLnps');
   const elLnps = document.getElementById('chartDashLnps');
   if(elLnps) CHARTS.chartDashLnps = new Chart(elLnps, {
-    type:'line',
-    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, borderColor:'#000000', backgroundColor:'rgba(0,0,0,0.1)', borderWidth:3, pointRadius:6, fill:true, tension:0, spanGaps:true}]},
-    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:false}}}
+    type:'bar',
+    data:{labels:periods, datasets:[{label:'lNPS', data:periodLnps, backgroundColor:periodLnps.map(v=>v!=null&&v>=50?'#962DFF':'#ff4343'), borderRadius:5, barPercentage:0.4, maxBarThickness:50}]},
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{y:{min:_dMin,max:_dMax,ticks:{stepSize:20,font:{size:11}},grid:{color:'#e5e5e5'}},x:{grid:{display:false},ticks:{font:{size:11}}}}}
   });
 
   // --- Detail table ---
@@ -4428,7 +4571,7 @@ function bindDashboard(){
 ========================================================= */
 function renderMeetingsList(){
   const bp = currentBP();
-  let list = DB.meetings.filter(m=>m.bpId===bp.id);
+  let list = DB.meetings.filter(m=>Number(m.bpId)===Number(bp.id));
   if(UI.filters.period) list = list.filter(m=>m.period===UI.filters.period);
   if(UI.filters.status) list = list.filter(m=>meetingStatus(m)===UI.filters.status);
   list.sort((a,b)=> CONFIG.periods.indexOf(b.period)-CONFIG.periods.indexOf(a.period));
@@ -4472,9 +4615,9 @@ function bindMeetingsList(){
   document.getElementById('btnNewMeeting').addEventListener('click', ()=>{ openMeetingForm(null); });
   document.getElementById('btnDeleteAll').addEventListener('click', ()=>{
     const bp = currentBP();
-    const count = DB.meetings.filter(m=>m.bpId===bp.id).length;
+    const count = DB.meetings.filter(m=>Number(m.bpId)===Number(bp.id)).length;
     if(count && confirm('Excluir TODAS as '+count+' reuniões de '+bp.name+'? Esta ação não pode ser desfeita.')){
-      DB.meetings = DB.meetings.filter(m=>m.bpId!==bp.id);
+      DB.meetings = DB.meetings.filter(m=>Number(m.bpId)!==Number(bp.id));
       persist('meetings');
       renderPageContent();
     }
@@ -4963,18 +5106,35 @@ function applyAutoCalc(){
       }
     }
     function fmtR$(v){ if(!v) return ''; if(typeof v==='number') return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2}); return String(v); }
+    const salAntNum = parseBRL(salAnt);
+    const salNovoNum = parseBRL(p.valorAprovado);
+    // Calculate reajuste and pct if missing but we have salary data
+    let reajVal = p.reajuste;
+    let pctVal = p.pct;
+    if((!reajVal || reajVal==='') && salAntNum>0 && salNovoNum>0){
+      reajVal = salNovoNum - salAntNum;
+    }
+    if((pctVal==null || pctVal==='') && salAntNum>0 && salNovoNum>0){
+      pctVal = (salNovoNum - salAntNum) / salAntNum;
+    }
     const salAntFmt = fmtR$(salAnt);
     const salNovoFmt = fmtR$(p.valorAprovado);
-    const reajFmt = fmtR$(p.reajuste);
-    return {nome:p.nome, gestor:p.gestor||'', aprovador:p.aprovador||'', cargoAnterior:cargoAnt, salarioAnterior:salAntFmt, cargoNovo:p.cargoAprovado||'', salarioNovo:salNovoFmt, reajuste:reajFmt, pct: p.pct!=null&&p.pct!==''?fmtPct(p.pct*100):'—'};
+    const reajFmt = fmtR$(reajVal);
+    return {nome:p.nome, gestor:p.gestor||'', aprovador:p.aprovador||'', cargoAnterior:cargoAnt, salarioAnterior:salAntFmt, cargoNovo:p.cargoAprovado||'', salarioNovo:salNovoFmt, reajuste:reajFmt, pct: pctVal!=null&&pctVal!==''?fmtPct(pctVal*100):'—'};
   });
   // eNPS/lNPS already set by applyEnpsAutoCalc() with exact dept/leader scores from DB.enps
-  // Helper: filter records by gerente's team (same logic as computeAutoData)
+  // Helper: filter records by gerente's team — uses full tree (sub-leaders + their teams)
   const _fullArea = !fd.gerente || isHead(fd.gerente);
-  const _teamNames = _fullArea ? null : new Set(
-    DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamento||'')===normalizeStr(fd.area) && normalizeStr(c.lider||c['Líder']||c.Lider||'')===normalizeStr(fd.gerente))
-      .map(c=>normalizeStr(c.nome||c.Nome||''))
-  );
+  let _teamNames = null;
+  if(!_fullArea){
+    _teamNames = new Set([normalizeStr(fd.gerente)]);
+    const _aliases = _resolveLiderAliases(fd.gerente);
+    _aliases.forEach(alias=>{
+      _teamNames.add(alias);
+      getTeamTree(alias).forEach(c=> _teamNames.add(normalizeStr(c.nome||c.Nome||'')));
+    });
+    getTeamTree(fd.gerente).forEach(c=> _teamNames.add(normalizeStr(c.nome||c.Nome||'')));
+  }
   function isInTeam(nome){ return _fullArea || (_teamNames && _teamNames.has(normalizeStr(nome))); }
   // Auto-populate banco de horas from imported data
   if(DB.bancoHorasImport.length){
@@ -5115,7 +5275,13 @@ function renderMeetingForm(){
           ${renderMiniTable('promocoesTable','Promoções / Movimentações', fd.promocoesTable, [{key:'nome',label:'Nome'},{key:'gestor',label:'Gestor'},{key:'aprovador',label:'Aprovador'},{key:'cargoAnterior',label:'Cargo anterior'},{key:'salarioAnterior',label:'Salário anterior'},{key:'cargoNovo',label:'Cargo novo'},{key:'salarioNovo',label:'Salário novo'},{key:'reajuste',label:'Reajuste'},{key:'pct',label:'%'}])}
           ${(()=>{
             const areaColabs = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamento||'')===normalizeStr(fd.area));
-            const filteredColabs = (!fd.gerente || isHead(fd.gerente)) ? areaColabs : areaColabs.filter(c=> normalizeStr(c.lider||c['Líder']||c.Lider||'')===normalizeStr(fd.gerente));
+            const _formPromoFull = !fd.gerente || isHead(fd.gerente);
+            let _formPromoTree = null;
+            if(!_formPromoFull){
+              _formPromoTree = new Set([normalizeStr(fd.gerente)]);
+              getTeamTree(fd.gerente).forEach(c=> _formPromoTree.add(normalizeStr(c.nome||c.Nome||'')));
+            }
+            const filteredColabs = _formPromoFull ? areaColabs : areaColabs.filter(c=> _formPromoTree.has(normalizeStr(c.nome||c.Nome||'')));
             const promoRows = filteredColabs.map(c=>{
               const p=getUltimaPromocao(c.nome||c.Nome||'');
               const nome=c.nome||c.Nome||'';
@@ -5143,7 +5309,12 @@ function renderMeetingForm(){
           <div class="section-title">Desenvolvimento</div>
           ${(()=>{
             const fullAreaPdi = !fd.gerente || isHead(fd.gerente);
-            const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(fd.area)).filter(p=> fullAreaPdi || normalizeStr(p.lider)===normalizeStr(fd.gerente));
+            let _formPdiTree = null;
+            if(!fullAreaPdi){
+              _formPdiTree = new Set([normalizeStr(fd.gerente)]);
+              getTeamTree(fd.gerente).forEach(c=> _formPdiTree.add(normalizeStr(c.nome||c.Nome||'')));
+            }
+            const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(fd.area)).filter(p=> fullAreaPdi || _formPdiTree.has(normalizeStr(p.nome||'')) || _formPdiTree.has(normalizeStr(p.lider||'')));
             const hasPdi = areaPdis.length>0;
             const pdiAtivos = areaPdis.filter(p=>p.totalAreas>0).length;
             const pdiAprovados = areaPdis.filter(p=>p.aprovado==='Sim').length;
@@ -5762,7 +5933,13 @@ function renderMeetingDetail(){
   <div data-report-topic="promocoes">${detailMiniTable('Promoções / Movimentações', m.promocoesTable, ['Nome','Gestor','Aprovador','Cargo anterior','Salário anterior','Cargo novo','Salário novo','Reajuste','%'], ['nome','gestor','aprovador','cargoAnterior','salarioAnterior','cargoNovo','salarioNovo','reajuste','pct'])}</div>
   <div data-report-topic="promocoes">${(()=>{
     const areaColabs = DB.colaboradores.filter(c=> normalizeStr(c.area||c.departamento||'')===normalizeStr(m.area));
-    const filtColabs = (!m.gerente || isHead(m.gerente)) ? areaColabs : areaColabs.filter(c=> normalizeStr(c.lider||c['Líder']||c.Lider||'')===normalizeStr(m.gerente));
+    const _promoFullArea = !m.gerente || isHead(m.gerente);
+    let _promoTreeNames = null;
+    if(!_promoFullArea){
+      _promoTreeNames = new Set([normalizeStr(m.gerente)]);
+      getTeamTree(m.gerente).forEach(c=> _promoTreeNames.add(normalizeStr(c.nome||c.Nome||'')));
+    }
+    const filtColabs = _promoFullArea ? areaColabs : areaColabs.filter(c=> _promoTreeNames.has(normalizeStr(c.nome||c.Nome||'')));
     const promoRows = filtColabs.map(c=>{
       const p=getUltimaPromocao(c.nome||c.Nome||'');
       const nome=c.nome||c.Nome||'';
@@ -5786,7 +5963,12 @@ function renderMeetingDetail(){
   })()}</div>
   <div data-report-topic="pdis">${(()=>{
     const fullAreaPdiDetail = !m.gerente || isHead(m.gerente);
-    const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(m.area)).filter(p=> fullAreaPdiDetail || normalizeStr(p.lider)===normalizeStr(m.gerente));
+    let _pdiTreeNames = null;
+    if(!fullAreaPdiDetail){
+      _pdiTreeNames = new Set([normalizeStr(m.gerente)]);
+      getTeamTree(m.gerente).forEach(c=> _pdiTreeNames.add(normalizeStr(c.nome||c.Nome||'')));
+    }
+    const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(m.area)).filter(p=> fullAreaPdiDetail || _pdiTreeNames.has(normalizeStr(p.nome||'')) || _pdiTreeNames.has(normalizeStr(p.lider||'')));
     if(!areaPdis.length) return '';
     // Group by leader
     const byLider = {};
@@ -5977,7 +6159,7 @@ function bindMeetingDetail(){
    HISTORY
 ========================================================= */
 function periodAreaAgg(bp, period){
-  const ms = DB.meetings.filter(m=>m.bpId===bp.id && m.period===period);
+  const ms = DB.meetings.filter(m=>Number(m.bpId)===Number(bp.id) && m.period===period);
   const hc = ms.reduce((s,m)=>s+(m.headcount||0),0);
   const to = ms.length? ms.reduce((s,m)=>s+(m.turnover||0),0)/ms.length : 0;
   const enps = ms.length? ms.reduce((s,m)=>s+(m.enps||0),0)/ms.length : 0;
@@ -6034,7 +6216,7 @@ function bindHistory(){
 ========================================================= */
 function getAcompanhamentoRecords(){
   const bp = currentBP();
-  const colabs = DB.colaboradores.filter(c => getBPAreas(bp).map(a=>normalizeStr(a)).includes(normalizeStr(c.area||c.departamento||'')));
+  const colabs = getMyColaboradores();
   const milestones = [7,15,45,90];
   const records = [];
   const today = new Date(); today.setHours(0,0,0,0);
@@ -6246,8 +6428,7 @@ function renderAcompanhamentos(){
             <select id="oo_nome" class="select">
               <option value="">Selecione...</option>
               ${(()=>{
-                const bp = currentBP();
-                const colabs = DB.colaboradores.filter(c => getBPAreas(bp).map(a=>normalizeStr(a)).includes(normalizeStr(c.area||c.departamento||'')));
+                const colabs = getMyColaboradores();
                 return colabs.map(c=>{
                   const nome = c.nome || c.Nome || '';
                   return '<option value="'+esc(nome)+'">'+esc(nome)+'</option>';
@@ -6290,7 +6471,10 @@ function renderAcompanhamentos(){
               '</div>'+
               '<div style="font-size:13px;color:#555;line-height:1.5;white-space:pre-wrap;">'+esc(o.resumo||'')+'</div>'+
             '</div>'+
-            '<button class="btn btn-danger btn-sm oo-delete" data-oo-id="'+esc(o.id)+'" title="Excluir" style="flex-shrink:0;">'+ICONS.trash+'</button>'+
+            '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">'+
+              '<button class="btn btn-outline btn-sm oo-edit" data-oo-id="'+esc(o.id)+'" title="Editar" style="padding:6px 8px;">'+ICONS.edit+'</button>'+
+              '<button class="btn btn-danger btn-sm oo-delete" data-oo-id="'+esc(o.id)+'" title="Excluir" style="padding:6px 8px;">'+ICONS.trash+'</button>'+
+            '</div>'+
           '</div>';
         }).join('')+'</div>';
       })()}
@@ -6351,6 +6535,8 @@ function bindAcompanhamentos(){
   const btnCancel = document.getElementById('btnCancel1on1');
   if(btnCancel) btnCancel.addEventListener('click', ()=>{ form1on1.style.display='none'; });
 
+  let _editing1on1Id = null;
+
   const btnSave = document.getElementById('btnSave1on1');
   if(btnSave) btnSave.addEventListener('click', ()=>{
     const nome = document.getElementById('oo_nome').value;
@@ -6359,9 +6545,39 @@ function bindAcompanhamentos(){
     const resumo = document.getElementById('oo_resumo').value;
     if(!nome){ alert('Selecione um colaborador.'); return; }
     if(!titulo.trim()){ alert('Informe o título.'); return; }
-    DB.oneOnOnes.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, data, titulo, resumo, createdAt: new Date().toISOString() });
+    if(_editing1on1Id){
+      const idx = DB.oneOnOnes.findIndex(o=>o.id===_editing1on1Id);
+      if(idx>=0){
+        DB.oneOnOnes[idx].nome = nome;
+        DB.oneOnOnes[idx].data = data;
+        DB.oneOnOnes[idx].titulo = titulo;
+        DB.oneOnOnes[idx].resumo = resumo;
+      }
+      _editing1on1Id = null;
+    } else {
+      DB.oneOnOnes.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, data, titulo, resumo, createdAt: new Date().toISOString() });
+    }
     persist('oneOnOnes');
     rerender();
+  });
+
+  document.querySelectorAll('.oo-edit').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const ooId = btn.getAttribute('data-oo-id');
+      const rec = DB.oneOnOnes.find(o=>o.id===ooId);
+      if(!rec) return;
+      _editing1on1Id = ooId;
+      form1on1.style.display = 'block';
+      const selNome = document.getElementById('oo_nome');
+      const inpData = document.getElementById('oo_data');
+      const inpTitulo = document.getElementById('oo_titulo');
+      const inpResumo = document.getElementById('oo_resumo');
+      if(selNome) selNome.value = rec.nome || '';
+      if(inpData) inpData.value = rec.data || '';
+      if(inpTitulo) inpTitulo.value = rec.titulo || '';
+      if(inpResumo) inpResumo.value = rec.resumo || '';
+      form1on1.scrollIntoView({behavior:'smooth', block:'start'});
+    });
   });
 
   document.querySelectorAll('.oo-delete').forEach(btn=>{
@@ -7156,16 +7372,25 @@ function bindLideresPage(){
     const records = DB.enps.filter(r=>r.tipo==='lider' && normalizeStr(r.referencia)===normalizeStr(lider));
     if(!records.length) return;
     records.sort((a,b)=>(a.periodo||'').localeCompare(b.periodo||''));
+    const enpsVals = records.map(r=>r.enps);
+    const lnpsVals = records.map(r=>r.lnps);
+    const _allVals = [...enpsVals,...lnpsVals].filter(v=>v!=null);
+    const _minV = Math.min(0, ..._allVals);
+    const _maxV = Math.max(..._allVals);
+    const _yMin = Math.floor(_minV/20)*20;
+    const _yMax = Math.ceil((_maxV+10)/20)*20;
     new Chart(canvas, {
-      type:'line',
+      type:'bar',
       data:{
         labels: records.map(r=>r.periodo),
         datasets:[
-          {label:'eNPS', data:records.map(r=>r.enps), borderColor:'#22c55e', backgroundColor:'#22c55e22', borderWidth:3, pointRadius:6, tension:0, fill:true, spanGaps:true},
-          {label:'lNPS', data:records.map(r=>r.lnps), borderColor:'#962DFF', backgroundColor:'#962DFF22', borderWidth:3, pointRadius:6, tension:0, fill:true, spanGaps:true}
+          {label:'eNPS', data:enpsVals, backgroundColor:enpsVals.map(v=>v!=null&&v>=50?'#22c55e':'#ff4343'), borderRadius:5, barPercentage:0.4, categoryPercentage:0.5, maxBarThickness:40},
+          {label:'lNPS', data:lnpsVals, backgroundColor:lnpsVals.map(v=>v!=null&&v>=50?'#962DFF':'#ff4343'), borderRadius:5, barPercentage:0.4, categoryPercentage:0.5, maxBarThickness:40}
         ]
       },
-      options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}}, scales:{y:{min:-100,max:100,grid:{color:'#f0f0f0'}}}}
+      options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}},
+        datalabels:false,tooltip:{backgroundColor:'rgba(0,0,0,0.8)',padding:10,cornerRadius:8,titleFont:{size:12},bodyFont:{size:13}}},
+        scales:{y:{min:_yMin,max:_yMax,ticks:{stepSize:20,font:{size:11}},grid:{color:'#e5e5e5'}},x:{grid:{display:false},ticks:{font:{size:11}}}}}
     });
   });
 }
@@ -7183,7 +7408,22 @@ function getMyColaboradores(){
   if(_myColabsCache) return _myColabsCache;
   const bp = currentBP();
 
-  // Heads-based BP: start from head's tree (with fuzzy name resolution)
+  // PRIMARY: use bpResponsavel field if available
+  const byField = _getBPColabsByField(bp);
+  if(byField.length > 0){
+    _myColabsCache = byField;
+    const allNames = new Set(byField.map(c=>normalizeStr(c.nome||c.Nome||'')));
+    _myColabNamesCache = allNames;
+    const expandedAreas = new Set();
+    byField.forEach(c=>{
+      const a = normalizeStr(c.area||c.departamento||'');
+      if(a) expandedAreas.add(a);
+    });
+    _myExpandedAreasCache = expandedAreas;
+    return _myColabsCache;
+  }
+
+  // FALLBACK: Heads-based BP (start from head's tree with fuzzy name resolution)
   if(bp.heads && bp.heads.length){
     const allNames = new Set();
     bp.heads.forEach(h=>{
@@ -7191,7 +7431,6 @@ function getMyColaboradores(){
       resolvedNames.forEach(fullName=>{
         allNames.add(normalizeStr(fullName));
         getTeamTree(fullName).forEach(c=> allNames.add(normalizeStr(c.nome||c.Nome||'')));
-        // Also try aliases to catch name variants in lider field
         const aliases = _resolveLiderAliases(fullName);
         aliases.forEach(alias=>{
           allNames.add(alias);
@@ -7210,14 +7449,12 @@ function getMyColaboradores(){
     return _myColabsCache;
   }
 
-  // Area-based BP (existing behavior)
+  // FALLBACK: Area-based BP
   const bpAreas = getBPAreas(bp).map(a=>normalizeStr(a));
-  // 1) All collaborators whose area matches BP areas
   const byArea = DB.colaboradores.filter(c => {
     const cArea = normalizeStr(c.area||c.departamento||'');
     return !cArea || bpAreas.includes(cArea);
   });
-  // 2) Find leaders that belong to BP areas
   const areaLeaders = new Set();
   byArea.forEach(c=>{
     const nome = normalizeStr(c.nome||c.Nome||'');
@@ -7225,7 +7462,6 @@ function getMyColaboradores(){
     const l = normalizeStr(c.lider||c['Líder']||c.Lider||'');
     if(l) areaLeaders.add(l);
   });
-  // 3) Include anyone in those leaders' trees (catches cross-area subordinates)
   const allNames = new Set(byArea.map(c=>normalizeStr(c.nome||c.Nome||'')));
   areaLeaders.forEach(ldr=>{
     getTeamTree(ldr).forEach(c=>{
@@ -7235,7 +7471,6 @@ function getMyColaboradores(){
   });
   _myColabsCache = DB.colaboradores.filter(c=> allNames.has(normalizeStr(c.nome||c.Nome||'')));
   _myColabNamesCache = allNames;
-  // Expanded areas: BP areas + all areas from matched colabs
   const expandedAreas = new Set(bpAreas);
   _myColabsCache.forEach(c=>{
     const a = normalizeStr(c.area||c.departamento||'');
@@ -8095,9 +8330,18 @@ function getIndicadoresData(filterArea){
   const ea = getMyExpandedAreas();
   const cn = getMyColabNames();
   let myColabs = getMyColaboradores();
-  let myDeslig = DB.desligamentos.filter(d=> ea.has(normalizeStr(d.area||d.departamentoRaw||'')) || cn.has(normalizeStr(d.nome||'')));
-  let myPromos = DB.promocoes.filter(p=> (ea.has(normalizeStr(p.area||'')) || cn.has(normalizeStr(p.nome||''))) && isPromoSalarial(p));
-  let myMeetings = DB.meetings.filter(m=> m.bpId===bp.id);
+  const _indBpId = bp ? Number(bp.id) : null;
+  let myDeslig = DB.desligamentos.filter(d=>{
+    if(d.bpId != null) return Number(d.bpId) === _indBpId;
+    const dn = normalizeStr(d.nome||'');
+    return dn && cn.has(dn);
+  });
+  let myPromos = DB.promocoes.filter(p=>{
+    if(p.bpId != null) return Number(p.bpId) === _indBpId && isPromoSalarial(p);
+    const pn = normalizeStr(p.nome||'');
+    return pn && cn.has(pn) && isPromoSalarial(p);
+  });
+  let myMeetings = DB.meetings.filter(m=> Number(m.bpId)===Number(bp.id));
   if(filterArea){
     myColabs = myColabs.filter(c=>normalizeStr(c.area||c.departamento||'')===normalizeStr(filterArea));
     myDeslig = myDeslig.filter(d=>normalizeStr(d.area||'')===normalizeStr(filterArea));
@@ -8422,10 +8666,18 @@ function _exportMeetingPDFInner(meetingId){
   if(m.promocoesTable && m.promocoesTable.length){
     y = checkPage(y, 20);
     y = secTitle('Promoções / Movimentações ('+m.promocoesTable.length+')', y);
+    // Same columns as HTML detail — filter out empty columns like detailMiniTable does
+    const _promoCols = [
+      {h:'Nome',k:'nome'},{h:'Gestor',k:'gestor'},{h:'Aprovador',k:'aprovador'},
+      {h:'Cargo anterior',k:'cargoAnterior'},{h:'Salário anterior',k:'salarioAnterior'},
+      {h:'Cargo novo',k:'cargoNovo'},{h:'Salário novo',k:'salarioNovo'},
+      {h:'Reajuste',k:'reajuste'},{h:'%',k:'pct'}
+    ];
+    const _promoVisible = _promoCols.filter(col=> m.promocoesTable.some(r=>(r[col.k]||'').toString().trim()));
     doc.autoTable({
       startY: y,
-      head:[['Nome','Gestor','Cargo anterior','Cargo novo','Reajuste','%']],
-      body: m.promocoesTable.map(r=>[r.nome,r.gestor,r.cargoAnterior,r.cargoNovo,r.reajuste,r.pct]),
+      head:[_promoVisible.map(c=>c.h)],
+      body: m.promocoesTable.map(r=>_promoVisible.map(c=>r[c.k]||'')),
       styles:{fontSize:8, cellPadding:3},
       headStyles:hStyle, alternateRowStyles:altRow, margin:marg
     });
@@ -8461,7 +8713,13 @@ function _exportMeetingPDFInner(meetingId){
   }
 
   // === PDIs ===
-  const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(m.area)).filter(p=> (!m.gerente || isHead(m.gerente)) || normalizeStr(p.lider)===normalizeStr(m.gerente));
+  const _pdfPdiFull = !m.gerente || isHead(m.gerente);
+  let _pdfPdiTree = null;
+  if(!_pdfPdiFull){
+    _pdfPdiTree = new Set([normalizeStr(m.gerente)]);
+    getTeamTree(m.gerente).forEach(c=> _pdfPdiTree.add(normalizeStr(c.nome||c.Nome||'')));
+  }
+  const areaPdis = DB.pdis.filter(p=> normalizeStr(p.area)===normalizeStr(m.area)).filter(p=> _pdfPdiFull || _pdfPdiTree.has(normalizeStr(p.nome||'')) || _pdfPdiTree.has(normalizeStr(p.lider||'')));
   if(areaPdis.length){
     y = checkPage(y, 20);
     y = secTitle('PDIs — Planos de Desenvolvimento ('+areaPdis.length+')', y);
@@ -8497,7 +8755,7 @@ function _exportMeetingPDFInner(meetingId){
       y = checkPage(y, 30);
       y = secTitle('Clima — eNPS / lNPS', y);
       function _nv(r,f){ if(!r) return '—'; if(r['semNota'+f.charAt(0).toUpperCase()+f.slice(1)]) return 'Sem nota'; return r[f]!=null ? String(r[f]) : '—'; }
-      function _nvDelta(r,f,prevR){ let base = _nv(r,f); if(!r||!prevR||r[f]==null||prevR[f]==null) return base; const sn='semNota'+f.charAt(0).toUpperCase()+f.slice(1); if(r[sn]||prevR[sn]) return base; const d=Number(r[f])-Number(prevR[f]); if(d===0) return base+' (=)'; return base+' ('+(d>0?'▲+':'▼')+d+')'; }
+      function _nvDelta(r,f,prevR){ let base = _nv(r,f); if(!r||!prevR||r[f]==null||prevR[f]==null) return base; const sn='semNota'+f.charAt(0).toUpperCase()+f.slice(1); if(r[sn]||prevR[sn]) return base; const d=Number(r[f])-Number(prevR[f]); if(d===0) return base+' (=)'; return base+' ('+(d>0?'+':'')+d+')'; }
       // Area table
       if(_areaRecs.length && _last3.length){
         doc.setFontSize(9); doc.setTextColor(80); doc.text('Área: '+(m.area||''), 14, y); y+=5;
@@ -9875,12 +10133,24 @@ if(!UI.enpsShowForm) UI.enpsShowForm = false;
 function renderEnpsPage(){
   const bp = currentBP();
   const tab = UI.enpsTab || 'lider';
-  const records = (DB.enps||[]).filter(r=>{
+  // Filter eNPS by bpId; for legacy records without bpId, check if referencia belongs to this BP's team
+  const _myColabNames = getMyColabNames();
+  const _myAreas = getMyExpandedAreas();
+  const _myEnps = (DB.enps||[]).filter(r=>{
+    if(r.bpId) return Number(r.bpId)===Number(bp.id);
+    // Legacy: check referencia against BP's team
+    const refN = normalizeStr(r.referencia||'');
+    if(r.tipo==='lider') return _myColabNames && _myColabNames.has(refN);
+    if(r.tipo==='departamento') return _myAreas && _myAreas.has(refN);
+    if(r.tipo==='empresa') return true; // empresa-level shared
+    return true;
+  });
+  const records = _myEnps.filter(r=>{
     if(tab==='geral') return true;
     return r.tipo===tab;
   });
   records.sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
-  const total = DB.enps.length;
+  const total = _myEnps.length;
 
   // Reference options
   let refOptions = '';
@@ -9964,7 +10234,7 @@ function renderEnpsPage(){
   {
     // Group all enps records by referencia+tipo, sorted by periodo
     const _allByRef = {};
-    (DB.enps||[]).forEach(r=>{
+    _myEnps.forEach(r=>{
       const key = normalizeStr(r.referencia||'')+'|'+r.tipo;
       if(!_allByRef[key]) _allByRef[key]=[];
       _allByRef[key].push(r);
@@ -10064,7 +10334,7 @@ function renderEnpsPage(){
   </div>`;
   // Resumos / Comentários por líder
   {
-    const comentRecs = (DB.enps||[]).filter(r=>{
+    const comentRecs = _myEnps.filter(r=>{
       if(tab!=='geral' && r.tipo!==tab) return false;
       return (r.comentariosEnps||r.comentarios||r.comentariosLnps||'').trim();
     });
@@ -10113,7 +10383,7 @@ function renderEnpsPage(){
 
   // Ranking for "Por Líder" tab
   if(tab==='lider'){
-    const liderRecords = (DB.enps||[]).filter(r=>r.tipo==='lider' && !(r.semNotaEnps||r.semNota) && r.enps!=null);
+    const liderRecords = _myEnps.filter(r=>r.tipo==='lider' && !(r.semNotaEnps||r.semNota) && r.enps!=null);
     const latestByLider = {};
     liderRecords.forEach(r=>{
       const key = normalizeStr(r.referencia);
@@ -10214,6 +10484,7 @@ function bindEnpsPage(){
 
     DB.enps.push({
       id: uid(),
+      bpId: bp.id,
       periodo: periodo,
       tipo: tipo,
       referencia: ref,
@@ -10252,8 +10523,17 @@ function bindEnpsPage(){
   // Delete all
   const btnDelAll = document.getElementById('btnEnpsDeleteAll');
   if(btnDelAll) btnDelAll.addEventListener('click', ()=>{
-    if(!confirm('Apagar todos os registros eNPS/lNPS?')) return;
-    DB.enps = [];
+    if(!confirm('Apagar todos os seus registros eNPS/lNPS?')) return;
+    const _delColabNames = getMyColabNames();
+    const _delAreas = getMyExpandedAreas();
+    DB.enps = DB.enps.filter(r=>{
+      if(r.bpId) return Number(r.bpId)!==Number(bp.id); // keep if belongs to other BP
+      // Legacy: keep if NOT belonging to this BP
+      const refN = normalizeStr(r.referencia||'');
+      if(r.tipo==='lider') return !(_delColabNames && _delColabNames.has(refN));
+      if(r.tipo==='departamento') return !(_delAreas && _delAreas.has(refN));
+      return false; // empresa-level: delete
+    });
     persist('enps');
     rerender();
   });
@@ -10354,7 +10634,17 @@ function bindEnpsPage(){
   const evoCtxE = document.getElementById('enpsEvoChart');
   const evoCtxL2 = document.getElementById('lnpsEvoChart');
   if(barCtxE && barCtxL2){
-    const allEnpsRecs = (DB.enps||[]).filter(r=>{
+    const _bp = currentBP();
+    const _chartColabNames = getMyColabNames();
+    const _chartAreas = getMyExpandedAreas();
+    const _myEnpsChart = (DB.enps||[]).filter(r=>{
+      if(r.bpId) return Number(r.bpId)===(_bp?Number(_bp.id):null);
+      const refN = normalizeStr(r.referencia||'');
+      if(r.tipo==='lider') return _chartColabNames && _chartColabNames.has(refN);
+      if(r.tipo==='departamento') return _chartAreas && _chartAreas.has(refN);
+      return true;
+    });
+    const allEnpsRecs = _myEnpsChart.filter(r=>{
       if(tab==='geral') return true;
       return r.tipo===tab;
     });
@@ -10618,6 +10908,613 @@ function bindTagsPage(){
         if(arrow) arrow.textContent='▼';
       }
     });
+  });
+}
+
+/* =========================================================
+   CRONOGRAMA BP — Processos Operacionais
+========================================================= */
+const CRONO_AREAS = ['Contábil','Fiscal','Folha','Compartilhado'];
+const CRONO_FREQ = {mensal:'Mensal',bimestral:'Bimestral',trimestral:'Trimestral',semestral:'Semestral',anual:'Anual'};
+const CRONO_STATUS_COLORS = {concluido:'#22c55e',pendente:'#94a3b8',atrasado:'#ef4444',hoje:'#3b82f6',proximo:'#f59e0b'};
+const CRONO_STATUS_LABELS = {concluido:'Concluído',pendente:'Pendente',atrasado:'Atrasado',hoje:'Hoje',proximo:'Próximo'};
+let _cronoView = 'geral'; // geral | cronograma | processos | pendencias
+let _cronoMes = new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+let _cronoFiltroArea = '';
+let _cronoFiltroResp = '';
+let _cronoFiltroProcesso = '';
+let _cronoFiltroStatus = '';
+let _cronoFiltroRapido = '';
+let _cronoDetalheProcessoId = null;
+let _cronoFormOpen = false;
+let _cronoEditId = null;
+
+function _seedProcessosBP(){
+  if(DB.processosBP.length>0) return;
+  const bp = currentBP();
+  const bpId = bp?bp.id:null;
+  const procs = [
+    {id:uid(),nome:'Admissões',descricao:'Solicitações de admissão devem ser realizadas até o dia 25 para processamento.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Prazo para solicitações de admissão',dia:25,descricao:'Solicitações devem ser enviadas até esta data.'},{nome:'Onboarding',dia:0,descricao:'Toda terça-feira pela manhã.',recorrenciaSemanal:'terça'}],alertas:[],observacoes:'O onboarding acontece toda terça-feira pela manhã.',links:[],ativo:true,bpId:bpId},
+    {id:uid(),nome:'Promoções e Efetivações',descricao:'Processo mensal de solicitação, validação e aplicação de promoções e efetivações.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Recebimento das solicitações',dia:10,descricao:'Solicitações para aplicação no mês seguinte.'},{nome:'Envio aos Heads e Sócios',dia:11,descricao:'Para validação.'},{nome:'Retorno Heads e Sócios',dia:15,descricao:''},{nome:'Envio ao DP',dia:20,descricao:''},{nome:'Retorno aos gestores solicitantes',dia:20,descricao:''}],alertas:[],observacoes:'',links:[],ativo:true,bpId:bpId},
+    {id:uid(),nome:'Transição CLT → PJ',descricao:'Processo de transição de regime CLT para PJ.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Recebimento da solicitação',dia:10,descricao:'A solicitação deve ser feita até o dia 10 para cumprimento do aviso no mês seguinte.'},{nome:'Envio aos Heads e Sócios',dia:11,descricao:''},{nome:'Retorno da validação',dia:15,descricao:''},{nome:'Envio ao DP',dia:20,descricao:''},{nome:'Retorno aos gestores',dia:20,descricao:''},{nome:'Vigência do contrato PJ',dia:0,descricao:'Data definida caso a caso.'}],alertas:['Antes da transição é necessário zerar banco de horas e férias.'],observacoes:'A solicitação deve ser feita até o dia 10 para cumprimento do aviso no mês seguinte.',links:[],ativo:true,bpId:bpId},
+    {id:uid(),nome:'Desligamentos Involuntários',descricao:'Desligamentos involuntários devem ser realizados até o dia 20.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Prazo para desligamentos involuntários',dia:20,descricao:'Caso esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.'}],alertas:['Caso esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.'],observacoes:'',links:[],ativo:true,bpId:bpId},
+    {id:uid(),nome:'Reunião com Heads',descricao:'Apresentação dos resultados das áreas.',categoria:'Reunião',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Preparação do material',dia:0,descricao:'Consolidar indicadores e relatórios.'},{nome:'Reunião com Heads',dia:0,descricao:'Apresentação dos resultados.'}],alertas:[],observacoes:'',links:[],participantes:'Heads e Sócios',preparacao:'Consolidar dashboard, indicadores de headcount, turnover, eNPS, promoções e desligamentos.',ativo:true,bpId:bpId},
+    {id:uid(),nome:'Reunião com Gerentes',descricao:'Apresentação do Termômetro.',categoria:'Reunião',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'bimestral',etapas:[{nome:'Preparação do Termômetro',dia:0,descricao:''},{nome:'Reunião com Gerentes',dia:0,descricao:'Apresentação do Termômetro.'}],alertas:[],observacoes:'',links:[],participantes:'Gerentes das áreas',preparacao:'Preparar apresentação do Termômetro.',ativo:true,bpId:bpId},
+    {id:uid(),nome:'Imersão de Área',descricao:'Momento de alinhamento estratégico com o time da área.',categoria:'Estratégico',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Planejamento da pauta',dia:0,descricao:''},{nome:'Imersão',dia:0,descricao:'Alinhamento estratégico com o time.'}],alertas:[],observacoes:'',links:[],campos:{area:'',data:'',pauta:'',responsavel:'',pontos:'',encaminhamentos:''},ativo:true,bpId:bpId}
+  ];
+  DB.processosBP = procs;
+  persist('processosBP');
+}
+
+function _getCronoMesDate(){ const p=_cronoMes.split('-'); return new Date(Number(p[0]),Number(p[1])-1,1); }
+function _getCronoMesLabel(){ const d=_getCronoMesDate(); const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; return meses[d.getMonth()]+'/'+d.getFullYear(); }
+function _getDaysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+
+function _getProcessoInstancia(processoId, mes){
+  let inst = DB.processosInstancias.find(i=>i.processoId===processoId && i.mes===mes);
+  if(!inst){
+    const proc = DB.processosBP.find(p=>p.id===processoId);
+    if(!proc) return null;
+    inst = {id:uid(),processoId:processoId,mes:mes,etapas:proc.etapas.map(e=>({nome:e.nome,dia:e.dia,status:'pendente',dataConclusao:null})),observacoes:'',bpId:proc.bpId};
+    DB.processosInstancias.push(inst);
+    persist('processosInstancias');
+  }
+  return inst;
+}
+
+function _shouldShowInMonth(proc, mes){
+  if(!proc.ativo) return false;
+  const f = proc.frequencia;
+  if(f==='mensal') return true;
+  const p = mes.split('-'); const y=Number(p[0]); const m=Number(p[1]);
+  if(f==='bimestral') return m%2===0;
+  if(f==='trimestral') return m%3===1;
+  if(f==='semestral') return m===1||m===7;
+  if(f==='anual') return m===1;
+  return true;
+}
+
+function _getEtapaStatus(etapa, dia, mes){
+  if(etapa.status==='concluido') return 'concluido';
+  if(dia<=0) return 'pendente';
+  const p=mes.split('-'); const d=new Date(Number(p[0]),Number(p[1])-1,dia);
+  const hoje=new Date(); hoje.setHours(0,0,0,0); d.setHours(0,0,0,0);
+  const diff=(d-hoje)/(86400000);
+  if(diff<0) return 'atrasado';
+  if(diff===0) return 'hoje';
+  if(diff<=3) return 'proximo';
+  return 'pendente';
+}
+
+function _getCronoEventos(mes){
+  const eventos = [];
+  DB.processosBP.forEach(proc=>{
+    if(!_shouldShowInMonth(proc,mes)) return;
+    if(_cronoFiltroArea && !proc.areas.includes(_cronoFiltroArea) && _cronoFiltroArea!=='Compartilhado') return;
+    if(_cronoFiltroResp && proc.responsavel!==_cronoFiltroResp) return;
+    if(_cronoFiltroProcesso && proc.id!==_cronoFiltroProcesso) return;
+    const inst = _getProcessoInstancia(proc.id, mes);
+    if(!inst) return;
+    proc.etapas.forEach((et,idx)=>{
+      const instEt = inst.etapas[idx]||{status:'pendente'};
+      const status = _getEtapaStatus(instEt, et.dia, mes);
+      if(_cronoFiltroStatus && status!==_cronoFiltroStatus) return;
+      eventos.push({proc,etapa:et,instEtapa:instEt,idx,inst,status,dia:et.dia});
+    });
+  });
+  eventos.sort((a,b)=>(a.dia||99)-(b.dia||99));
+  return eventos;
+}
+
+function _filtroRapidoFilter(eventos){
+  if(!_cronoFiltroRapido) return eventos;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const p=_cronoMes.split('-'); const y=Number(p[0]); const mo=Number(p[1])-1;
+  if(_cronoFiltroRapido==='hoje') return eventos.filter(e=>e.status==='hoje');
+  if(_cronoFiltroRapido==='semana'){
+    const dow=hoje.getDay(); const ini=new Date(hoje); ini.setDate(ini.getDate()-dow);
+    const fim=new Date(ini); fim.setDate(fim.getDate()+6);
+    return eventos.filter(e=>{
+      if(e.dia<=0) return false;
+      const d=new Date(y,mo,e.dia); return d>=ini&&d<=fim;
+    });
+  }
+  if(_cronoFiltroRapido==='7dias'){
+    return eventos.filter(e=>{
+      if(e.dia<=0) return false;
+      const d=new Date(y,mo,e.dia); const diff=(d-hoje)/86400000;
+      return diff>=0&&diff<=7;
+    });
+  }
+  if(_cronoFiltroRapido==='pendentes') return eventos.filter(e=>e.status==='pendente'||e.status==='hoje'||e.status==='proximo');
+  if(_cronoFiltroRapido==='atrasados') return eventos.filter(e=>e.status==='atrasado');
+  return eventos;
+}
+
+function _statusDot(st){
+  const c=CRONO_STATUS_COLORS[st]||'#94a3b8';
+  if(st==='concluido') return '<span style="color:'+c+';font-size:16px;">&#9745;</span>';
+  if(st==='atrasado') return '<span style="color:'+c+';font-size:14px;">&#9679;</span>';
+  if(st==='hoje') return '<span style="color:'+c+';font-size:14px;">&#9679;</span>';
+  if(st==='proximo') return '<span style="color:'+c+';font-size:14px;">&#9679;</span>';
+  return '<span style="color:#ccc;font-size:14px;">&#9675;</span>';
+}
+
+function _renderProcessoFlow(proc){
+  const etapas=proc.etapas.filter(e=>e.dia>0);
+  if(!etapas.length) return '';
+  let h='<div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:12px 0;">';
+  etapas.forEach((e,i)=>{
+    h+='<div style="text-align:center;min-width:80px;"><div style="font-size:11px;font-weight:700;color:var(--primary);text-transform:uppercase;">'+esc(e.nome.length>18?e.nome.substring(0,18)+'…':e.nome)+'</div><div style="font-size:22px;font-weight:800;color:#1B1B2F;margin:4px 0;">'+e.dia+'</div></div>';
+    if(i<etapas.length-1) h+='<div style="font-size:18px;color:#ccc;margin:0 4px;">→</div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+function _renderProcessoCard(proc){
+  const areas=proc.areas.join(' / ');
+  const prazoInicio=proc.etapas.filter(e=>e.dia>0).map(e=>e.dia).sort((a,b)=>a-b);
+  const inicio=prazoInicio.length?'Dia '+prazoInicio[0]:'—';
+  const fim=prazoInicio.length?'Dia '+prazoInicio[prazoInicio.length-1]:'—';
+  return '<div class="card" style="margin-bottom:12px;cursor:pointer;transition:box-shadow .2s;" onclick="_cronoDetalheProcessoId=\''+proc.id+'\';render();">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+      '<div><div style="font-weight:700;font-size:15px;color:#1B1B2F;">'+esc(proc.nome)+'</div>'+
+      '<div style="font-size:12px;color:#888;margin-top:4px;">'+esc(CRONO_FREQ[proc.frequencia]||proc.frequencia)+' · '+esc(areas)+'</div></div>'+
+      '<span class="badge '+(proc.ativo?'badge-green':'badge-gray')+'" style="flex-shrink:0;">'+(proc.ativo?'Ativo':'Inativo')+'</span>'+
+    '</div>'+
+    '<div style="display:flex;gap:16px;margin-top:10px;font-size:12px;color:#555;">'+
+      '<div><strong>Início:</strong> '+inicio+'</div>'+
+      '<div><strong>Prazo final:</strong> '+fim+'</div>'+
+      '<div><strong>Responsável:</strong> '+esc(proc.responsavel)+'</div>'+
+    '</div>'+
+    _renderProcessoFlow(proc)+
+    '<div style="margin-top:8px;"><button class="btn btn-outline btn-sm" style="width:auto;pointer-events:none;">Ver processo →</button></div>'+
+  '</div>';
+}
+
+function _renderHojeBlock(eventos){
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const hojeEvts=eventos.filter(e=>e.status==='hoje');
+  const atrasados=eventos.filter(e=>e.status==='atrasado');
+  const combined=[...atrasados,...hojeEvts];
+  if(!combined.length) return '<div class="card" style="margin-bottom:16px;border-left:4px solid #22c55e;"><div style="font-weight:700;font-size:14px;color:#22c55e;margin-bottom:4px;">📌 Hoje — '+fmtDate(hoje)+'</div><div style="font-size:13px;color:#888;">Nenhuma etapa pendente para hoje.</div></div>';
+  let h='<div class="card" style="margin-bottom:16px;border-left:4px solid #3b82f6;">';
+  h+='<div style="font-weight:700;font-size:14px;color:#1B1B2F;margin-bottom:10px;">📌 Hoje — '+fmtDate(hoje)+'</div>';
+  combined.forEach(e=>{
+    const cor=e.status==='atrasado'?'#ef4444':'#3b82f6';
+    const label=e.status==='atrasado'?'ATRASADO':'HOJE';
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;">';
+    h+='<span style="background:'+cor+';color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">'+label+'</span>';
+    h+='<div><div style="font-weight:600;font-size:13px;">'+esc(e.proc.nome)+'</div><div style="font-size:12px;color:#888;">'+esc(e.etapa.nome)+'</div></div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+function _renderProximosPrazos(eventos){
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const p=_cronoMes.split('-'); const y=Number(p[0]); const mo=Number(p[1])-1;
+  const proximos=eventos.filter(e=>e.dia>0&&e.status!=='concluido').sort((a,b)=>a.dia-b.dia).slice(0,12);
+  if(!proximos.length) return '';
+  let h='<div class="card" style="margin-bottom:16px;">';
+  h+='<div style="font-weight:700;font-size:14px;color:#1B1B2F;margin-bottom:10px;">⏰ Próximos prazos</div>';
+  let lastDay=0;
+  proximos.forEach(e=>{
+    if(e.dia!==lastDay){
+      h+='<div style="font-weight:700;font-size:12px;color:var(--primary);margin-top:8px;margin-bottom:4px;">'+String(e.dia).padStart(2,'0')+'/'+String(mo+1).padStart(2,'0')+'</div>';
+      lastDay=e.dia;
+    }
+    const cor=CRONO_STATUS_COLORS[e.status]||'#94a3b8';
+    h+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0 6px 12px;border-left:3px solid '+cor+';">';
+    h+=_statusDot(e.status);
+    h+='<div style="font-size:13px;"><strong>'+esc(e.proc.nome)+'</strong> — '+esc(e.etapa.nome)+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+function _renderCalendario(eventos){
+  const p=_cronoMes.split('-'); const y=Number(p[0]); const mo=Number(p[1])-1;
+  const days=_getDaysInMonth(y,mo);
+  const firstDow=new Date(y,mo,1).getDay();
+  const byDay={};
+  eventos.forEach(e=>{if(e.dia>0&&e.dia<=days){if(!byDay[e.dia])byDay[e.dia]=[];byDay[e.dia].push(e);}});
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const hojeDay=(hoje.getFullYear()===y&&hoje.getMonth()===mo)?hoje.getDate():0;
+  let h='<div class="card" style="margin-bottom:16px;overflow-x:auto;">';
+  h+='<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr>';
+  ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d=>h+='<th style="padding:8px 4px;font-size:11px;text-transform:uppercase;color:#888;text-align:center;border-bottom:1px solid #e5e7eb;">'+d+'</th>');
+  h+='</tr></thead><tbody><tr>';
+  for(let i=0;i<firstDow;i++) h+='<td style="padding:4px;border:1px solid #f0f0f0;height:80px;vertical-align:top;"></td>';
+  for(let d=1;d<=days;d++){
+    const isToday=d===hojeDay;
+    h+='<td style="padding:4px;border:1px solid #f0f0f0;height:80px;vertical-align:top;'+(isToday?'background:#EBF5FF;':'')+'font-size:11px;">';
+    h+='<div style="font-weight:'+(isToday?'800':'600')+';font-size:12px;color:'+(isToday?'var(--primary)':'#555')+';margin-bottom:2px;">'+d+'</div>';
+    if(byDay[d]){
+      byDay[d].slice(0,3).forEach(e=>{
+        const cor=CRONO_STATUS_COLORS[e.status]||'#94a3b8';
+        h+='<div style="background:'+cor+'22;color:'+cor+';font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid '+cor+';">'+esc(e.proc.nome.substring(0,12))+'</div>';
+      });
+      if(byDay[d].length>3) h+='<div style="font-size:9px;color:#888;">+'+(byDay[d].length-3)+' mais</div>';
+    }
+    h+='</td>';
+    if((firstDow+d)%7===0&&d<days) h+='</tr><tr>';
+  }
+  const remaining=7-((firstDow+days)%7);
+  if(remaining<7) for(let i=0;i<remaining;i++) h+='<td style="padding:4px;border:1px solid #f0f0f0;height:80px;"></td>';
+  h+='</tr></tbody></table></div>';
+  return h;
+}
+
+function _renderCronogramaTimeline(eventos){
+  if(!eventos.length) return '<div class="card" style="margin-bottom:16px;"><div class="empty-state">Nenhum evento no período selecionado.</div></div>';
+  const p=_cronoMes.split('-'); const mo=Number(p[1]);
+  let h='<div class="card" style="margin-bottom:16px;">';
+  let lastDay=0;
+  eventos.filter(e=>e.dia>0).forEach(e=>{
+    if(e.dia!==lastDay){
+      h+='<div style="display:flex;align-items:center;gap:10px;margin-top:12px;margin-bottom:6px;"><div style="width:44px;height:44px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;">'+e.dia+'</div><div style="font-weight:700;font-size:13px;color:#1B1B2F;">'+String(e.dia).padStart(2,'0')+'/'+String(mo).padStart(2,'0')+'</div><div style="flex:1;height:1px;background:#e5e7eb;"></div></div>';
+      lastDay=e.dia;
+    }
+    const cor=CRONO_STATUS_COLORS[e.status]||'#94a3b8';
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 12px 8px 56px;">';
+    h+=_statusDot(e.status);
+    h+='<div style="flex:1;"><div style="font-weight:600;font-size:13px;">'+esc(e.proc.nome)+'</div><div style="font-size:12px;color:#888;">'+esc(e.etapa.nome)+'</div></div>';
+    h+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:'+cor+'22;color:'+cor+';">'+esc(CRONO_STATUS_LABELS[e.status]||e.status)+'</span>';
+    h+='</div>';
+  });
+  // Etapas sem dia fixo
+  const semDia=eventos.filter(e=>e.dia<=0);
+  if(semDia.length){
+    h+='<div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;"><div style="font-weight:700;font-size:12px;color:#888;margin-bottom:6px;">Atividades recorrentes / sem data fixa</div>';
+    semDia.forEach(e=>{
+      h+='<div style="display:flex;align-items:center;gap:10px;padding:6px 12px;">'+_statusDot(e.status)+'<div style="font-size:13px;"><strong>'+esc(e.proc.nome)+'</strong> — '+esc(e.etapa.nome)+'</div></div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+function _renderProcessoDetalhe(proc){
+  const inst=_getProcessoInstancia(proc.id, _cronoMes);
+  let h='<div style="margin-bottom:12px;"><button class="btn btn-outline btn-sm" id="btnCronoBack" style="width:auto;">← Voltar</button></div>';
+  h+='<div class="card" style="margin-bottom:16px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">';
+  h+='<div><h2 style="margin:0 0 4px;font-size:18px;">'+esc(proc.nome)+'</h2>';
+  h+='<div style="font-size:13px;color:#888;">'+esc(CRONO_FREQ[proc.frequencia]||'')+' · '+esc(proc.areas.join(' / '))+' · Responsável: '+esc(proc.responsavel)+'</div></div>';
+  h+='<div style="display:flex;gap:6px;"><button class="btn btn-outline btn-sm crono-edit-proc" data-id="'+proc.id+'" style="width:auto;">'+ICONS.edit+' Editar</button><button class="btn btn-danger btn-sm crono-del-proc" data-id="'+proc.id+'" style="width:auto;">'+ICONS.trash+'</button></div>';
+  h+='</div>';
+  if(proc.descricao) h+='<p style="font-size:13px;color:#555;margin-bottom:12px;">'+esc(proc.descricao)+'</p>';
+  if(proc.alertas&&proc.alertas.length){
+    proc.alertas.forEach(a=>h+='<div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#92400e;"><strong>⚠️ Alerta:</strong> '+esc(a)+'</div>');
+  }
+  if(proc.observacoes) h+='<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#0369a1;">'+esc(proc.observacoes)+'</div>';
+  if(proc.participantes) h+='<div style="font-size:13px;margin-bottom:6px;"><strong>Participantes:</strong> '+esc(proc.participantes)+'</div>';
+  if(proc.preparacao) h+='<div style="font-size:13px;margin-bottom:6px;"><strong>Preparação:</strong> '+esc(proc.preparacao)+'</div>';
+  // Flow visualization
+  h+=_renderProcessoFlow(proc);
+  h+='</div>';
+  // Instance status for current month
+  h+='<div class="card" style="margin-bottom:16px;">';
+  h+='<div style="font-weight:700;font-size:14px;margin-bottom:12px;">'+esc(proc.nome)+' — '+_getCronoMesLabel()+'</div>';
+  if(inst){
+    inst.etapas.forEach((et,i)=>{
+      const procEt=proc.etapas[i]||{};
+      const st=_getEtapaStatus(et,procEt.dia||0,_cronoMes);
+      const cor=CRONO_STATUS_COLORS[st]||'#94a3b8';
+      h+='<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0;" class="crono-step-row">';
+      h+='<button class="crono-toggle-step btn btn-outline btn-sm" data-proc="'+proc.id+'" data-idx="'+i+'" style="width:32px;height:32px;padding:0;border-radius:50%;border-color:'+cor+';color:'+cor+';font-size:14px;">'+(et.status==='concluido'?'✓':'○')+'</button>';
+      h+='<div style="flex:1;"><div style="font-weight:600;font-size:13px;'+(et.status==='concluido'?'text-decoration:line-through;color:#aaa;':'')+'">'+esc(et.nome)+'</div>';
+      if(procEt.dia>0) h+='<div style="font-size:11px;color:#888;">Dia '+procEt.dia+'</div>';
+      if(procEt.descricao) h+='<div style="font-size:11px;color:#888;">'+esc(procEt.descricao)+'</div>';
+      h+='</div>';
+      h+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:'+cor+'22;color:'+cor+';">'+esc(CRONO_STATUS_LABELS[st]||st)+'</span>';
+      h+='</div>';
+    });
+    // Progress bar
+    const total=inst.etapas.length;
+    const done=inst.etapas.filter(e=>e.status==='concluido').length;
+    const pct=total>0?Math.round(done/total*100):0;
+    h+='<div style="margin-top:12px;display:flex;align-items:center;gap:10px;"><div style="flex:1;height:8px;background:#eef0f4;border-radius:6px;overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:var(--primary);border-radius:6px;transition:width .3s;"></div></div><span style="font-size:12px;font-weight:700;color:var(--primary);">'+pct+'%</span></div>';
+  }
+  h+='</div>';
+  // Links
+  h+='<div class="card" style="margin-bottom:16px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-weight:700;font-size:14px;">🔗 Links de apoio</div><button class="btn btn-outline btn-sm crono-add-link" data-id="'+proc.id+'" style="width:auto;">+ Link</button></div>';
+  if(proc.links&&proc.links.length){
+    proc.links.forEach((lk,i)=>{
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">';
+      h+=ICONS.link;
+      h+='<a href="'+esc(lk.url)+'" target="_blank" rel="noopener" style="flex:1;font-size:13px;color:var(--primary);text-decoration:none;">'+esc(lk.titulo||lk.url)+'</a>';
+      h+='<button class="btn btn-danger btn-sm crono-del-link" data-proc="'+proc.id+'" data-idx="'+i+'" style="width:auto;padding:4px 8px;">'+ICONS.trash+'</button>';
+      h+='</div>';
+    });
+  } else {
+    h+='<div style="font-size:13px;color:#aaa;">Nenhum link cadastrado.</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+function _renderProcessoForm(){
+  const ed=_cronoEditId?DB.processosBP.find(p=>p.id===_cronoEditId):null;
+  const bps=CONFIG.bps||[];
+  let h='<div class="card" style="margin-bottom:16px;border:2px solid var(--primary);">';
+  h+='<div style="font-weight:700;font-size:16px;margin-bottom:14px;">'+(ed?'Editar Processo':'Novo Processo')+'</div>';
+  h+='<div class="field-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">';
+  h+='<div class="field"><label>Nome *</label><input id="cpf_nome" class="input" value="'+esc(ed?ed.nome:'')+'"></div>';
+  h+='<div class="field"><label>Categoria</label><input id="cpf_cat" class="input" value="'+esc(ed?ed.categoria:'')+'"></div>';
+  h+='<div class="field" style="grid-column:1/-1;"><label>Descrição</label><textarea id="cpf_desc" class="input" rows="2">'+esc(ed?ed.descricao:'')+'</textarea></div>';
+  h+='<div class="field"><label>Frequência</label><select id="cpf_freq" class="input">';
+  Object.entries(CRONO_FREQ).forEach(([k,v])=>h+='<option value="'+k+'" '+(ed&&ed.frequencia===k?'selected':'')+'>'+v+'</option>');
+  h+='</select></div>';
+  h+='<div class="field"><label>Responsável</label><select id="cpf_resp" class="input"><option value="Compartilhado" '+(ed&&ed.responsavel==='Compartilhado'?'selected':'')+ '>Compartilhado</option>';
+  bps.forEach(bp=>h+='<option value="'+esc(bp.nome)+'" '+(ed&&ed.responsavel===bp.nome?'selected':'')+'>'+esc(bp.nome)+'</option>');
+  h+='</select></div>';
+  h+='<div class="field" style="grid-column:1/-1;"><label>Áreas</label><div style="display:flex;gap:10px;flex-wrap:wrap;">';
+  const selAreas=ed?ed.areas:['Contábil','Fiscal','Folha'];
+  CRONO_AREAS.forEach(a=>h+='<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" class="cpf_area" value="'+a+'" '+(selAreas.includes(a)?'checked':'')+'> '+a+'</label>');
+  h+='</div></div>';
+  h+='<div class="field" style="grid-column:1/-1;"><label>Observações</label><textarea id="cpf_obs" class="input" rows="2">'+esc(ed?ed.observacoes:'')+'</textarea></div>';
+  h+='<div class="field" style="grid-column:1/-1;"><label>Alertas (um por linha)</label><textarea id="cpf_alertas" class="input" rows="2">'+esc(ed&&ed.alertas?ed.alertas.join('\n'):'')+'</textarea></div>';
+  // Etapas
+  h+='<div class="field" style="grid-column:1/-1;"><label>Etapas</label><div id="cpf_etapas">';
+  const etapas=ed?ed.etapas:[{nome:'',dia:'',descricao:''}];
+  etapas.forEach((et,i)=>{
+    h+='<div class="cpf-etapa-row" style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">';
+    h+='<input class="input cpf_et_nome" placeholder="Nome da etapa" value="'+esc(et.nome)+'" style="flex:2;">';
+    h+='<input class="input cpf_et_dia" type="number" placeholder="Dia" value="'+(et.dia||'')+'" style="width:70px;">';
+    h+='<input class="input cpf_et_desc" placeholder="Descrição" value="'+esc(et.descricao||'')+'" style="flex:2;">';
+    h+='<button class="btn btn-danger btn-sm cpf-et-del" style="width:auto;padding:4px 8px;">×</button>';
+    h+='</div>';
+  });
+  h+='</div><button class="btn btn-outline btn-sm" id="cpf_add_etapa" style="width:auto;margin-top:4px;">+ Etapa</button></div>';
+  h+='</div>';
+  h+='<div style="display:flex;gap:8px;margin-top:14px;"><button class="btn btn-primary" id="cpf_salvar" style="width:auto;">Salvar</button><button class="btn btn-outline" id="cpf_cancelar" style="width:auto;">Cancelar</button></div>';
+  h+='</div>';
+  return h;
+}
+
+function _renderKPIs(eventos){
+  const total=DB.processosBP.filter(p=>p.ativo).length;
+  const atrasados=eventos.filter(e=>e.status==='atrasado').length;
+  const hoje=eventos.filter(e=>e.status==='hoje').length;
+  const concluidos=eventos.filter(e=>e.status==='concluido').length;
+  const pendentes=eventos.filter(e=>e.status==='pendente'||e.status==='proximo').length;
+  return '<div class="grid grid-4" style="margin-bottom:16px;">'+
+    '<div class="card kpi-card"><div class="kpi-value">'+total+'</div><div class="kpi-label">Processos ativos</div></div>'+
+    '<div class="card kpi-card" style="border-left:3px solid #ef4444;"><div class="kpi-value" style="color:#ef4444;">'+atrasados+'</div><div class="kpi-label">Etapas atrasadas</div></div>'+
+    '<div class="card kpi-card" style="border-left:3px solid #3b82f6;"><div class="kpi-value" style="color:#3b82f6;">'+hoje+'</div><div class="kpi-label">Para hoje</div></div>'+
+    '<div class="card kpi-card" style="border-left:3px solid #22c55e;"><div class="kpi-value" style="color:#22c55e;">'+concluidos+'</div><div class="kpi-label">Concluídas</div></div>'+
+  '</div>';
+}
+
+function renderCronogramaPage(){
+  _seedProcessosBP();
+  const eventos=_filtroRapidoFilter(_getCronoEventos(_cronoMes));
+  // If viewing a process detail
+  if(_cronoDetalheProcessoId){
+    const proc=DB.processosBP.find(p=>p.id===_cronoDetalheProcessoId);
+    if(proc) return _renderProcessoDetalhe(proc);
+    _cronoDetalheProcessoId=null;
+  }
+  let h='';
+  // Filters bar
+  h+='<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">';
+  // Month nav
+  h+='<button class="btn btn-outline btn-sm" id="cronoPrevMes" style="width:auto;padding:6px 10px;">←</button>';
+  h+='<span style="font-weight:700;font-size:14px;min-width:140px;text-align:center;">'+_getCronoMesLabel()+'</span>';
+  h+='<button class="btn btn-outline btn-sm" id="cronoNextMes" style="width:auto;padding:6px 10px;">→</button>';
+  h+='<div style="flex:1;"></div>';
+  h+='<button class="btn btn-primary btn-sm" id="cronoNovoProc" style="width:auto;">+ Novo processo</button>';
+  h+='</div>';
+  // Filter dropdowns
+  h+='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">';
+  h+='<select class="input crono-filter" data-filter="area" style="width:auto;min-width:120px;font-size:12px;"><option value="">Todas as áreas</option>';
+  CRONO_AREAS.forEach(a=>h+='<option value="'+a+'" '+(_cronoFiltroArea===a?'selected':'')+'>'+a+'</option>');
+  h+='</select>';
+  h+='<select class="input crono-filter" data-filter="resp" style="width:auto;min-width:130px;font-size:12px;"><option value="">Todos responsáveis</option><option value="Compartilhado" '+(_cronoFiltroResp==='Compartilhado'?'selected':'')+'>Compartilhado</option>';
+  (CONFIG.bps||[]).forEach(bp=>h+='<option value="'+esc(bp.nome)+'" '+(_cronoFiltroResp===bp.nome?'selected':'')+'>'+esc(bp.nome)+'</option>');
+  h+='</select>';
+  h+='<select class="input crono-filter" data-filter="processo" style="width:auto;min-width:140px;font-size:12px;"><option value="">Todos processos</option>';
+  DB.processosBP.filter(p=>p.ativo).forEach(p=>h+='<option value="'+p.id+'" '+(_cronoFiltroProcesso===p.id?'selected':'')+'>'+esc(p.nome)+'</option>');
+  h+='</select>';
+  h+='<select class="input crono-filter" data-filter="status" style="width:auto;min-width:120px;font-size:12px;"><option value="">Todos status</option>';
+  Object.entries(CRONO_STATUS_LABELS).forEach(([k,v])=>h+='<option value="'+k+'" '+(_cronoFiltroStatus===k?'selected':'')+'>'+v+'</option>');
+  h+='</select>';
+  h+='</div>';
+  // Quick filters
+  h+='<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">';
+  const rapidos=[{k:'',l:'Todos'},{k:'hoje',l:'Hoje'},{k:'semana',l:'Esta semana'},{k:'7dias',l:'Próximos 7 dias'},{k:'pendentes',l:'Pendentes'},{k:'atrasados',l:'Atrasados'}];
+  rapidos.forEach(r=>h+='<button class="btn btn-sm crono-rapido '+(_cronoFiltroRapido===r.k?'btn-primary':'btn-outline')+'" data-rapido="'+r.k+'" style="width:auto;">'+r.l+'</button>');
+  h+='</div>';
+  // Sub-nav tabs
+  h+='<div style="display:flex;gap:0;margin-bottom:16px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">';
+  [{k:'geral',l:'📊 Visão geral'},{k:'cronograma',l:'📅 Cronograma'},{k:'processos',l:'🔄 Processos'},{k:'pendencias',l:'⚠️ Pendências'}].forEach(t=>{
+    h+='<button class="btn crono-tab" data-tab="'+t.k+'" style="flex:1;border:none;border-radius:0;font-size:13px;padding:10px;'+(_cronoView===t.k?'background:var(--primary);color:#fff;font-weight:700;':'background:#fff;color:#555;')+'">'+t.l+'</button>';
+  });
+  h+='</div>';
+  // Form
+  if(_cronoFormOpen) h+=_renderProcessoForm();
+  // Content
+  if(_cronoView==='geral'){
+    h+=_renderKPIs(eventos);
+    h+=_renderHojeBlock(eventos);
+    h+=_renderProximosPrazos(eventos);
+  } else if(_cronoView==='cronograma'){
+    h+=_renderCalendario(eventos);
+    h+='<div style="font-weight:700;font-size:14px;margin-bottom:10px;">📋 Timeline</div>';
+    h+=_renderCronogramaTimeline(eventos);
+  } else if(_cronoView==='processos'){
+    h+='<div style="font-weight:700;font-size:14px;margin-bottom:12px;">🔄 Processos BP ('+DB.processosBP.filter(p=>p.ativo).length+')</div>';
+    DB.processosBP.filter(p=>p.ativo).forEach(p=>h+=_renderProcessoCard(p));
+  } else if(_cronoView==='pendencias'){
+    const atrasados=eventos.filter(e=>e.status==='atrasado');
+    const proximos=eventos.filter(e=>e.status==='proximo'||e.status==='hoje');
+    if(!atrasados.length&&!proximos.length) h+='<div class="card"><div class="empty-state">Nenhuma pendência encontrada.</div></div>';
+    if(atrasados.length){
+      h+='<div class="card" style="margin-bottom:16px;border-left:4px solid #ef4444;"><div style="font-weight:700;font-size:14px;color:#ef4444;margin-bottom:10px;">🔴 Atrasados ('+atrasados.length+')</div>';
+      atrasados.forEach(e=>{
+        h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;">';
+        h+='<span style="font-weight:700;font-size:13px;color:#ef4444;width:40px;">Dia '+e.dia+'</span>';
+        h+='<div><div style="font-weight:600;font-size:13px;">'+esc(e.proc.nome)+'</div><div style="font-size:12px;color:#888;">'+esc(e.etapa.nome)+'</div></div>';
+        h+='<button class="btn btn-outline btn-sm crono-toggle-step" data-proc="'+e.proc.id+'" data-idx="'+e.idx+'" style="width:auto;margin-left:auto;">Concluir</button>';
+        h+='</div>';
+      });
+      h+='</div>';
+    }
+    if(proximos.length){
+      h+='<div class="card" style="margin-bottom:16px;border-left:4px solid #f59e0b;"><div style="font-weight:700;font-size:14px;color:#f59e0b;margin-bottom:10px;">🟡 Próximos / Hoje ('+proximos.length+')</div>';
+      proximos.forEach(e=>{
+        const cor=e.status==='hoje'?'#3b82f6':'#f59e0b';
+        h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;">';
+        h+='<span style="font-weight:700;font-size:13px;color:'+cor+';width:40px;">'+(e.dia>0?'Dia '+e.dia:'—')+'</span>';
+        h+='<div><div style="font-weight:600;font-size:13px;">'+esc(e.proc.nome)+'</div><div style="font-size:12px;color:#888;">'+esc(e.etapa.nome)+'</div></div>';
+        h+='<button class="btn btn-outline btn-sm crono-toggle-step" data-proc="'+e.proc.id+'" data-idx="'+e.idx+'" style="width:auto;margin-left:auto;">Concluir</button>';
+        h+='</div>';
+      });
+      h+='</div>';
+    }
+  }
+  return h;
+}
+
+function bindCronogramaPage(){
+  document.querySelectorAll('.crono-tab').forEach(btn=>{
+    btn.addEventListener('click',()=>{ _cronoView=btn.getAttribute('data-tab'); render(); });
+  });
+  document.querySelectorAll('.crono-filter').forEach(sel=>{
+    sel.addEventListener('change',()=>{
+      const f=sel.getAttribute('data-filter');
+      if(f==='area') _cronoFiltroArea=sel.value;
+      if(f==='resp') _cronoFiltroResp=sel.value;
+      if(f==='processo') _cronoFiltroProcesso=sel.value;
+      if(f==='status') _cronoFiltroStatus=sel.value;
+      render();
+    });
+  });
+  document.querySelectorAll('.crono-rapido').forEach(btn=>{
+    btn.addEventListener('click',()=>{ _cronoFiltroRapido=btn.getAttribute('data-rapido'); render(); });
+  });
+  const prevBtn=document.getElementById('cronoPrevMes');
+  const nextBtn=document.getElementById('cronoNextMes');
+  if(prevBtn) prevBtn.addEventListener('click',()=>{ const d=_getCronoMesDate(); d.setMonth(d.getMonth()-1); _cronoMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); render(); });
+  if(nextBtn) nextBtn.addEventListener('click',()=>{ const d=_getCronoMesDate(); d.setMonth(d.getMonth()+1); _cronoMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); render(); });
+  const novoBtn=document.getElementById('cronoNovoProc');
+  if(novoBtn) novoBtn.addEventListener('click',()=>{ _cronoFormOpen=true; _cronoEditId=null; render(); });
+  // Back from detail
+  const backBtn=document.getElementById('btnCronoBack');
+  if(backBtn) backBtn.addEventListener('click',()=>{ _cronoDetalheProcessoId=null; render(); });
+  // Toggle step status
+  document.querySelectorAll('.crono-toggle-step').forEach(btn=>{
+    btn.addEventListener('click',(ev)=>{
+      ev.stopPropagation();
+      const procId=btn.getAttribute('data-proc');
+      const idx=Number(btn.getAttribute('data-idx'));
+      const inst=DB.processosInstancias.find(i=>i.processoId===procId && i.mes===_cronoMes);
+      if(!inst||!inst.etapas[idx]) return;
+      inst.etapas[idx].status=inst.etapas[idx].status==='concluido'?'pendente':'concluido';
+      inst.etapas[idx].dataConclusao=inst.etapas[idx].status==='concluido'?new Date().toISOString():null;
+      persist('processosInstancias');
+      render();
+    });
+  });
+  // Edit process
+  document.querySelectorAll('.crono-edit-proc').forEach(btn=>{
+    btn.addEventListener('click',()=>{ _cronoEditId=btn.getAttribute('data-id'); _cronoFormOpen=true; _cronoDetalheProcessoId=null; render(); });
+  });
+  // Delete process
+  document.querySelectorAll('.crono-del-proc').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      if(!confirm('Excluir este processo?')) return;
+      const id=btn.getAttribute('data-id');
+      DB.processosBP=DB.processosBP.filter(p=>p.id!==id);
+      DB.processosInstancias=DB.processosInstancias.filter(i=>i.processoId!==id);
+      persist('processosBP'); persist('processosInstancias');
+      _cronoDetalheProcessoId=null; render();
+    });
+  });
+  // Add link
+  document.querySelectorAll('.crono-add-link').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const procId=btn.getAttribute('data-id');
+      const titulo=prompt('Título do link:');
+      if(!titulo) return;
+      const url=prompt('URL:');
+      if(!url) return;
+      const proc=DB.processosBP.find(p=>p.id===procId);
+      if(!proc) return;
+      if(!proc.links) proc.links=[];
+      proc.links.push({titulo,url});
+      persist('processosBP'); render();
+    });
+  });
+  // Delete link
+  document.querySelectorAll('.crono-del-link').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const procId=btn.getAttribute('data-proc');
+      const idx=Number(btn.getAttribute('data-idx'));
+      const proc=DB.processosBP.find(p=>p.id===procId);
+      if(!proc||!proc.links) return;
+      proc.links.splice(idx,1);
+      persist('processosBP'); render();
+    });
+  });
+  // Form: add etapa row
+  const addEtBtn=document.getElementById('cpf_add_etapa');
+  if(addEtBtn) addEtBtn.addEventListener('click',()=>{
+    const container=document.getElementById('cpf_etapas');
+    const row=document.createElement('div');
+    row.className='cpf-etapa-row';
+    row.style.cssText='display:flex;gap:8px;margin-bottom:6px;align-items:center;';
+    row.innerHTML='<input class="input cpf_et_nome" placeholder="Nome da etapa" style="flex:2;"><input class="input cpf_et_dia" type="number" placeholder="Dia" style="width:70px;"><input class="input cpf_et_desc" placeholder="Descrição" style="flex:2;"><button class="btn btn-danger btn-sm cpf-et-del" style="width:auto;padding:4px 8px;">×</button>';
+    container.appendChild(row);
+    row.querySelector('.cpf-et-del').addEventListener('click',()=>row.remove());
+  });
+  // Form: delete etapa
+  document.querySelectorAll('.cpf-et-del').forEach(btn=>{
+    btn.addEventListener('click',()=>btn.closest('.cpf-etapa-row').remove());
+  });
+  // Form: cancel
+  const cancelBtn=document.getElementById('cpf_cancelar');
+  if(cancelBtn) cancelBtn.addEventListener('click',()=>{ _cronoFormOpen=false; _cronoEditId=null; render(); });
+  // Form: save
+  const saveBtn=document.getElementById('cpf_salvar');
+  if(saveBtn) saveBtn.addEventListener('click',()=>{
+    const nome=(document.getElementById('cpf_nome')||{}).value||'';
+    if(!nome.trim()){ alert('Informe o nome do processo.'); return; }
+    const desc=(document.getElementById('cpf_desc')||{}).value||'';
+    const cat=(document.getElementById('cpf_cat')||{}).value||'';
+    const freq=(document.getElementById('cpf_freq')||{}).value||'mensal';
+    const resp=(document.getElementById('cpf_resp')||{}).value||'Compartilhado';
+    const obs=(document.getElementById('cpf_obs')||{}).value||'';
+    const alertasTxt=(document.getElementById('cpf_alertas')||{}).value||'';
+    const alertas=alertasTxt.split('\n').map(a=>a.trim()).filter(Boolean);
+    const areas=[]; document.querySelectorAll('.cpf_area:checked').forEach(cb=>areas.push(cb.value));
+    if(!areas.length) areas.push('Compartilhado');
+    const etapas=[];
+    document.querySelectorAll('.cpf-etapa-row').forEach(row=>{
+      const en=row.querySelector('.cpf_et_nome').value.trim();
+      const ed=Number(row.querySelector('.cpf_et_dia').value)||0;
+      const edc=row.querySelector('.cpf_et_desc').value.trim();
+      if(en) etapas.push({nome:en,dia:ed,descricao:edc});
+    });
+    const bp=currentBP();
+    if(_cronoEditId){
+      const proc=DB.processosBP.find(p=>p.id===_cronoEditId);
+      if(proc){
+        proc.nome=nome; proc.descricao=desc; proc.categoria=cat; proc.frequencia=freq;
+        proc.responsavel=resp; proc.observacoes=obs; proc.alertas=alertas; proc.areas=areas; proc.etapas=etapas;
+      }
+    } else {
+      DB.processosBP.push({id:uid(),nome,descricao:desc,categoria:cat,areas,responsavel:resp,frequencia:freq,etapas,alertas,observacoes:obs,links:[],ativo:true,bpId:bp?bp.id:null});
+    }
+    persist('processosBP');
+    _cronoFormOpen=false; _cronoEditId=null; render();
   });
 }
 
