@@ -11474,91 +11474,53 @@ let _cronoFormOpen = false;
 let _cronoEditId = null;
 
 function _seedProcessosBP(){
-  if(DB.processosBP.length>0) return;
-  const procs = [
-    {id:uid(),nome:'Admissões',descricao:'Solicitações de admissão devem ser realizadas até o dia 25 para processamento.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Prazo para solicitações de admissão',dia:25,descricao:'Solicitações devem ser enviadas até esta data.'},{nome:'Onboarding',dia:0,descricao:'Toda terça-feira pela manhã.',recorrenciaSemanal:'terça'}],alertas:[],observacoes:'O onboarding acontece toda terça-feira pela manhã.',links:[],ativo:true},
-    {id:uid(),nome:'Promoções e Efetivações',descricao:'Processo mensal de solicitação, validação e aplicação de promoções e efetivações.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Recebimento das solicitações',dia:10,descricao:'Solicitações para aplicação no mês seguinte.'},{nome:'Envio aos Heads e Sócios',dia:11,descricao:'Para validação.'},{nome:'Retorno Heads e Sócios',dia:15,descricao:''},{nome:'Envio ao DP',dia:20,descricao:''},{nome:'Retorno aos gestores solicitantes',dia:20,descricao:''}],alertas:[],observacoes:'',links:[],ativo:true},
-    {id:uid(),nome:'Transição CLT → PJ',descricao:'Processo de transição de regime CLT para PJ.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Recebimento da solicitação',dia:10,descricao:'A solicitação deve ser feita até o dia 10 para cumprimento do aviso no mês seguinte.'},{nome:'Envio aos Heads e Sócios',dia:11,descricao:''},{nome:'Retorno da validação',dia:15,descricao:''},{nome:'Envio ao DP',dia:20,descricao:''},{nome:'Retorno aos gestores',dia:20,descricao:''},{nome:'Vigência do contrato PJ',dia:0,descricao:'Data definida caso a caso.'}],alertas:['Antes da transição é necessário zerar banco de horas e férias.'],observacoes:'A solicitação deve ser feita até o dia 10 para cumprimento do aviso no mês seguinte.',links:[],ativo:true},
-    {id:uid(),nome:'Desligamentos Voluntários',descricao:'Processo completo para desligamentos voluntários (pedido de demissão). O colaborador comunica o líder e envia e-mail ao RH informando interesse em sair e último dia de trabalho.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
-      {nome:'Colaborador comunica líder e envia e-mail',dia:0,descricao:'Colaborador deve obrigatoriamente enviar e-mail para rh.planning@planning.com.br comunicando o interesse em sair e informando o último dia de trabalho.'},
-      {nome:'DP interno responde com último dia',dia:0,descricao:'O Departamento Pessoal interno responde o e-mail confirmando o último dia de trabalho do colaborador.'},
-      {nome:'BP registra na planilha de controle',dia:0,descricao:'BP acessa a planilha de controle de desligamentos, insere o nome completo do colaborador (a planilha puxa cargo, equipe e data de admissão) e registra a data do último dia de trabalho.'},
-      {nome:'BP envia e-mail de formalização',dia:0,descricao:'No último dia de trabalho, BP envia e-mail de formalização para rh.planning@planning.com.br e equipe.ti@planning.com.br com o líder em cópia.'},
-      {nome:'BP exclui da Qulture.Rocks',dia:0,descricao:'Após envio do e-mail, excluir o colaborador da plataforma Qulture.Rocks.'},
-      {nome:'BP marca "Ok" na planilha',dia:0,descricao:'Marcar "Ok" nas colunas de e-mail enviado e exclusão da Qulture na planilha de controle de desligamentos.'}
-    ],alertas:['O colaborador DEVE enviar e-mail para rh.planning@planning.com.br no mesmo momento em que comunica o líder.','O e-mail de formalização deve ser enviado no último dia de trabalho.'],observacoes:'',links:[],
-    msgLider:'Olá {nome},\n\nInformamos que o colaborador comunicou interesse em se desligar da empresa.\n\nPróximos passos:\n1. Confirmar o último dia de trabalho\n2. Aguardar retorno do DP interno\n3. No último dia, a BP fará o envio do e-mail de formalização\n\nQualquer dúvida, estamos à disposição.',
-    msgColab:'Olá {nome},\n\nRecebemos sua comunicação sobre o desligamento.\n\nPara formalizar, pedimos que envie um e-mail para rh.planning@planning.com.br informando:\n- Seu interesse em sair da empresa\n- Seu último dia de trabalho\n\nEsse envio é obrigatório para dar início aos trâmites.',
-    msgFormal:'{Gente e Gestão Planning} Encerramento de Contrato - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de desligamento do colaborador {nome}, da equipe do {lider}.\n\nTipo de desligamento: Voluntário\nÚltimo dia de trabalho: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do colaborador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual, rescisão, exclusão dos benefícios, CEFIS e demais procedimentos necessários;\n· @RH | Planning: excluir o colaborador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do colaborador e realizar a entrega em mãos à equipe de TI.',
-    ativo:true},
-    {id:uid(),nome:'Desligamentos Involuntários',descricao:'Processo completo para desligamentos involuntários (decisão da empresa). Devem ocorrer até o dia 20 de cada mês para não atrapalhar o fechamento da folha. Exige programação prévia de ao menos 1 dia útil de antecedência.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
-      {nome:'Líder procura BP sobre interesse em desligar',dia:0,descricao:'O líder deve procurar a BP para informar sobre o interesse em desligar o colaborador.'},
-      {nome:'BP avalia remanejamento',dia:0,descricao:'A BP deve avaliar se faz sentido fazer o remanejamento do colaborador para outro gestor antes de seguir com o desligamento.'},
-      {nome:'Verificar banco de horas e férias',dia:0,descricao:'Verificar se há banco de horas (programar para zerar) ou férias a gozar (é necessário gozá-las antes do desligamento).'},
-      {nome:'Gestor abre solicitação de desligamento',dia:0,descricao:'O gestor deve abrir a solicitação de desligamento pelo formulário. O desligamento deve ser programado com ao menos 1 dia útil de antecedência.'},
-      {nome:'Comunicado presencial ao colaborador',dia:0,descricao:'O desligamento deve ser comunicado ao colaborador preferencialmente de forma presencial, na parte da manhã, com a presença obrigatória da BP.'},
-      {nome:'BP envia e-mail de formalização',dia:0,descricao:'Após comunicado, BP envia e-mail para rh.planning@planning.com.br e equipe.ti@planning.com.br com o líder em cópia.'},
-      {nome:'BP exclui da Qulture.Rocks',dia:0,descricao:'Após envio do e-mail, excluir o colaborador da plataforma Qulture.Rocks.'},
-      {nome:'BP registra na planilha e marca "Ok"',dia:20,descricao:'Registrar na planilha de controle de desligamentos e marcar "Ok" nas colunas de e-mail enviado e exclusão da Qulture.'}
-    ],alertas:['Desligamentos involuntários devem ocorrer até o dia 20 de cada mês para não atrapalhar o fechamento da folha.','O desligamento deve ser programado com ao menos 1 dia útil de antecedência.','Verificar banco de horas e férias ANTES de abrir a solicitação.','A presença da BP no comunicado ao colaborador é obrigatória.'],observacoes:'Caso o desligamento esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.',links:[],
-    msgLider:'Olá {nome},\n\nSobre o desligamento que conversamos:\n\nAntes de seguir, precisamos verificar:\n1. Possibilidade de remanejamento do colaborador\n2. Saldo de banco de horas (precisa zerar)\n3. Férias pendentes (precisa gozar)\n\nApós essas verificações, você deve abrir a solicitação de desligamento pelo formulário com ao menos 1 dia útil de antecedência.\n\nO comunicado ao colaborador deve ser feito presencialmente, de manhã, e eu (BP) estarei presente obrigatoriamente.',
-    msgColab:'',
-    msgFormal:'{Gente e Gestão Planning} Encerramento de Contrato - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de desligamento do colaborador {nome}, da equipe do {lider}.\n\nTipo de desligamento: Involuntário\nÚltimo dia de trabalho: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do colaborador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual, rescisão, exclusão dos benefícios, CEFIS e demais procedimentos necessários;\n· @RH | Planning: excluir o colaborador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do colaborador e realizar a entrega em mãos à equipe de TI.',
-    ativo:true},
-    {id:uid(),nome:'Reunião com Heads',descricao:'Apresentação dos resultados das áreas.',categoria:'Reunião',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Preparação do material',dia:0,descricao:'Consolidar indicadores e relatórios.'},{nome:'Reunião com Heads',dia:0,descricao:'Apresentação dos resultados.'}],alertas:[],observacoes:'',links:[],participantes:'Heads e Sócios',preparacao:'Consolidar dashboard, indicadores de headcount, turnover, eNPS, promoções e desligamentos.',ativo:true},
-    {id:uid(),nome:'Reunião com Gerentes',descricao:'Apresentação do Termômetro.',categoria:'Reunião',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'bimestral',etapas:[{nome:'Preparação do Termômetro',dia:0,descricao:''},{nome:'Reunião com Gerentes',dia:0,descricao:'Apresentação do Termômetro.'}],alertas:[],observacoes:'',links:[],participantes:'Gerentes das áreas',preparacao:'Preparar apresentação do Termômetro.',ativo:true},
-    {id:uid(),nome:'Imersão de Área',descricao:'Momento de alinhamento estratégico com o time da área.',categoria:'Estratégico',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Planejamento da pauta',dia:0,descricao:''},{nome:'Imersão',dia:0,descricao:'Alinhamento estratégico com o time.'}],alertas:[],observacoes:'',links:[],campos:{area:'',data:'',pauta:'',responsavel:'',pontos:'',encaminhamentos:''},ativo:true}
-  ];
-  DB.processosBP = procs;
-  persist('processosBP');
-}
-
-// Migration: update existing desligamentos processes with full POP details
-function _migrateDesligamentosPOP(){
-  // Check if migration already done (voluntary process exists with etapas > 1)
-  const volExist = DB.processosBP.find(p=> normalizeStr(p.nome).includes('voluntar') && p.etapas && p.etapas.length > 1);
-  if(volExist) return;
-  // Update existing involuntário if it only has 1 etapa (old seed)
-  const invIdx = DB.processosBP.findIndex(p=> normalizeStr(p.nome).includes('involuntar') && p.etapas && p.etapas.length <= 1);
-  if(invIdx >= 0){
-    const proc = DB.processosBP[invIdx];
-    proc.descricao = 'Processo completo para desligamentos involuntários (decisão da empresa). Devem ocorrer até o dia 20 de cada mês para não atrapalhar o fechamento da folha. Exige programação prévia de ao menos 1 dia útil de antecedência.';
-    proc.etapas = [
-      {nome:'Líder procura BP sobre interesse em desligar',dia:0,descricao:'O líder deve procurar a BP para informar sobre o interesse em desligar o colaborador.'},
-      {nome:'BP avalia remanejamento',dia:0,descricao:'A BP deve avaliar se faz sentido fazer o remanejamento do colaborador para outro gestor antes de seguir com o desligamento.'},
-      {nome:'Verificar banco de horas e férias',dia:0,descricao:'Verificar se há banco de horas (programar para zerar) ou férias a gozar (é necessário gozá-las antes do desligamento).'},
-      {nome:'Gestor abre solicitação de desligamento',dia:0,descricao:'O gestor deve abrir a solicitação de desligamento pelo formulário. O desligamento deve ser programado com ao menos 1 dia útil de antecedência.'},
-      {nome:'Comunicado presencial ao colaborador',dia:0,descricao:'O desligamento deve ser comunicado ao colaborador preferencialmente de forma presencial, na parte da manhã, com a presença obrigatória da BP.'},
-      {nome:'BP envia e-mail de formalização',dia:0,descricao:'Após comunicado, BP envia e-mail para rh.planning@planning.com.br e equipe.ti@planning.com.br com o líder em cópia.'},
-      {nome:'BP exclui da Qulture.Rocks',dia:0,descricao:'Após envio do e-mail, excluir o colaborador da plataforma Qulture.Rocks.'},
-      {nome:'BP registra na planilha e marca "Ok"',dia:20,descricao:'Registrar na planilha de controle de desligamentos e marcar "Ok" nas colunas de e-mail enviado e exclusão da Qulture.'}
-    ];
-    proc.alertas = ['Desligamentos involuntários devem ocorrer até o dia 20 de cada mês para não atrapalhar o fechamento da folha.','O desligamento deve ser programado com ao menos 1 dia útil de antecedência.','Verificar banco de horas e férias ANTES de abrir a solicitação.','A presença da BP no comunicado ao colaborador é obrigatória.'];
-    proc.observacoes = 'Caso o desligamento esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.';
-    proc.msgLider = 'Olá {nome},\n\nSobre o desligamento que conversamos:\n\nAntes de seguir, precisamos verificar:\n1. Possibilidade de remanejamento do colaborador\n2. Saldo de banco de horas (precisa zerar)\n3. Férias pendentes (precisa gozar)\n\nApós essas verificações, você deve abrir a solicitação de desligamento pelo formulário com ao menos 1 dia útil de antecedência.\n\nO comunicado ao colaborador deve ser feito presencialmente, de manhã, e eu (BP) estarei presente obrigatoriamente.';
-    proc.msgColab = '';
-    proc.msgFormal = '{Gente e Gestão Planning} Encerramento de Contrato - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de desligamento do colaborador {nome}, da equipe do {lider}.\n\nTipo de desligamento: Involuntário\nÚltimo dia de trabalho: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do colaborador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual, rescisão, exclusão dos benefícios, CEFIS e demais procedimentos necessários;\n· @RH | Planning: excluir o colaborador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do colaborador e realizar a entrega em mãos à equipe de TI.';
-  }
-  // Add voluntary if not present
-  const volCheck = DB.processosBP.find(p=> normalizeStr(p.nome).includes('voluntar'));
-  if(!volCheck){
-    DB.processosBP.push({
-      id:uid(),nome:'Desligamentos Voluntários',descricao:'Processo completo para desligamentos voluntários (pedido de demissão). O colaborador comunica o líder e envia e-mail ao RH informando interesse em sair e último dia de trabalho.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
-        {nome:'Colaborador comunica líder e envia e-mail',dia:0,descricao:'Colaborador deve obrigatoriamente enviar e-mail para rh.planning@planning.com.br comunicando o interesse em sair e informando o último dia de trabalho.'},
-        {nome:'DP interno responde com último dia',dia:0,descricao:'O Departamento Pessoal interno responde o e-mail confirmando o último dia de trabalho do colaborador.'},
-        {nome:'BP registra na planilha de controle',dia:0,descricao:'BP acessa a planilha de controle de desligamentos, insere o nome completo do colaborador (a planilha puxa cargo, equipe e data de admissão) e registra a data do último dia de trabalho.'},
-        {nome:'BP envia e-mail de formalização',dia:0,descricao:'No último dia de trabalho, BP envia e-mail de formalização para rh.planning@planning.com.br e equipe.ti@planning.com.br com o líder em cópia.'},
-        {nome:'BP exclui da Qulture.Rocks',dia:0,descricao:'Após envio do e-mail, excluir o colaborador da plataforma Qulture.Rocks.'},
-        {nome:'BP marca "Ok" na planilha',dia:0,descricao:'Marcar "Ok" nas colunas de e-mail enviado e exclusão da Qulture na planilha de controle de desligamentos.'}
-      ],alertas:['O colaborador DEVE enviar e-mail para rh.planning@planning.com.br no mesmo momento em que comunica o líder.','O e-mail de formalização deve ser enviado no último dia de trabalho.'],observacoes:'',links:[],
+  // Limpar processos antigos e incluir apenas os definidos manualmente (migração v3)
+  if(!localStorage.getItem('_pop_wiped_v3')){
+    DB.processosBP = [
+      {id:uid(),nome:'Desligamentos Voluntários',descricao:'Processo completo para desligamentos voluntários (pedido de demissão). O colaborador comunica o líder e envia e-mail ao RH informando interesse em sair e último dia de trabalho.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
+        {nome:'Colaborador comunica líder e envia e-mail ao RH',dia:0,descricao:'O colaborador comunica o líder sobre o desligamento e, obrigatoriamente no mesmo momento, envia e-mail para rh.planning@planning.com.br comunicando o interesse em sair da empresa e informando o último dia de trabalho.'},
+        {nome:'DP interno responde com último dia de trabalho',dia:0,descricao:'O Departamento Pessoal interno responde o e-mail confirmando o último dia de trabalho do colaborador.'},
+        {nome:'BP registra na planilha de controle',dia:0,descricao:'A BP acessa a planilha de controle de desligamentos e insere o nome completo do colaborador (a planilha puxa automaticamente cargo, equipe e data de admissão). A BP registra a data do último dia de trabalho.'},
+        {nome:'BP envia e-mail de formalização',dia:0,descricao:'No último dia de trabalho, a BP envia o e-mail de formalização para rh.planning@planning.com.br e equipe.ti@planning.com.br com o líder em cópia.'},
+        {nome:'BP exclui da Qulture.Rocks',dia:0,descricao:'Após o envio do e-mail, a BP exclui o colaborador da plataforma Qulture.Rocks.'},
+        {nome:'BP marca "Ok" na planilha de controle',dia:0,descricao:'Após enviar o e-mail e excluir da Qulture, a BP marca "Ok" nas colunas correspondentes na planilha de controle de desligamentos.'}
+      ],alertas:[
+        'O colaborador DEVE enviar e-mail para rh.planning@planning.com.br no mesmo momento em que comunica o líder.',
+        'O e-mail de formalização deve ser enviado no último dia de trabalho do colaborador.'
+      ],observacoes:'',links:[],
       msgLider:'Olá {nome},\n\nInformamos que o colaborador comunicou interesse em se desligar da empresa.\n\nPróximos passos:\n1. Confirmar o último dia de trabalho\n2. Aguardar retorno do DP interno\n3. No último dia, a BP fará o envio do e-mail de formalização\n\nQualquer dúvida, estamos à disposição.',
       msgColab:'Olá {nome},\n\nRecebemos sua comunicação sobre o desligamento.\n\nPara formalizar, pedimos que envie um e-mail para rh.planning@planning.com.br informando:\n- Seu interesse em sair da empresa\n- Seu último dia de trabalho\n\nEsse envio é obrigatório para dar início aos trâmites.',
       msgFormal:'{Gente e Gestão Planning} Encerramento de Contrato - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de desligamento do colaborador {nome}, da equipe do {lider}.\n\nTipo de desligamento: Voluntário\nÚltimo dia de trabalho: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do colaborador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual, rescisão, exclusão dos benefícios, CEFIS e demais procedimentos necessários;\n· @RH | Planning: excluir o colaborador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do colaborador e realizar a entrega em mãos à equipe de TI.',
-      ativo:true
-    });
+      ativo:true},
+      {id:uid(),nome:'Desligamentos Involuntários',descricao:'Processo completo para desligamentos involuntários (decisão da empresa). Devem ocorrer até o dia 20 de cada mês para não atrapalhar o fechamento da folha. O desligamento deve ser programado com ao menos 1 dia útil de antecedência.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
+        {nome:'Líder procura BP sobre interesse em desligar',dia:0,descricao:'O líder deve procurar a BP para informar sobre o interesse em desligar o colaborador.'},
+        {nome:'BP avalia possibilidade de remanejamento',dia:0,descricao:'A BP deve avaliar se faz sentido remanejar o colaborador para outro gestor antes de seguir com o desligamento.'},
+        {nome:'Verificar banco de horas e férias',dia:0,descricao:'Verificar se há banco de horas (programar para zerar as horas) ou férias pendentes (é necessário gozá-las antes do desligamento).'},
+        {nome:'Gestor abre solicitação de desligamento',dia:0,descricao:'Após organizar banco de horas e férias, o gestor abre a solicitação de desligamento pelo formulário. O desligamento deve ser programado com ao menos 1 dia útil de antecedência.'},
+        {nome:'Comunicado presencial ao colaborador',dia:0,descricao:'O desligamento deve ser comunicado ao colaborador preferencialmente de forma presencial, na parte da manhã, com a presença obrigatória da BP.'},
+        {nome:'BP envia e-mail de formalização',dia:0,descricao:'Após o comunicado, a BP envia o e-mail de formalização para rh.planning@planning.com.br e equipe.ti@planning.com.br com o líder em cópia.'},
+        {nome:'BP exclui da Qulture.Rocks',dia:0,descricao:'Após o envio do e-mail, a BP exclui o colaborador da plataforma Qulture.Rocks.'},
+        {nome:'BP registra na planilha e marca "Ok"',dia:20,descricao:'Registrar na planilha de controle de desligamentos e marcar "Ok" nas colunas de e-mail enviado e exclusão da Qulture.'}
+      ],alertas:[
+        'Desligamentos involuntários devem ocorrer até o dia 20 de cada mês para não atrapalhar o fechamento da folha.',
+        'O desligamento deve ser programado com ao menos 1 dia útil de antecedência.',
+        'Verificar banco de horas e férias ANTES de abrir a solicitação.',
+        'A presença da BP no comunicado ao colaborador é obrigatória.',
+        'O comunicado deve ser feito preferencialmente presencial e na parte da manhã.'
+      ],observacoes:'Caso o desligamento esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.',links:[],
+      msgLider:'Olá {nome},\n\nSobre o desligamento que conversamos:\n\nAntes de seguir, precisamos verificar:\n1. Possibilidade de remanejamento do colaborador\n2. Saldo de banco de horas (precisa zerar)\n3. Férias pendentes (precisa gozar)\n\nApós essas verificações, você deve abrir a solicitação de desligamento pelo formulário com ao menos 1 dia útil de antecedência.\n\nO comunicado ao colaborador deve ser feito presencialmente, de manhã, e eu (BP) estarei presente obrigatoriamente.',
+      msgColab:'',
+      msgFormal:'{Gente e Gestão Planning} Encerramento de Contrato - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de desligamento do colaborador {nome}, da equipe do {lider}.\n\nTipo de desligamento: Involuntário\nÚltimo dia de trabalho: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do colaborador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual, rescisão, exclusão dos benefícios, CEFIS e demais procedimentos necessários;\n· @RH | Planning: excluir o colaborador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do colaborador e realizar a entrega em mãos à equipe de TI.',
+      ativo:true}
+    ];
+    DB.processosInstancias = [];
+    persist('processosBP');
+    persist('processosInstancias');
+    localStorage.setItem('_pop_wiped_v3','1');
   }
-  if(invIdx >= 0 || !volCheck) persist('processosBP');
 }
+
+function _migrateDesligamentosPOP(){}
 
 function _getCronoMesDate(){ const p=_cronoMes.split('-'); return new Date(Number(p[0]),Number(p[1])-1,1); }
 function _getCronoMesLabel(){ const d=_getCronoMesDate(); const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; return meses[d.getMonth()]+'/'+d.getFullYear(); }
