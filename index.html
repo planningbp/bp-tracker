@@ -11780,7 +11780,7 @@ function _renderProcessoDetalhe(proc){
   }
   h+='</div>';
   // Mensagens padrão
-  if(proc.msgLider || proc.msgColab){
+  if(proc.msgLider || proc.msgColab || proc.msgFormal){
     h+='<div class="card" style="margin-bottom:16px;">';
     h+='<div style="font-weight:700;font-size:14px;margin-bottom:12px;">📩 Mensagens Padrão</div>';
     if(proc.msgLider){
@@ -11793,12 +11793,21 @@ function _renderProcessoDetalhe(proc){
       h+='</div>';
     }
     if(proc.msgColab){
-      h+='<div>';
+      h+='<div style="margin-bottom:12px;">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
       h+='<div style="font-weight:600;font-size:12px;color:#555;">Para Colaborador</div>';
       h+='<button class="btn btn-outline btn-sm crono-copy-msg" data-tipo="colab" data-proc="'+proc.id+'" style="width:auto;padding:4px 10px;font-size:11px;">📋 Copiar</button>';
       h+='</div>';
       h+='<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:13px;color:#333;white-space:pre-wrap;line-height:1.5;">'+esc(proc.msgColab)+'</div>';
+      h+='</div>';
+    }
+    if(proc.msgFormal){
+      h+='<div>';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+      h+='<div style="font-weight:600;font-size:12px;color:#555;">📄 Formalização Geral</div>';
+      h+='<button class="btn btn-outline btn-sm crono-copy-msg" data-tipo="formal" data-proc="'+proc.id+'" style="width:auto;padding:4px 10px;font-size:11px;">📋 Copiar</button>';
+      h+='</div>';
+      h+='<div style="background:#FFF9E6;border:1px solid #fbbf24;border-radius:8px;padding:12px;font-size:13px;color:#333;white-space:pre-wrap;line-height:1.5;">'+esc(proc.msgFormal)+'</div>';
       h+='</div>';
     }
     h+='</div>';
@@ -11830,6 +11839,7 @@ function _renderProcessoForm(){
   // Templates de mensagem
   h+='<div class="field" style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:6px;">📩 Mensagem padrão — Líder/Gestor <span style="font-size:10px;color:#888;font-weight:400;">Use {nome}, {processo}, {prazo}, {etapa} como variáveis</span></label><textarea id="cpf_msgLider" class="input" rows="3" placeholder="Ex: Olá {nome}, informamos que o processo de {processo} tem prazo até o dia {prazo}. Favor providenciar...">'+esc(ed&&ed.msgLider?ed.msgLider:'')+'</textarea></div>';
   h+='<div class="field" style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:6px;">📩 Mensagem padrão — Colaborador <span style="font-size:10px;color:#888;font-weight:400;">Use {nome}, {processo}, {prazo}, {etapa} como variáveis</span></label><textarea id="cpf_msgColab" class="input" rows="3" placeholder="Ex: Olá {nome}, seu processo de {processo} está em andamento. A próxima etapa é {etapa}...">'+esc(ed&&ed.msgColab?ed.msgColab:'')+'</textarea></div>';
+  h+='<div class="field" style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:6px;">📄 Formalização Geral <span style="font-size:10px;color:#888;font-weight:400;">Modelo de comunicado oficial (ex: desligamento, promoção, transferência)</span></label><textarea id="cpf_msgFormal" class="input" rows="4" placeholder="Ex: Prezado(a) {nome},\n\nComunicamos que...">'+esc(ed&&ed.msgFormal?ed.msgFormal:'')+'</textarea></div>';
   // Etapas
   h+='<div class="field" style="grid-column:1/-1;"><label>Etapas</label><div id="cpf_etapas">';
   const etapas=ed?ed.etapas:[{nome:'',dia:'',descricao:''}];
@@ -12046,7 +12056,7 @@ function bindCronogramaPage(){
       const tipo=btn.getAttribute('data-tipo');
       const proc=DB.processosBP.find(p=>p.id===procId);
       if(!proc) return;
-      const msg = tipo==='lider' ? (proc.msgLider||'') : (proc.msgColab||'');
+      const msg = tipo==='lider' ? (proc.msgLider||'') : tipo==='colab' ? (proc.msgColab||'') : (proc.msgFormal||'');
       navigator.clipboard.writeText(msg).then(()=>{
         const orig=btn.innerHTML; btn.innerHTML='✅ Copiado!'; btn.style.color='#22c55e';
         setTimeout(()=>{btn.innerHTML=orig; btn.style.color='';},1500);
@@ -12085,6 +12095,7 @@ function bindCronogramaPage(){
     const alertas=alertasTxt.split('\n').map(a=>a.trim()).filter(Boolean);
     const msgLider=(document.getElementById('cpf_msgLider')||{}).value||'';
     const msgColab=(document.getElementById('cpf_msgColab')||{}).value||'';
+    const msgFormal=(document.getElementById('cpf_msgFormal')||{}).value||'';
     const areas=[]; document.querySelectorAll('.cpf_area:checked').forEach(cb=>areas.push(cb.value));
     if(!areas.length) areas.push('Compartilhado');
     const etapas=[];
@@ -12100,10 +12111,10 @@ function bindCronogramaPage(){
       if(proc){
         proc.nome=nome; proc.descricao=desc; proc.categoria=cat; proc.frequencia=freq;
         proc.responsavel=resp; proc.observacoes=obs; proc.alertas=alertas; proc.areas=areas; proc.etapas=etapas;
-        proc.msgLider=msgLider; proc.msgColab=msgColab;
+        proc.msgLider=msgLider; proc.msgColab=msgColab; proc.msgFormal=msgFormal;
       }
     } else {
-      DB.processosBP.push({id:uid(),nome,descricao:desc,categoria:cat,areas,responsavel:resp,frequencia:freq,etapas,alertas,observacoes:obs,msgLider,msgColab,links:[],ativo:true});
+      DB.processosBP.push({id:uid(),nome,descricao:desc,categoria:cat,areas,responsavel:resp,frequencia:freq,etapas,alertas,observacoes:obs,msgLider,msgColab,msgFormal,links:[],ativo:true});
     }
     persist('processosBP');
     _cronoFormOpen=false; _cronoEditId=null; render();
