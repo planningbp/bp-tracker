@@ -7015,9 +7015,13 @@ function bindAcompanhamentos(){
       const realizado = status !== 'Pendente' ? new Date().toISOString().slice(0,10) : '';
 
       const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
-      const record = { nome, milestone, status, realizado, observacao };
-      if(idx>=0) DB.acompanhamentos[idx] = record;
-      else DB.acompanhamentos.push(record);
+      if(idx>=0){
+        DB.acompanhamentos[idx].status = status;
+        DB.acompanhamentos[idx].realizado = realizado;
+        DB.acompanhamentos[idx].observacao = observacao;
+      } else {
+        DB.acompanhamentos.push({ nome, milestone, status, realizado, observacao });
+      }
       persist('acompanhamentos');
       rerender();
     });
@@ -8911,9 +8915,13 @@ function bindColaboradorDetail(){
       const ta = document.querySelector('.detail-obs[data-milestone="'+milestone+'"]');
       const observacao = ta ? ta.value : '';
       const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
-      const record = { nome, milestone, status, realizado, observacao };
-      if(idx>=0) DB.acompanhamentos[idx] = record;
-      else DB.acompanhamentos.push(record);
+      if(idx>=0){
+        DB.acompanhamentos[idx].status = status;
+        DB.acompanhamentos[idx].realizado = realizado;
+        DB.acompanhamentos[idx].observacao = observacao;
+      } else {
+        DB.acompanhamentos.push({ nome, milestone, status, realizado, observacao });
+      }
       persist('acompanhamentos');
       rerender();
     });
