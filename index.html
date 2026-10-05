@@ -462,7 +462,9 @@ const CONFIG = {
     { id:2, name:"Julia Soares", email:"julia.soares@planning.com.br", avatar:"JS",
       heads:["Diogo Teles","Nairim Dantas","Giovanna Verzeloni","João Nonato","Raul Dantas","Talita Araujo"], areas:[] },
     { id:3, name:"Maryanna Moura", email:"maryanna.moura@planning.com.br", avatar:"MM",
-      areas:["TI","BPO Financeiro","Financeiro Interno","Controladoria","Desenvolvedores","Comercial","Marketing","Expansão"] }
+      areas:["TI","BPO Financeiro","Financeiro Interno","Controladoria","Desenvolvedores","Comercial","Marketing","Expansão"] },
+    { id:4, name:"Hadassa Teixeira", email:"hadassa.teixeira@planning.com.br", avatar:"HT",
+      areas:["Consultoria"] }
   ],
   periods: ["Jan/Fev 2025","Mar/Abr 2025","Mai/Jun 2025","Jul/Ago 2025","Set/Out 2025","Nov/Dez 2025",
     "Jan/Fev 2026","Mar/Abr 2026","Mai/Jun 2026","Jul/Ago 2026","Set/Out 2026","Nov/Dez 2026"]
@@ -3801,7 +3803,7 @@ const PAGE_TITLES = {
   agenda:['Agenda BP','Timeline consolidada — prazos, aniversários, ações e alertas'],
   solicitacoes:['Solicitações','Solicitações de movimentação dos líderes'],
   enps:['eNPS / lNPS','Cadastro e evolução de eNPS e lNPS por líder, departamento e empresa'],
-  cronograma:['Cronograma BP','Cronograma operacional — processos, prazos, etapas e responsáveis']
+  cronograma:['Cronograma BP — POP','Procedimento Operacional Padrão — processos, prazos e etapas compartilhados entre todas as BPs']
 };
 function hasImportedData(){
   return DB.colaboradores.length>0 || DB.desligamentos.length>0 || DB.promocoes.length>0;
@@ -11473,16 +11475,14 @@ let _cronoEditId = null;
 
 function _seedProcessosBP(){
   if(DB.processosBP.length>0) return;
-  const bp = currentBP();
-  const bpId = bp?bp.id:null;
   const procs = [
-    {id:uid(),nome:'Admissões',descricao:'Solicitações de admissão devem ser realizadas até o dia 25 para processamento.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Prazo para solicitações de admissão',dia:25,descricao:'Solicitações devem ser enviadas até esta data.'},{nome:'Onboarding',dia:0,descricao:'Toda terça-feira pela manhã.',recorrenciaSemanal:'terça'}],alertas:[],observacoes:'O onboarding acontece toda terça-feira pela manhã.',links:[],ativo:true,bpId:bpId},
-    {id:uid(),nome:'Promoções e Efetivações',descricao:'Processo mensal de solicitação, validação e aplicação de promoções e efetivações.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Recebimento das solicitações',dia:10,descricao:'Solicitações para aplicação no mês seguinte.'},{nome:'Envio aos Heads e Sócios',dia:11,descricao:'Para validação.'},{nome:'Retorno Heads e Sócios',dia:15,descricao:''},{nome:'Envio ao DP',dia:20,descricao:''},{nome:'Retorno aos gestores solicitantes',dia:20,descricao:''}],alertas:[],observacoes:'',links:[],ativo:true,bpId:bpId},
-    {id:uid(),nome:'Transição CLT → PJ',descricao:'Processo de transição de regime CLT para PJ.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Recebimento da solicitação',dia:10,descricao:'A solicitação deve ser feita até o dia 10 para cumprimento do aviso no mês seguinte.'},{nome:'Envio aos Heads e Sócios',dia:11,descricao:''},{nome:'Retorno da validação',dia:15,descricao:''},{nome:'Envio ao DP',dia:20,descricao:''},{nome:'Retorno aos gestores',dia:20,descricao:''},{nome:'Vigência do contrato PJ',dia:0,descricao:'Data definida caso a caso.'}],alertas:['Antes da transição é necessário zerar banco de horas e férias.'],observacoes:'A solicitação deve ser feita até o dia 10 para cumprimento do aviso no mês seguinte.',links:[],ativo:true,bpId:bpId},
-    {id:uid(),nome:'Desligamentos Involuntários',descricao:'Desligamentos involuntários devem ser realizados até o dia 20.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Prazo para desligamentos involuntários',dia:20,descricao:'Caso esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.'}],alertas:['Caso esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.'],observacoes:'',links:[],ativo:true,bpId:bpId},
-    {id:uid(),nome:'Reunião com Heads',descricao:'Apresentação dos resultados das áreas.',categoria:'Reunião',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Preparação do material',dia:0,descricao:'Consolidar indicadores e relatórios.'},{nome:'Reunião com Heads',dia:0,descricao:'Apresentação dos resultados.'}],alertas:[],observacoes:'',links:[],participantes:'Heads e Sócios',preparacao:'Consolidar dashboard, indicadores de headcount, turnover, eNPS, promoções e desligamentos.',ativo:true,bpId:bpId},
-    {id:uid(),nome:'Reunião com Gerentes',descricao:'Apresentação do Termômetro.',categoria:'Reunião',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'bimestral',etapas:[{nome:'Preparação do Termômetro',dia:0,descricao:''},{nome:'Reunião com Gerentes',dia:0,descricao:'Apresentação do Termômetro.'}],alertas:[],observacoes:'',links:[],participantes:'Gerentes das áreas',preparacao:'Preparar apresentação do Termômetro.',ativo:true,bpId:bpId},
-    {id:uid(),nome:'Imersão de Área',descricao:'Momento de alinhamento estratégico com o time da área.',categoria:'Estratégico',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Planejamento da pauta',dia:0,descricao:''},{nome:'Imersão',dia:0,descricao:'Alinhamento estratégico com o time.'}],alertas:[],observacoes:'',links:[],campos:{area:'',data:'',pauta:'',responsavel:'',pontos:'',encaminhamentos:''},ativo:true,bpId:bpId}
+    {id:uid(),nome:'Admissões',descricao:'Solicitações de admissão devem ser realizadas até o dia 25 para processamento.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Prazo para solicitações de admissão',dia:25,descricao:'Solicitações devem ser enviadas até esta data.'},{nome:'Onboarding',dia:0,descricao:'Toda terça-feira pela manhã.',recorrenciaSemanal:'terça'}],alertas:[],observacoes:'O onboarding acontece toda terça-feira pela manhã.',links:[],ativo:true},
+    {id:uid(),nome:'Promoções e Efetivações',descricao:'Processo mensal de solicitação, validação e aplicação de promoções e efetivações.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Recebimento das solicitações',dia:10,descricao:'Solicitações para aplicação no mês seguinte.'},{nome:'Envio aos Heads e Sócios',dia:11,descricao:'Para validação.'},{nome:'Retorno Heads e Sócios',dia:15,descricao:''},{nome:'Envio ao DP',dia:20,descricao:''},{nome:'Retorno aos gestores solicitantes',dia:20,descricao:''}],alertas:[],observacoes:'',links:[],ativo:true},
+    {id:uid(),nome:'Transição CLT → PJ',descricao:'Processo de transição de regime CLT para PJ.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Recebimento da solicitação',dia:10,descricao:'A solicitação deve ser feita até o dia 10 para cumprimento do aviso no mês seguinte.'},{nome:'Envio aos Heads e Sócios',dia:11,descricao:''},{nome:'Retorno da validação',dia:15,descricao:''},{nome:'Envio ao DP',dia:20,descricao:''},{nome:'Retorno aos gestores',dia:20,descricao:''},{nome:'Vigência do contrato PJ',dia:0,descricao:'Data definida caso a caso.'}],alertas:['Antes da transição é necessário zerar banco de horas e férias.'],observacoes:'A solicitação deve ser feita até o dia 10 para cumprimento do aviso no mês seguinte.',links:[],ativo:true},
+    {id:uid(),nome:'Desligamentos Involuntários',descricao:'Desligamentos involuntários devem ser realizados até o dia 20.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Prazo para desligamentos involuntários',dia:20,descricao:'Caso esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.'}],alertas:['Caso esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.'],observacoes:'',links:[],ativo:true},
+    {id:uid(),nome:'Reunião com Heads',descricao:'Apresentação dos resultados das áreas.',categoria:'Reunião',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Preparação do material',dia:0,descricao:'Consolidar indicadores e relatórios.'},{nome:'Reunião com Heads',dia:0,descricao:'Apresentação dos resultados.'}],alertas:[],observacoes:'',links:[],participantes:'Heads e Sócios',preparacao:'Consolidar dashboard, indicadores de headcount, turnover, eNPS, promoções e desligamentos.',ativo:true},
+    {id:uid(),nome:'Reunião com Gerentes',descricao:'Apresentação do Termômetro.',categoria:'Reunião',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'bimestral',etapas:[{nome:'Preparação do Termômetro',dia:0,descricao:''},{nome:'Reunião com Gerentes',dia:0,descricao:'Apresentação do Termômetro.'}],alertas:[],observacoes:'',links:[],participantes:'Gerentes das áreas',preparacao:'Preparar apresentação do Termômetro.',ativo:true},
+    {id:uid(),nome:'Imersão de Área',descricao:'Momento de alinhamento estratégico com o time da área.',categoria:'Estratégico',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[{nome:'Planejamento da pauta',dia:0,descricao:''},{nome:'Imersão',dia:0,descricao:'Alinhamento estratégico com o time.'}],alertas:[],observacoes:'',links:[],campos:{area:'',data:'',pauta:'',responsavel:'',pontos:'',encaminhamentos:''},ativo:true}
   ];
   DB.processosBP = procs;
   persist('processosBP');
@@ -11497,7 +11497,7 @@ function _getProcessoInstancia(processoId, mes){
   if(!inst){
     const proc = DB.processosBP.find(p=>p.id===processoId);
     if(!proc) return null;
-    inst = {id:uid(),processoId:processoId,mes:mes,etapas:proc.etapas.map(e=>({nome:e.nome,dia:e.dia,status:'pendente',dataConclusao:null})),observacoes:'',bpId:proc.bpId};
+    inst = {id:uid(),processoId:processoId,mes:mes,etapas:proc.etapas.map(e=>({nome:e.nome,dia:e.dia,status:'pendente',dataConclusao:null})),observacoes:''};
     DB.processosInstancias.push(inst);
     persist('processosInstancias');
   }
@@ -11845,6 +11845,12 @@ function renderCronogramaPage(){
     _cronoDetalheProcessoId=null;
   }
   let h='';
+  // POP shared banner
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 16px;background:linear-gradient(135deg,#EAF3EE,#E8F4FD);border:1px solid #bbf7d0;border-radius:10px;">';
+  h+='<span style="font-size:18px;">📋</span>';
+  h+='<div><div style="font-weight:700;font-size:13px;color:#1B1B2F;">Procedimento Operacional Padrão (POP)</div>';
+  h+='<div style="font-size:11px;color:#888;">Compartilhado entre todas as BPs — processos, etapas e prazos visíveis para todos.</div></div>';
+  h+='</div>';
   // Filters bar
   h+='<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">';
   // Month nav
@@ -12053,7 +12059,7 @@ function bindCronogramaPage(){
         proc.responsavel=resp; proc.observacoes=obs; proc.alertas=alertas; proc.areas=areas; proc.etapas=etapas;
       }
     } else {
-      DB.processosBP.push({id:uid(),nome,descricao:desc,categoria:cat,areas,responsavel:resp,frequencia:freq,etapas,alertas,observacoes:obs,links:[],ativo:true,bpId:bp?bp.id:null});
+      DB.processosBP.push({id:uid(),nome,descricao:desc,categoria:cat,areas,responsavel:resp,frequencia:freq,etapas,alertas,observacoes:obs,links:[],ativo:true});
     }
     persist('processosBP');
     _cronoFormOpen=false; _cronoEditId=null; render();
