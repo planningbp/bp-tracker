@@ -808,28 +808,56 @@ function loadJSON(key, fallback){
 }
 function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){ console.warn('localStorage full for',key,e); } }
 
-/* ---- IndexedDB for large binary attachments (anexos) ---- */
+/* ---- Armazenamento de anexos (separado do localStorage/Firebase) ---- */
+/* Usa um localStorage separado com chave individual por anexo.
+   Se o base64 for grande demais, tenta IndexedDB como fallback. */
 var _idb = null;
 function _openIDB(){
   return new Promise(function(resolve,reject){
     if(_idb){ resolve(_idb); return; }
-    var req = indexedDB.open('bp_gestao_anexos',1);
-    req.onupgradeneeded = function(e){ e.target.result.createObjectStore('files'); };
-    req.onsuccess = function(e){ _idb = e.target.result; resolve(_idb); };
-    req.onerror = function(){ reject(req.error); };
+    try {
+      var req = indexedDB.open('bp_gestao_anexos',2);
+      req.onupgradeneeded = function(e){
+        var db = e.target.result;
+        if(!db.objectStoreNames.contains('files')) db.createObjectStore('files');
+      };
+      req.onsuccess = function(e){ _idb = e.target.result; resolve(_idb); };
+      req.onerror = function(){ reject(req.error); };
+      req.onblocked = function(){ reject(new Error('IDB blocked')); };
+    } catch(e){ reject(e); }
   });
 }
-function idbSave(key, val){
+
+function anexoSave(key, data, fileName){
+  // Tenta salvar no localStorage individual primeiro (mais simples)
+  try {
+    localStorage.setItem('_anexo_'+key, JSON.stringify({data:data, nome:fileName}));
+    console.log('Anexo salvo no localStorage:', key);
+    return Promise.resolve(true);
+  } catch(e){
+    console.warn('localStorage cheio, tentando IndexedDB...', e);
+  }
+  // Fallback: IndexedDB
   return _openIDB().then(function(db){
     return new Promise(function(resolve,reject){
       var tx = db.transaction('files','readwrite');
-      tx.objectStore('files').put(val, key);
-      tx.oncomplete = resolve;
+      tx.objectStore('files').put({data:data, nome:fileName}, key);
+      tx.oncomplete = function(){ console.log('Anexo salvo no IndexedDB:', key); resolve(true); };
       tx.onerror = function(){ reject(tx.error); };
     });
-  }).catch(function(e){ console.warn('IDB save error',key,e); });
+  }).catch(function(e){
+    console.error('Falha ao salvar anexo:', key, e);
+    return false;
+  });
 }
-function idbLoad(key){
+
+function anexoLoad(key){
+  // Tenta localStorage primeiro
+  try {
+    var raw = localStorage.getItem('_anexo_'+key);
+    if(raw){ return Promise.resolve(JSON.parse(raw)); }
+  } catch(e){}
+  // Fallback: IndexedDB
   return _openIDB().then(function(db){
     return new Promise(function(resolve,reject){
       var tx = db.transaction('files','readonly');
@@ -837,18 +865,25 @@ function idbLoad(key){
       req.onsuccess = function(){ resolve(req.result||null); };
       req.onerror = function(){ reject(req.error); };
     });
-  }).catch(function(e){ console.warn('IDB load error',key,e); return null; });
+  }).catch(function(e){ console.warn('Falha ao carregar anexo:', key, e); return null; });
 }
-function idbDelete(key){
+
+function anexoDelete(key){
+  try { localStorage.removeItem('_anexo_'+key); } catch(e){}
   return _openIDB().then(function(db){
     return new Promise(function(resolve,reject){
       var tx = db.transaction('files','readwrite');
       tx.objectStore('files').delete(key);
       tx.oncomplete = resolve;
-      tx.onerror = function(){ reject(tx.error); };
+      tx.onerror = function(){ resolve(); };
     });
-  }).catch(function(e){ console.warn('IDB delete error',key,e); });
+  }).catch(function(){ return; });
 }
+
+// Alias mantidos para compatibilidade
+function idbSave(k,v){ return anexoSave(k, v.data, v.nome); }
+function idbLoad(k){ return anexoLoad(k); }
+function idbDelete(k){ return anexoDelete(k); }
 
 function getDefaultFormConfigs(){
   return {
@@ -6902,12 +6937,12 @@ function renderAcompanhamentos(){
                   <input type="text" class="acomp-obs" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" value="${esc(r.observacao)}" placeholder="Observação..." style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#f9fafb;">
                 </div>
                 ${(r.milestone===45||r.milestone===90) ? `<div style="margin-top:8px;">
-                  ${(r.anexoRef||r.anexo) ? `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#EAF3EE;border:1px solid #bbf7d0;border-radius:8px;font-size:11px;">
-                    <span style="color:#14C8FA;">&#128206;</span>
-                    <span class="acomp-download-link" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" data-ref="${esc(r.anexoRef||'')}" data-legacy="${r.anexo?'1':'0'}" style="color:#0f766e;font-weight:600;cursor:pointer;text-decoration:underline;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.anexoNome||'Avaliação anexada')}</span>
+                  ${r.anexoRef ? `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#EAF3EE;border:1px solid #bbf7d0;border-radius:8px;font-size:11px;">
+                    <span style="color:#14C8FA;">📎</span>
+                    <span class="acomp-download-link" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" data-ref="${esc(r.anexoRef)}" style="color:#0f766e;font-weight:600;cursor:pointer;text-decoration:underline;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.anexoNome||'Avaliação anexada')}</span>
                     <button class="acomp-remove-anexo" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" style="background:none;border:none;cursor:pointer;color:#ff4343;font-size:12px;padding:2px;" title="Remover anexo">✕</button>
                   </div>` : `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f9fafb;border:1px dashed #cbd5e1;border-radius:8px;font-size:11px;cursor:pointer;color:#888;transition:background .2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f9fafb'">
-                    <span>&#128206;</span> Anexar avaliação
+                    <span>📎</span> Anexar avaliação
                     <input type="file" class="acomp-anexo" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx" style="display:none;">
                   </label>`}
                 </div>` : ''}
@@ -7038,7 +7073,7 @@ function bindAcompanhamentos(){
     });
   });
 
-  // Anexo file upload (45/90 dias) — salva em IndexedDB (sem limite de 5MB do localStorage)
+  // Anexo file upload (45/90 dias)
   document.querySelectorAll('.acomp-anexo').forEach(inp=>{
     inp.addEventListener('change', function(){
       const file = this.files[0];
@@ -7046,24 +7081,30 @@ function bindAcompanhamentos(){
       if(file.size > 10*1024*1024){ alert('Arquivo muito grande (máx 10MB).'); this.value=''; return; }
       const nome = this.getAttribute('data-nome');
       const milestone = parseInt(this.getAttribute('data-milestone'));
+      const label = this.closest('label');
+      if(label) label.innerHTML = '<span>⏳</span> Salvando...';
       const reader = new FileReader();
       reader.onload = function(e){
-        const idbKey = 'anexo_'+normalizeStr(nome)+'_'+milestone;
+        const anexoKey = normalizeStr(nome)+'_'+milestone;
         const base64 = e.target.result;
-        // Salva o arquivo binário no IndexedDB
-        idbSave(idbKey, {data:base64, nome:file.name}).then(function(){
-          // No DB só salva referência (sem o base64 pesado)
-          const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
-          const rec = idx>=0 ? DB.acompanhamentos[idx] : { nome, milestone, status:'Pendente', realizado:'', observacao:'' };
-          rec.anexoRef = idbKey;
-          rec.anexoNome = file.name;
-          delete rec.anexo; // remove base64 do DB (fica no IDB)
-          if(idx>=0) DB.acompanhamentos[idx] = rec;
-          else DB.acompanhamentos.push(rec);
-          persist('acompanhamentos');
-          rerender();
+        anexoSave(anexoKey, base64, file.name).then(function(ok){
+          if(ok){
+            const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
+            if(idx>=0){
+              DB.acompanhamentos[idx].anexoRef = anexoKey;
+              DB.acompanhamentos[idx].anexoNome = file.name;
+            } else {
+              DB.acompanhamentos.push({ nome, milestone, status:'Pendente', realizado:'', observacao:'', anexoRef:anexoKey, anexoNome:file.name });
+            }
+            persist('acompanhamentos');
+            rerender();
+          } else {
+            alert('Erro ao salvar o arquivo. Tente novamente ou use um arquivo menor.');
+            rerender();
+          }
         });
       };
+      reader.onerror = function(){ alert('Erro ao ler o arquivo.'); rerender(); };
       reader.readAsDataURL(file);
     });
   });
@@ -7074,8 +7115,8 @@ function bindAcompanhamentos(){
       const milestone = parseInt(this.getAttribute('data-milestone'));
       const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
       if(idx>=0){
-        const idbKey = DB.acompanhamentos[idx].anexoRef;
-        if(idbKey) idbDelete(idbKey);
+        const ref = DB.acompanhamentos[idx].anexoRef;
+        if(ref) anexoDelete(ref);
         delete DB.acompanhamentos[idx].anexo;
         delete DB.acompanhamentos[idx].anexoNome;
         delete DB.acompanhamentos[idx].anexoRef;
@@ -7085,34 +7126,26 @@ function bindAcompanhamentos(){
     });
   });
 
-  // Download link — busca do IndexedDB e faz download
+  // Download link — busca do armazenamento local
   document.querySelectorAll('.acomp-download-link').forEach(function(el){
     el.addEventListener('click', function(){
       var ref = this.getAttribute('data-ref');
       var nome = this.getAttribute('data-nome');
       var milestone = this.getAttribute('data-milestone');
-      var legacy = this.getAttribute('data-legacy')==='1';
       if(ref){
-        // Busca do IndexedDB
-        idbLoad(ref).then(function(fileObj){
+        el.textContent = 'Carregando...';
+        anexoLoad(ref).then(function(fileObj){
           if(fileObj && fileObj.data){
             var a = document.createElement('a');
             a.href = fileObj.data;
             a.download = fileObj.nome || 'avaliacao';
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            el.textContent = fileObj.nome || 'Avaliação anexada';
           } else {
-            alert('Arquivo não encontrado no armazenamento local.');
+            alert('Arquivo não encontrado. Pode ter sido salvo em outro navegador/computador.');
+            el.textContent = '⚠ Arquivo não encontrado';
           }
         });
-      } else if(legacy){
-        // Fallback: anexo antigo direto no DB
-        var rec = DB.acompanhamentos.find(function(a){ return normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===parseInt(milestone); });
-        if(rec && rec.anexo){
-          var a = document.createElement('a');
-          a.href = rec.anexo;
-          a.download = rec.anexoNome || 'avaliacao';
-          document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        }
       }
     });
   });
