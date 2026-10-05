@@ -11474,9 +11474,10 @@ let _cronoFormOpen = false;
 let _cronoEditId = null;
 
 function _seedProcessosBP(){
-  // Limpar processos antigos e incluir todos (migração v4 — adicionou Distrato PJ)
-  if(!localStorage.getItem('_pop_wiped_v4')){
-    DB.processosBP = [
+  // Migração aditiva: só adiciona processos que não existem ainda (nunca sobrescreve)
+  // Se já tem dados do Firebase, respeita — só adiciona os que faltam
+  if(!localStorage.getItem('_pop_seed_additive_v1')){
+    var _seedProcessos = [
       {id:uid(),nome:'Desligamentos Voluntários',descricao:'Processo completo para desligamentos voluntários (pedido de demissão). O colaborador comunica o líder e envia e-mail ao RH informando interesse em sair e último dia de trabalho.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
         {nome:'Colaborador comunica líder e envia e-mail ao RH',dia:0,descricao:'O colaborador comunica o líder sobre o desligamento e, obrigatoriamente no mesmo momento, envia e-mail para rh.planning@planning.com.br comunicando o interesse em sair da empresa e informando o último dia de trabalho.'},
         {nome:'DP interno responde com último dia de trabalho',dia:0,descricao:'O Departamento Pessoal interno responde o e-mail confirmando o último dia de trabalho do colaborador.'},
@@ -11548,10 +11549,19 @@ function _seedProcessosBP(){
       msgFormal:'{Gente e Gestão Planning} Encerramento de Contrato PJ - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de distrato do prestador de serviço {nome}, da equipe do {lider}.\n\nTipo de distrato: Involuntário\nÚltimo dia de prestação de serviço: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do prestador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual e demais procedimentos necessários;\n· @RH | Planning: excluir o prestador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do prestador e realizar a entrega em mãos à equipe de TI.',
       ativo:true}
     ];
-    DB.processosInstancias = [];
-    persist('processosBP');
-    persist('processosInstancias');
-    localStorage.setItem('_pop_wiped_v4','1');
+    // Só adiciona processos cujo nome ainda não existe no DB
+    var existentes = (DB.processosBP||[]).map(function(p){ return p.nome; });
+    var adicionou = false;
+    _seedProcessos.forEach(function(proc){
+      if(existentes.indexOf(proc.nome) === -1){
+        DB.processosBP.push(proc);
+        adicionou = true;
+      }
+    });
+    if(adicionou){
+      persist('processosBP');
+    }
+    localStorage.setItem('_pop_seed_additive_v1','1');
   }
 }
 
