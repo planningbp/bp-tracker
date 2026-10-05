@@ -919,8 +919,15 @@ var _fbReceiving = false;
 function persist(part){
   saveJSON(LS[part], DB[part]);
   if(!_fbReceiving && FB_SYNC_KEYS.includes(part) && typeof fbDB!=='undefined' && fbDB){
-    // JSON round-trip to convert Date objects to ISO strings (Firebase can't serialize Date)
-    fbDB.ref(part).set(JSON.parse(JSON.stringify(DB[part]))).catch(()=>{});
+    // Strip large binary fields before sending to Firebase (base64 files exceed limits)
+    var payload = JSON.parse(JSON.stringify(DB[part]));
+    if(part==='acompanhamentos' && Array.isArray(payload)){
+      payload = payload.map(function(a){ var c=Object.assign({},a); delete c.anexo; delete c.anexoNome; return c; });
+    }
+    if(part==='processosBP' && Array.isArray(payload)){
+      payload = payload.map(function(p){ var c=Object.assign({},p); if(c.prints) delete c.prints; return c; });
+    }
+    fbDB.ref(part).set(payload).catch(function(err){ console.warn('Firebase persist error ('+part+'):', err); });
   }
 }
 
@@ -972,6 +979,17 @@ try {
         if(!data) return;
         if(!Array.isArray(data)) data = Object.values(data);
         _fbReceiving = true;
+        // Preserve local-only fields (binary attachments not sent to Firebase)
+        if(key==='acompanhamentos' && Array.isArray(DB[key])){
+          var localAnexos = {};
+          DB[key].forEach(function(a){ if(a.anexo){ localAnexos[a.nome+'_'+a.milestone] = {anexo:a.anexo, anexoNome:a.anexoNome}; } });
+          data.forEach(function(a){ var k=a.nome+'_'+a.milestone; if(localAnexos[k]){ a.anexo=localAnexos[k].anexo; a.anexoNome=localAnexos[k].anexoNome; } });
+        }
+        if(key==='processosBP' && Array.isArray(DB[key])){
+          var localPrints = {};
+          DB[key].forEach(function(p){ if(p.prints && p.prints.length){ localPrints[p.nome] = p.prints; } });
+          data.forEach(function(p){ if(localPrints[p.nome]){ p.prints = localPrints[p.nome]; } });
+        }
         DB[key] = data;
         // Revive date fields
         if(FB_DATE_FIELDS[key]) revive(DB[key], FB_DATE_FIELDS[key]);
