@@ -11474,8 +11474,8 @@ let _cronoFormOpen = false;
 let _cronoEditId = null;
 
 function _seedProcessosBP(){
-  // Limpar processos antigos e incluir apenas os definidos manualmente (migração v3)
-  if(!localStorage.getItem('_pop_wiped_v3')){
+  // Limpar processos antigos e incluir todos (migração v4 — adicionou Distrato PJ)
+  if(!localStorage.getItem('_pop_wiped_v4')){
     DB.processosBP = [
       {id:uid(),nome:'Desligamentos Voluntários',descricao:'Processo completo para desligamentos voluntários (pedido de demissão). O colaborador comunica o líder e envia e-mail ao RH informando interesse em sair e último dia de trabalho.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
         {nome:'Colaborador comunica líder e envia e-mail ao RH',dia:0,descricao:'O colaborador comunica o líder sobre o desligamento e, obrigatoriamente no mesmo momento, envia e-mail para rh.planning@planning.com.br comunicando o interesse em sair da empresa e informando o último dia de trabalho.'},
@@ -11511,12 +11511,47 @@ function _seedProcessosBP(){
       msgLider:'Olá {nome},\n\nSobre o desligamento que conversamos:\n\nAntes de seguir, precisamos verificar:\n1. Possibilidade de remanejamento do colaborador\n2. Saldo de banco de horas (precisa zerar)\n3. Férias pendentes (precisa gozar)\n\nApós essas verificações, você deve abrir a solicitação de desligamento pelo formulário com ao menos 1 dia útil de antecedência.\n\nO comunicado ao colaborador deve ser feito presencialmente, de manhã, e eu (BP) estarei presente obrigatoriamente.',
       msgColab:'',
       msgFormal:'{Gente e Gestão Planning} Encerramento de Contrato - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de desligamento do colaborador {nome}, da equipe do {lider}.\n\nTipo de desligamento: Involuntário\nÚltimo dia de trabalho: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do colaborador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual, rescisão, exclusão dos benefícios, CEFIS e demais procedimentos necessários;\n· @RH | Planning: excluir o colaborador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do colaborador e realizar a entrega em mãos à equipe de TI.',
+      ativo:true},
+      {id:uid(),nome:'Distrato PJ — Voluntário',descricao:'Processo completo para distrato voluntário de PJ (pedido do prestador de serviço). O prestador comunica o líder e envia e-mail ao RH informando interesse em encerrar o contrato e o último dia de prestação de serviço.',categoria:'Distrato PJ',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
+        {nome:'Prestador comunica líder e envia e-mail ao RH',dia:0,descricao:'O prestador de serviço comunica o líder sobre o distrato e, obrigatoriamente no mesmo momento, envia e-mail para rh.planning@planning.com.br comunicando o interesse em encerrar o contrato e informando o último dia de prestação de serviço.'},
+        {nome:'DP interno responde com último dia de prestação',dia:0,descricao:'O Departamento Pessoal interno responde o e-mail confirmando o último dia de prestação de serviço.'},
+        {nome:'BP registra na planilha de controle',dia:0,descricao:'A BP acessa a planilha de controle de distratos e insere o nome completo do prestador (a planilha puxa automaticamente cargo, equipe e data de início do contrato). A BP registra a data do último dia de prestação de serviço.'},
+        {nome:'BP envia e-mail de formalização',dia:0,descricao:'No último dia de prestação de serviço, a BP envia o e-mail de formalização para rh.planning@planning.com.br e equipe.ti@planning.com.br com o líder em cópia.'},
+        {nome:'BP exclui da Qulture.Rocks',dia:0,descricao:'Após o envio do e-mail, a BP exclui o prestador de serviço da plataforma Qulture.Rocks.'},
+        {nome:'BP marca "Ok" na planilha de controle',dia:0,descricao:'Após enviar o e-mail e excluir da Qulture, a BP marca "Ok" nas colunas correspondentes na planilha de controle de distratos.'}
+      ],alertas:[
+        'O prestador de serviço DEVE enviar e-mail para rh.planning@planning.com.br no mesmo momento em que comunica o líder.',
+        'O e-mail de formalização deve ser enviado no último dia de prestação de serviço.'
+      ],observacoes:'',links:[],
+      msgLider:'Olá {nome},\n\nInformamos que o prestador de serviço comunicou interesse em encerrar o contrato com o tomador.\n\nPróximos passos:\n1. Confirmar o último dia de prestação de serviço\n2. Aguardar retorno do DP interno\n3. No último dia, a BP fará o envio do e-mail de formalização\n\nQualquer dúvida, estamos à disposição.',
+      msgColab:'Olá {nome},\n\nRecebemos sua comunicação sobre o distrato.\n\nPara formalizar, pedimos que envie um e-mail para rh.planning@planning.com.br informando:\n- Seu interesse em encerrar o contrato\n- Seu último dia de prestação de serviço\n\nEsse envio é obrigatório para dar início aos trâmites.',
+      msgFormal:'{Gente e Gestão Planning} Encerramento de Contrato PJ - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de distrato do prestador de serviço {nome}, da equipe do {lider}.\n\nTipo de distrato: Voluntário\nÚltimo dia de prestação de serviço: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do prestador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual e demais procedimentos necessários;\n· @RH | Planning: excluir o prestador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do prestador e realizar a entrega em mãos à equipe de TI.',
+      ativo:true},
+      {id:uid(),nome:'Distrato PJ — Involuntário',descricao:'Processo completo para distrato involuntário de PJ (decisão do tomador). Devem ocorrer até o dia 20 de cada mês para não atrapalhar o fechamento da folha. O distrato deve ser programado com ao menos 1 dia útil de antecedência.',categoria:'Distrato PJ',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
+        {nome:'Líder procura BP sobre interesse em distratar',dia:0,descricao:'O líder deve procurar a BP para informar sobre o interesse em encerrar o contrato do prestador de serviço.'},
+        {nome:'BP avalia possibilidade de remanejamento',dia:0,descricao:'A BP deve avaliar se faz sentido remanejar o prestador de serviço para outro gestor antes de seguir com o distrato.'},
+        {nome:'Verificar banco de horas',dia:0,descricao:'Verificar se há banco de horas pendente (programar para zerar as horas antes do distrato).'},
+        {nome:'Gestor abre solicitação de distrato',dia:0,descricao:'Após organizar o banco de horas, o gestor abre a solicitação de distrato pelo formulário. O distrato deve ser programado com ao menos 1 dia útil de antecedência.'},
+        {nome:'Comunicado presencial ao prestador',dia:0,descricao:'O distrato deve ser comunicado ao prestador de serviço preferencialmente de forma presencial, na parte da manhã, com a presença obrigatória da BP.'},
+        {nome:'BP envia e-mail de formalização',dia:0,descricao:'Após o comunicado, a BP envia o e-mail de formalização para rh.planning@planning.com.br e equipe.ti@planning.com.br com o líder em cópia.'},
+        {nome:'BP exclui da Qulture.Rocks',dia:0,descricao:'Após o envio do e-mail, a BP exclui o prestador de serviço da plataforma Qulture.Rocks.'},
+        {nome:'BP registra na planilha e marca "Ok"',dia:0,descricao:'Registrar na planilha de controle de distratos e marcar "Ok" nas colunas de e-mail enviado e exclusão da Qulture.'}
+      ],alertas:[
+        'Distratos involuntários devem ocorrer até o dia 20 de cada mês para não atrapalhar o fechamento da folha.',
+        'O distrato deve ser programado com ao menos 1 dia útil de antecedência.',
+        'Verificar banco de horas ANTES de abrir a solicitação.',
+        'A presença da BP no comunicado ao prestador é obrigatória.',
+        'O comunicado deve ser feito preferencialmente presencial e na parte da manhã.'
+      ],observacoes:'Caso o distrato esteja previsto para depois do dia 20, informar o DP antecipadamente até o dia 20.',links:[],
+      msgLider:'Olá {nome},\n\nSobre o distrato que conversamos:\n\nAntes de seguir, precisamos verificar:\n1. Possibilidade de remanejamento do prestador\n2. Saldo de banco de horas (precisa zerar)\n\nApós essas verificações, você deve abrir a solicitação de distrato pelo formulário com ao menos 1 dia útil de antecedência.\n\nO comunicado ao prestador deve ser feito presencialmente, de manhã, e eu (BP) estarei presente obrigatoriamente.',
+      msgColab:'',
+      msgFormal:'{Gente e Gestão Planning} Encerramento de Contrato PJ - {nome}\n\nBom dia, pessoal!\n\nSegue comunicado de distrato do prestador de serviço {nome}, da equipe do {lider}.\n\nTipo de distrato: Involuntário\nÚltimo dia de prestação de serviço: {prazo}\n\nPeço, por gentileza, o apoio das áreas envolvidas nos trâmites abaixo:\n\n· @Equipe TI: excluir ou redirecionar as credenciais do prestador, conforme orientação da gestão;\n· @Departamento Pessoal Interno: seguir com os trâmites de encerramento contratual e demais procedimentos necessários;\n· @RH | Planning: excluir o prestador dos grupos de WhatsApp, QR e demais acessos;\n     · @Líder: recolher os equipamentos em posse do prestador e realizar a entrega em mãos à equipe de TI.',
       ativo:true}
     ];
     DB.processosInstancias = [];
     persist('processosBP');
     persist('processosInstancias');
-    localStorage.setItem('_pop_wiped_v3','1');
+    localStorage.setItem('_pop_wiped_v4','1');
   }
 }
 
