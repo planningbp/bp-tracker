@@ -806,7 +806,49 @@ const LS = {
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v?JSON.parse(v):fallback; }catch(e){ return fallback; }
 }
-function saveJSON(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){ console.warn('localStorage full for',key,e); } }
+
+/* ---- IndexedDB for large binary attachments (anexos) ---- */
+var _idb = null;
+function _openIDB(){
+  return new Promise(function(resolve,reject){
+    if(_idb){ resolve(_idb); return; }
+    var req = indexedDB.open('bp_gestao_anexos',1);
+    req.onupgradeneeded = function(e){ e.target.result.createObjectStore('files'); };
+    req.onsuccess = function(e){ _idb = e.target.result; resolve(_idb); };
+    req.onerror = function(){ reject(req.error); };
+  });
+}
+function idbSave(key, val){
+  return _openIDB().then(function(db){
+    return new Promise(function(resolve,reject){
+      var tx = db.transaction('files','readwrite');
+      tx.objectStore('files').put(val, key);
+      tx.oncomplete = resolve;
+      tx.onerror = function(){ reject(tx.error); };
+    });
+  }).catch(function(e){ console.warn('IDB save error',key,e); });
+}
+function idbLoad(key){
+  return _openIDB().then(function(db){
+    return new Promise(function(resolve,reject){
+      var tx = db.transaction('files','readonly');
+      var req = tx.objectStore('files').get(key);
+      req.onsuccess = function(){ resolve(req.result||null); };
+      req.onerror = function(){ reject(req.error); };
+    });
+  }).catch(function(e){ console.warn('IDB load error',key,e); return null; });
+}
+function idbDelete(key){
+  return _openIDB().then(function(db){
+    return new Promise(function(resolve,reject){
+      var tx = db.transaction('files','readwrite');
+      tx.objectStore('files').delete(key);
+      tx.oncomplete = resolve;
+      tx.onerror = function(){ reject(tx.error); };
+    });
+  }).catch(function(e){ console.warn('IDB delete error',key,e); });
+}
 
 function getDefaultFormConfigs(){
   return {
@@ -922,7 +964,7 @@ function persist(part){
     // Strip large binary fields before sending to Firebase (base64 files exceed limits)
     var payload = JSON.parse(JSON.stringify(DB[part]));
     if(part==='acompanhamentos' && Array.isArray(payload)){
-      payload = payload.map(function(a){ var c=Object.assign({},a); delete c.anexo; delete c.anexoNome; return c; });
+      payload = payload.map(function(a){ var c=Object.assign({},a); delete c.anexo; delete c.anexoNome; delete c.anexoRef; return c; });
     }
     if(part==='processosBP' && Array.isArray(payload)){
       payload = payload.map(function(p){ var c=Object.assign({},p); if(c.prints) delete c.prints; return c; });
@@ -979,11 +1021,21 @@ try {
         if(!data) return;
         if(!Array.isArray(data)) data = Object.values(data);
         _fbReceiving = true;
-        // Preserve local-only fields (binary attachments not sent to Firebase)
+        // Preserve local-only fields (IndexedDB refs + legacy base64 attachments)
         if(key==='acompanhamentos' && Array.isArray(DB[key])){
-          var localAnexos = {};
-          DB[key].forEach(function(a){ if(a.anexo){ localAnexos[a.nome+'_'+a.milestone] = {anexo:a.anexo, anexoNome:a.anexoNome}; } });
-          data.forEach(function(a){ var k=a.nome+'_'+a.milestone; if(localAnexos[k]){ a.anexo=localAnexos[k].anexo; a.anexoNome=localAnexos[k].anexoNome; } });
+          var localRefs = {};
+          DB[key].forEach(function(a){
+            var k = a.nome+'_'+a.milestone;
+            if(a.anexoRef) localRefs[k] = {anexoRef:a.anexoRef, anexoNome:a.anexoNome};
+            else if(a.anexo) localRefs[k] = {anexo:a.anexo, anexoNome:a.anexoNome};
+          });
+          data.forEach(function(a){
+            var k = a.nome+'_'+a.milestone;
+            if(localRefs[k]){
+              if(localRefs[k].anexoRef){ a.anexoRef=localRefs[k].anexoRef; a.anexoNome=localRefs[k].anexoNome; }
+              else if(localRefs[k].anexo){ a.anexo=localRefs[k].anexo; a.anexoNome=localRefs[k].anexoNome; }
+            }
+          });
         }
         if(key==='processosBP' && Array.isArray(DB[key])){
           var localPrints = {};
@@ -6850,9 +6902,9 @@ function renderAcompanhamentos(){
                   <input type="text" class="acomp-obs" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" value="${esc(r.observacao)}" placeholder="Observação..." style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#f9fafb;">
                 </div>
                 ${(r.milestone===45||r.milestone===90) ? `<div style="margin-top:8px;">
-                  ${r.anexo ? `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#EAF3EE;border:1px solid #bbf7d0;border-radius:8px;font-size:11px;">
+                  ${(r.anexoRef||r.anexo) ? `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#EAF3EE;border:1px solid #bbf7d0;border-radius:8px;font-size:11px;">
                     <span style="color:#14C8FA;">&#128206;</span>
-                    <a href="${r.anexo}" download="${esc(r.anexoNome||'avaliacao')}" style="color:#0f766e;font-weight:600;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.anexoNome||'Avaliação anexada')}</a>
+                    <span class="acomp-download-link" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" data-ref="${esc(r.anexoRef||'')}" data-legacy="${r.anexo?'1':'0'}" style="color:#0f766e;font-weight:600;cursor:pointer;text-decoration:underline;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.anexoNome||'Avaliação anexada')}</span>
                     <button class="acomp-remove-anexo" data-nome="${esc(r.nome)}" data-milestone="${r.milestone}" style="background:none;border:none;cursor:pointer;color:#ff4343;font-size:12px;padding:2px;" title="Remover anexo">✕</button>
                   </div>` : `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f9fafb;border:1px dashed #cbd5e1;border-radius:8px;font-size:11px;cursor:pointer;color:#888;transition:background .2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f9fafb'">
                     <span>&#128206;</span> Anexar avaliação
@@ -6982,24 +7034,31 @@ function bindAcompanhamentos(){
     });
   });
 
-  // Anexo file upload (45/90 dias)
+  // Anexo file upload (45/90 dias) — salva em IndexedDB (sem limite de 5MB do localStorage)
   document.querySelectorAll('.acomp-anexo').forEach(inp=>{
     inp.addEventListener('change', function(){
       const file = this.files[0];
       if(!file) return;
-      if(file.size > 5*1024*1024){ alert('Arquivo muito grande (máx 5MB).'); this.value=''; return; }
+      if(file.size > 10*1024*1024){ alert('Arquivo muito grande (máx 10MB).'); this.value=''; return; }
       const nome = this.getAttribute('data-nome');
       const milestone = parseInt(this.getAttribute('data-milestone'));
       const reader = new FileReader();
       reader.onload = function(e){
-        const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
-        const rec = idx>=0 ? DB.acompanhamentos[idx] : { nome, milestone, status:'Pendente', realizado:'', observacao:'' };
-        rec.anexo = e.target.result;
-        rec.anexoNome = file.name;
-        if(idx>=0) DB.acompanhamentos[idx] = rec;
-        else DB.acompanhamentos.push(rec);
-        persist('acompanhamentos');
-        rerender();
+        const idbKey = 'anexo_'+normalizeStr(nome)+'_'+milestone;
+        const base64 = e.target.result;
+        // Salva o arquivo binário no IndexedDB
+        idbSave(idbKey, {data:base64, nome:file.name}).then(function(){
+          // No DB só salva referência (sem o base64 pesado)
+          const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
+          const rec = idx>=0 ? DB.acompanhamentos[idx] : { nome, milestone, status:'Pendente', realizado:'', observacao:'' };
+          rec.anexoRef = idbKey;
+          rec.anexoNome = file.name;
+          delete rec.anexo; // remove base64 do DB (fica no IDB)
+          if(idx>=0) DB.acompanhamentos[idx] = rec;
+          else DB.acompanhamentos.push(rec);
+          persist('acompanhamentos');
+          rerender();
+        });
       };
       reader.readAsDataURL(file);
     });
@@ -7011,10 +7070,45 @@ function bindAcompanhamentos(){
       const milestone = parseInt(this.getAttribute('data-milestone'));
       const idx = DB.acompanhamentos.findIndex(a=> normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===milestone);
       if(idx>=0){
+        const idbKey = DB.acompanhamentos[idx].anexoRef;
+        if(idbKey) idbDelete(idbKey);
         delete DB.acompanhamentos[idx].anexo;
         delete DB.acompanhamentos[idx].anexoNome;
+        delete DB.acompanhamentos[idx].anexoRef;
         persist('acompanhamentos');
         rerender();
+      }
+    });
+  });
+
+  // Download link — busca do IndexedDB e faz download
+  document.querySelectorAll('.acomp-download-link').forEach(function(el){
+    el.addEventListener('click', function(){
+      var ref = this.getAttribute('data-ref');
+      var nome = this.getAttribute('data-nome');
+      var milestone = this.getAttribute('data-milestone');
+      var legacy = this.getAttribute('data-legacy')==='1';
+      if(ref){
+        // Busca do IndexedDB
+        idbLoad(ref).then(function(fileObj){
+          if(fileObj && fileObj.data){
+            var a = document.createElement('a');
+            a.href = fileObj.data;
+            a.download = fileObj.nome || 'avaliacao';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          } else {
+            alert('Arquivo não encontrado no armazenamento local.');
+          }
+        });
+      } else if(legacy){
+        // Fallback: anexo antigo direto no DB
+        var rec = DB.acompanhamentos.find(function(a){ return normalizeStr(a.nome)===normalizeStr(nome) && a.milestone===parseInt(milestone); });
+        if(rec && rec.anexo){
+          var a = document.createElement('a');
+          a.href = rec.anexo;
+          a.download = rec.anexoNome || 'avaliacao';
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }
       }
     });
   });
