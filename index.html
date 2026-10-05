@@ -11629,7 +11629,7 @@ let _cronoEditId = null;
 function _seedProcessosBP(){
   // Migração aditiva: só adiciona processos que não existem ainda (nunca sobrescreve)
   // Se já tem dados do Firebase, respeita — só adiciona os que faltam
-  if(!localStorage.getItem('_pop_seed_additive_v2')){
+  if(!localStorage.getItem('_pop_seed_additive_v3')){
     var _seedProcessos = [
       {id:uid(),nome:'Desligamentos Voluntários',descricao:'Processo completo para desligamentos voluntários (pedido de demissão). O colaborador comunica o líder e envia e-mail ao RH informando interesse em sair e último dia de trabalho.',categoria:'Desligamento',areas:['Contábil','Fiscal','Folha'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
         {nome:'Colaborador comunica líder e envia e-mail ao RH',dia:0,descricao:'O colaborador comunica o líder sobre o desligamento e, obrigatoriamente no mesmo momento, envia e-mail para rh.planning@planning.com.br comunicando o interesse em sair da empresa e informando o último dia de trabalho.'},
@@ -11747,7 +11747,8 @@ function _seedProcessosBP(){
       {id:uid(),nome:'Efetivação de Estagiários',descricao:'POP-GG-005 — Procedimento padrão para efetivação de estagiários na Planning. Encerramento do contrato de estágio e admissão em regime CLT no cargo de Auxiliar (R$ 1.900,00). A efetivação é exclusivamente para Auxiliar, exceto em programas específicos como o Programa Impulso.',categoria:'Movimentação',areas:['Contábil','Fiscal','Folha','BPO Financeiro','Financeiro Interno','Controladoria','TI','Desenvolvedores','Comercial','Marketing','Expansão','Consultoria'],responsavel:'Compartilhado',frequencia:'mensal',etapas:[
         {nome:'Líder verifica pré-requisitos',dia:0,descricao:'Verificar: tempo de estágio acima de 3 meses (máximo 2 anos — Lei 11.788/2008), registros de 1:1 (mínimo 1/mês ao longo do estágio), PDI com pelo menos 3 planos de ação concluídos, ausência de horas extras registradas. ⚠ Horas extras são PROIBIDAS para estagiários (Regimento Interno + Lei 11.788/2008).'},
         {nome:'Líder alinha com Head — aprovação obrigatória',dia:0,descricao:'Aprovação obrigatória do Head antes de qualquer outra etapa. O Head considera desempenho do estagiário, impactos na equipe e orçamento.'},
-        {nome:'Líder abre vaga no Pandapé',dia:0,descricao:'Após aprovação do Head e ANTES do formulário de movimentação: abrir vaga no Pandapé como "Aumento de Custo", cargo Auxiliar, remuneração R$ 1.900,00. A vaga deve ser aprovada no Pandapé antes de seguir. ⚠ Solicitações sem vaga aprovada NÃO serão processadas.'},
+        {nome:'Líder consulta o estagiário sobre interesse na efetivação',dia:0,descricao:'Antes de abrir vaga ou formulário, o líder deve consultar o estagiário para entender se a efetivação faz sentido para ele, considerando: mudança de carga horária (de estágio para jornada CLT integral), valor da remuneração (R$ 1.900,00 como Auxiliar) e pacote de benefícios (ajuda de custo iFood R$ 500/mês, plano de saúde após 3 meses, seguro de vida, day off aniversário, Wellhub, Starbem, Avus). O estagiário deve manifestar aceite antes de prosseguir.'},
+        {nome:'Líder abre vaga no Pandapé',dia:0,descricao:'Após aprovação do Head, aceite do estagiário e ANTES do formulário de movimentação: abrir vaga no Pandapé como "Aumento de Custo", cargo Auxiliar, remuneração R$ 1.900,00. A vaga deve ser aprovada no Pandapé antes de seguir. ⚠ Solicitações sem vaga aprovada NÃO serão processadas.'},
         {nome:'Líder abre Solicitação de Movimentação até dia 10',dia:10,descricao:'Formulário oficial de movimentação com a vaga já aprovada no Pandapé. Deve ser aberto até dia 10 do mês. Solicitações após o dia 10 serão processadas no mês seguinte.'},
         {nome:'BP encaminha aos Heads e Sócios',dia:15,descricao:'A BP encaminha a solicitação aos Heads e Sócios para aprovação financeira.'},
         {nome:'BP encaminha ao DP',dia:20,descricao:'A BP consolida as efetivações aprovadas e encaminha ao DP até o dia 20 para as providências de rescisão do estágio e formalização do CLT.'},
@@ -11757,14 +11758,14 @@ function _seedProcessosBP(){
         {nome:'CLT inicia no 1º dia útil do mês seguinte',dia:0,descricao:'O estagiário passa a ser Auxiliar CLT com remuneração de R$ 1.900,00 e benefícios: ajuda de custo iFood R$ 500/mês, plano de saúde após 3 meses, seguro de vida, day off aniversário, Wellhub, Starbem, Avus. Bônus por desempenho (até R$ 200/mês) exclusivo para Contábil, Fiscal e Folha.'}
       ],alertas:[
         'Solicitação até dia 10 para efetivação no mês seguinte.',
-        '⚠ SIGILO: O estagiário NÃO deve ser informado antes do retorno formal da BP.',
+        'O estagiário deve ser consultado ANTES da abertura de vaga/formulário sobre carga horária, remuneração (R$ 1.900) e benefícios.',
         '⚠ Horas extras são PROIBIDAS para estagiários (Lei 11.788/2008). Não serão pagas na rescisão.',
         'Prazo máximo de estágio: 2 anos. Ao atingir sem efetivação, contrato encerrado automaticamente.',
         'Vaga no Pandapé (Auxiliar, R$ 1.900) deve ser aberta e aprovada ANTES do formulário de movimentação.',
         'Exames devem ser realizados até 5 dias úteis antes do início do CLT.',
         'Renovação do estágio só é possível com matrícula ativa na faculdade.'
       ],observacoes:'Cargo de destino: Auxiliar (R$ 1.900,00) para todas as efetivações. Movimentações para cargos superiores seguem o POP-GG-003 após a efetivação. Exemplo: Solicitação até 10/06 → CLT em 01/07.',links:[],
-      msgLider:'Olá {nome},\n\nSobre a efetivação do estagiário que conversamos:\n\nAntes de abrir a solicitação, verifique os pré-requisitos:\n1. Tempo de estágio acima de 3 meses\n2. Registros de 1:1 mensais ao longo do estágio\n3. PDI com pelo menos 3 planos de ação concluídos\n4. Ausência de horas extras registradas\n5. Aprovação do Head\n\nApós verificar, abra a vaga no Pandapé (Auxiliar, R$ 1.900,00, tipo Aumento de Custo) e depois o formulário de Solicitação de Movimentação até o dia 10.\n\n⚠ Não comunique o estagiário antes do meu retorno (até dia 25).',
+      msgLider:'Olá {nome},\n\nSobre a efetivação do estagiário que conversamos:\n\nAntes de abrir a solicitação, verifique os pré-requisitos:\n1. Tempo de estágio acima de 3 meses\n2. Registros de 1:1 mensais ao longo do estágio\n3. PDI com pelo menos 3 planos de ação concluídos\n4. Ausência de horas extras registradas\n5. Aprovação do Head\n6. Consulta ao estagiário — converse com ele sobre a efetivação: carga horária (jornada CLT integral), remuneração (R$ 1.900,00 como Auxiliar) e benefícios. O estagiário precisa manifestar aceite antes de prosseguir.\n\nApós verificar e obter o aceite do estagiário, abra a vaga no Pandapé (Auxiliar, R$ 1.900,00, tipo Aumento de Custo) e depois o formulário de Solicitação de Movimentação até o dia 10.\n\n⚠ A decisão final (aprovação/reprovação) não deve ser comunicada antes do meu retorno (até dia 25).',
       msgColab:'Olá {nome},\n\nTemos uma ótima notícia! Seu desempenho durante o estágio foi reconhecido e estamos felizes em comunicar sua efetivação na Planning.\n\nA partir do próximo mês, você passa a integrar o quadro CLT como Auxiliar, com remuneração de R$ 1.900,00.\n\nBenefícios CLT:\n• Ajuda de custo (iFood): R$ 500/mês\n• Plano de saúde: após 3 meses\n• Seguro de vida\n• Day off no aniversário\n• Wellhub, Starbem e Avus\n\nO DP entrará em contato para os procedimentos de transição (guias e exames).\n\nParabéns e bem-vindo(a) ao time!',
       msgFormal:'',
       ativo:true}
@@ -11781,11 +11782,36 @@ function _seedProcessosBP(){
     if(adicionou){
       persist('processosBP');
     }
-    localStorage.setItem('_pop_seed_additive_v2','1');
+    localStorage.setItem('_pop_seed_additive_v3','1');
   }
 }
 
 function _migrateDesligamentosPOP(){}
+
+// Migração v3: atualiza Efetivação de Estagiários com etapa de consulta ao estagiário
+(function(){
+  if(!localStorage.getItem('_mig_efetivacao_consulta_v1')){
+    var proc = (DB.processosBP||[]).find(function(p){ return p.nome==='Efetivação de Estagiários'; });
+    if(proc){
+      var jaTemConsulta = proc.etapas.some(function(e){ return e.nome.indexOf('consulta o estagiário')!==-1; });
+      if(!jaTemConsulta){
+        // Insere entre Head (idx 1) e Pandapé (idx 2)
+        proc.etapas.splice(2,0,{nome:'Líder consulta o estagiário sobre interesse na efetivação',dia:0,descricao:'Antes de abrir vaga ou formulário, o líder deve consultar o estagiário para entender se a efetivação faz sentido para ele, considerando: mudança de carga horária (de estágio para jornada CLT integral), valor da remuneração (R$ 1.900,00 como Auxiliar) e pacote de benefícios (ajuda de custo iFood R$ 500/mês, plano de saúde após 3 meses, seguro de vida, day off aniversário, Wellhub, Starbem, Avus). O estagiário deve manifestar aceite antes de prosseguir.'});
+        // Atualiza alerta de sigilo
+        var idxSigilo = proc.alertas.findIndex(function(a){ return a.indexOf('NÃO deve ser informado')!==-1; });
+        if(idxSigilo>=0) proc.alertas[idxSigilo] = 'O estagiário deve ser consultado ANTES da abertura de vaga/formulário sobre carga horária, remuneração (R$ 1.900) e benefícios.';
+        // Atualiza msgLider
+        if(proc.msgLider && proc.msgLider.indexOf('Consulta ao estagiário')===-1){
+          proc.msgLider = proc.msgLider.replace('5. Aprovação do Head','5. Aprovação do Head\\n6. Consulta ao estagiário — converse com ele sobre a efetivação: carga horária (jornada CLT integral), remuneração (R$ 1.900,00 como Auxiliar) e benefícios. O estagiário precisa manifestar aceite antes de prosseguir.');
+          proc.msgLider = proc.msgLider.replace('Após verificar, abra','Após verificar e obter o aceite do estagiário, abra');
+          proc.msgLider = proc.msgLider.replace('Não comunique o estagiário antes do meu retorno','A decisão final (aprovação/reprovação) não deve ser comunicada antes do meu retorno');
+        }
+        persist('processosBP');
+      }
+    }
+    localStorage.setItem('_mig_efetivacao_consulta_v1','1');
+  }
+})();
 
 function _getCronoMesDate(){ const p=_cronoMes.split('-'); return new Date(Number(p[0]),Number(p[1])-1,1); }
 function _getCronoMesLabel(){ const d=_getCronoMesDate(); const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; return meses[d.getMonth()]+'/'+d.getFullYear(); }
