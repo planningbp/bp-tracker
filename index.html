@@ -11813,6 +11813,31 @@ function _renderProcessoDetalhe(proc){
     h+='<div style="font-size:13px;color:#aaa;">Nenhum link cadastrado.</div>';
   }
   h+='</div>';
+  // Prints / Anexos visuais
+  h+='<div class="card" style="margin-bottom:16px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  h+='<div style="font-weight:700;font-size:14px;">🖼️ Prints e Anexos</div>';
+  h+='<label class="btn btn-outline btn-sm" style="width:auto;cursor:pointer;"><span>+ Anexar imagem</span><input type="file" class="crono-add-print" data-proc="'+proc.id+'" accept="image/*,.pdf" multiple style="display:none;"></label>';
+  h+='</div>';
+  if(proc.prints&&proc.prints.length){
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;">';
+    proc.prints.forEach((p,i)=>{
+      h+='<div style="position:relative;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#f9fafb;">';
+      if(p.type&&p.type.startsWith('image/')){
+        h+='<a href="'+p.data+'" target="_blank"><img src="'+p.data+'" style="width:100%;height:140px;object-fit:cover;display:block;cursor:zoom-in;"></a>';
+      } else {
+        h+='<a href="'+p.data+'" download="'+esc(p.name)+'" style="display:flex;align-items:center;justify-content:center;height:140px;text-decoration:none;color:#555;font-size:13px;gap:6px;">📄 '+esc(p.name)+'</a>';
+      }
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-top:1px solid #e5e7eb;">';
+      h+='<span style="font-size:11px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">'+esc(p.name)+'</span>';
+      h+='<button class="crono-del-print" data-proc="'+proc.id+'" data-idx="'+i+'" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:12px;padding:2px;" title="Remover">✕</button>';
+      h+='</div></div>';
+    });
+    h+='</div>';
+  } else {
+    h+='<div style="font-size:13px;color:#aaa;">Nenhum print ou anexo. Clique em "+ Anexar imagem" para adicionar prints do processo.</div>';
+  }
+  h+='</div>';
   // Mensagens padrão (sempre mostrar, mesmo vazio — para poder adicionar)
   h+='<div class="card" style="margin-bottom:16px;">';
   h+='<div style="font-weight:700;font-size:14px;margin-bottom:12px;">📩 Mensagens Padrão</div>';
@@ -12074,6 +12099,38 @@ function bindCronogramaPage(){
       const proc=DB.processosBP.find(p=>p.id===procId);
       if(!proc||!proc.links) return;
       proc.links.splice(idx,1);
+      persist('processosBP'); render();
+    });
+  });
+  // Upload prints
+  document.querySelectorAll('.crono-add-print').forEach(inp=>{
+    inp.addEventListener('change', function(){
+      const procId=this.getAttribute('data-proc');
+      const proc=DB.processosBP.find(p=>p.id===procId);
+      if(!proc) return;
+      if(!proc.prints) proc.prints=[];
+      const files=Array.from(this.files);
+      let loaded=0;
+      files.forEach(file=>{
+        if(file.size>5*1024*1024){ alert('Arquivo "'+file.name+'" muito grande (máx 5MB).'); loaded++; return; }
+        const reader=new FileReader();
+        reader.onload=function(e){
+          proc.prints.push({name:file.name,type:file.type,data:e.target.result});
+          loaded++;
+          if(loaded>=files.length){ persist('processosBP'); render(); }
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+  });
+  // Delete print
+  document.querySelectorAll('.crono-del-print').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const procId=btn.getAttribute('data-proc');
+      const idx=Number(btn.getAttribute('data-idx'));
+      const proc=DB.processosBP.find(p=>p.id===procId);
+      if(!proc||!proc.prints) return;
+      proc.prints.splice(idx,1);
       persist('processosBP'); render();
     });
   });
